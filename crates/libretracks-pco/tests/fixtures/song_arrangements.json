@@ -1,0 +1,210 @@
+{
+  "links": {
+    "self": "https://api.planningcenteronline.com/services/v2/songs/9000009/arrangements"
+  },
+  "data": [
+    {
+      "type": "Arrangement",
+      "id": "9000008",
+      "attributes": {
+        "archived_at": null,
+        "bpm": 96,
+        "chord_chart": "VERSE 1\n[C]Morning light is [G]breaking through\n[Am]Every shadow [F]fades away\n[C]All the world is [G]waking new\n[Am]Here begins a [F]brand new day\n\nCHORUS\n[F]Lift your [G]voice and [C]sing\n[Am]Let the [F]rafters [G]ring\n[F]Every [G]heart re[Am]joice\n[F]Raise a [G]joyful [C]noise\n\nVERSE 2\n[C]Rivers run to [G]find the sea\n[Am]Mountains reach to [F]touch the sky\n[C]Every bird is [G]singing free\n[Am]Every star is [F]shining high\n\nCHORUS\n\nBRIDGE\n[Am]Higher and [G]higher\n[F]Louder and [C]louder\n[Am]Higher and [G]higher\n[F]Sing it a[G]gain\n\n(Repeat Chorus x2)\n\nTAG\n[F]Raise a [G]joyful [C]noise\n",
+        "chord_chart_chord_color": 0,
+        "chord_chart_columns": 1,
+        "chord_chart_font": "Courier",
+        "chord_chart_font_size": 12,
+        "chord_chart_key": "C",
+        "created_at": "2026-11-23T08:40:04Z",
+        "has_chord_chart": true,
+        "has_chords": true,
+        "length": 0,
+        "lyrics": "VERSE 1\nMorning light is breaking through\nEvery shadow fades away\nAll the world is waking new\nHere begins a brand new day\n\nCHORUS\nLift your voice and sing\nLet the rafters ring\nEvery heart rejoice\nRaise a joyful noise\n\nVERSE 2\nRivers run to find the sea\nMountains reach to touch the sky\nEvery bird is singing free\nEvery star is shining high\n\nCHORUS\n\nBRIDGE\nHigher and higher\nLouder and louder\nHigher and higher\nSing it again\n\n(Repeat Chorus x2)\n\nTAG\nRaise a joyful noise",
+        "lyrics_enabled": true,
+        "meter": "4/4",
+        "name": "Default Arrangement",
+        "notes": null,
+        "number_chart_enabled": false,
+        "numeral_chart_enabled": false,
+        "print_margin": "0.5in",
+        "print_orientation": "Portrait",
+        "print_page_size": "Letter",
+        "sequence": [
+          "Verse 1",
+          "Chorus",
+          "Verse 2",
+          "Chorus",
+          "Bridge",
+          "Chorus",
+          "Chorus",
+          "Tag"
+        ],
+        "sequence_full": [
+          {
+            "label": "Verse",
+            "number": "1"
+          },
+          {
+            "label": "Chorus",
+            "number": "1"
+          },
+          {
+            "label": "Verse",
+            "number": "2"
+          },
+          {
+            "label": "Chorus",
+            "number": "1"
+          },
+          {
+            "label": "Bridge",
+            "number": "1"
+          },
+          {
+            "label": "Chorus",
+            "number": "1"
+          },
+          {
+            "label": "Chorus",
+            "number": "1"
+          },
+          {
+            "label": "Tag",
+            "number": "1"
+          }
+        ],
+        "sequence_short": [
+          "V1",
+          "C",
+          "V2",
+          "C",
+          "B",
+          "C×2",
+          "Tag"
+        ],
+        "updated_at": "2026-11-23T08:40:04Z"
+      },
+      "relationships": {
+        "updated_by": {
+          "data": {
+            "type": "Person",
+            "id": "9000002"
+          }
+        },
+        "created_by": {
+          "data": {
+            "type": "Person",
+            "id": "9000002"
+          }
+        },
+        "song": {
+          "data": {
+            "type": "Song",
+            "id": "9000009"
+          }
+        }
+      },
+      "links": {
+        "self": "https://api.planningcenteronline.com/services/v2/songs/9000009/arrangements/9000008"
+      }
+    },
+    {
+      "type": "Arrangement",
+      "id": "9000010",
+      "attributes": {
+        "archived_at": null,
+        "bpm": 88,
+        "chord_chart": "VERSE 1\n[C]Morning light is [G]breaking through\n[Am]Every shadow [F]fades away\n[C]All the world is [G]waking new\n[Am]Here begins a [F]brand new day\n\nCHORUS\n[F]Lift your [G]voice and [C]sing\n[Am]Let the [F]rafters [G]ring\n[F]Every [G]heart re[Am]joice\n[F]Raise a [G]joyful [C]noise\n\nVERSE 2\n[C]Rivers run to [G]find the sea\n[Am]Mountains reach to [F]touch the sky\n[C]Every bird is [G]singing free\n[Am]Every star is [F]shining high\n\nCHORUS\n\nBRIDGE\n[Am]Higher and [G]higher\n[F]Louder and [C]louder\n[Am]Higher and [G]higher\n[F]Sing it a[G]gain\n\n(Repeat Chorus x2)\n\nTAG\n[F]Raise a [G]joyful [C]noise\n",
+        "chord_chart_chord_color": 0,
+        "chord_chart_columns": 1,
+        "chord_chart_font": "Courier",
+        "chord_chart_font_size": 12,
+        "chord_chart_key": "C",
+        "created_at": "2026-11-23T08:40:05Z",
+        "has_chord_chart": true,
+        "has_chords": true,
+        "length": 0,
+        "lyrics": "VERSE 1\nMorning light is breaking through\nEvery shadow fades away\nAll the world is waking new\nHere begins a brand new day\n\nCHORUS\nLift your voice and sing\nLet the rafters ring\nEvery heart rejoice\nRaise a joyful noise\n\nVERSE 2\nRivers run to find the sea\nMountains reach to touch the sky\nEvery bird is singing free\nEvery star is shining high\n\nCHORUS\n\nBRIDGE\nHigher and higher\nLouder and louder\nHigher and higher\nSing it again\n\n(Repeat Chorus x2)\n\nTAG\nRaise a joyful noise",
+        "lyrics_enabled": true,
+        "meter": "4/4",
+        "name": "Acoustic (D)",
+        "notes": null,
+        "number_chart_enabled": false,
+        "numeral_chart_enabled": false,
+        "print_margin": "0.5in",
+        "print_orientation": "Portrait",
+        "print_page_size": "Letter",
+        "sequence": [
+          "Verse",
+          "Chorus",
+          "Bridge",
+          "Chorus"
+        ],
+        "sequence_full": [
+          {
+            "label": "Verse",
+            "number": "1"
+          },
+          {
+            "label": "Chorus",
+            "number": "1"
+          },
+          {
+            "label": "Bridge",
+            "number": "1"
+          },
+          {
+            "label": "Chorus",
+            "number": "1"
+          }
+        ],
+        "sequence_short": [
+          "V",
+          "C",
+          "B",
+          "C"
+        ],
+        "updated_at": "2026-11-23T08:41:13Z"
+      },
+      "relationships": {
+        "updated_by": {
+          "data": {
+            "type": "Person",
+            "id": "9000002"
+          }
+        },
+        "created_by": {
+          "data": {
+            "type": "Person",
+            "id": "9000002"
+          }
+        },
+        "song": {
+          "data": {
+            "type": "Song",
+            "id": "9000009"
+          }
+        }
+      },
+      "links": {
+        "self": "https://api.planningcenteronline.com/services/v2/songs/9000009/arrangements/9000010"
+      }
+    }
+  ],
+  "included": [],
+  "meta": {
+    "total_count": 2,
+    "count": 2,
+    "can_order_by": [
+      "name"
+    ],
+    "can_include": [
+      "keys",
+      "sections"
+    ],
+    "parent": {
+      "id": "9000009",
+      "type": "Song"
+    }
+  }
+}

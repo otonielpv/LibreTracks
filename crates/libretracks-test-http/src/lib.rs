@@ -26,6 +26,8 @@ pub struct Response {
     pub body: String,
     /// Wait this long before answering (a program that hangs).
     pub delay: Option<std::time::Duration>,
+    /// Extra headers ("Retry-After" on a 429).
+    pub headers: Vec<(String, String)>,
 }
 
 impl Response {
@@ -34,6 +36,7 @@ impl Response {
             status,
             body: body.into(),
             delay: None,
+            headers: Vec::new(),
         })
     }
 
@@ -43,6 +46,20 @@ impl Response {
             status,
             body: body.into(),
             delay: Some(delay),
+            headers: Vec::new(),
+        })
+    }
+
+    /// Answer `status` with extra headers.
+    pub fn with_headers(status: u16, body: impl Into<String>, headers: &[(&str, &str)]) -> Option<Self> {
+        Some(Self {
+            status,
+            body: body.into(),
+            delay: None,
+            headers: headers
+                .iter()
+                .map(|(name, value)| (name.to_string(), value.to_string()))
+                .collect(),
         })
     }
 }
@@ -77,10 +94,16 @@ where
                     if let Some(delay) = response.delay {
                         tokio::time::sleep(delay).await;
                     }
+                    let extra: String = response
+                        .headers
+                        .iter()
+                        .map(|(name, value)| format!("{name}: {value}\r\n"))
+                        .collect();
                     let reply = format!(
-                        "HTTP/1.1 {} X\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{}",
+                        "HTTP/1.1 {} X\r\nContent-Type: application/json\r\nContent-Length: {}\r\n{}\r\n{}",
                         response.status,
                         response.body.len(),
+                        extra,
                         response.body
                     );
                     if write.write_all(reply.as_bytes()).await.is_err() {

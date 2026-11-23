@@ -1,0 +1,113 @@
+{
+  "links": {
+    "self": "https://api.planningcenteronline.com/services/v2/service_types/9000016/plans?filter=future&order=sort_date"
+  },
+  "data": [
+    {
+      "type": "Plan",
+      "id": "9000017",
+      "attributes": {
+        "can_view_order": true,
+        "created_at": "2026-11-23T08:40:42Z",
+        "dates": "29 November 2026",
+        "files_expire_at": "2026-12-14T11:30:00Z",
+        "items_count": 6,
+        "last_time_at": "2026-11-29T10:00:00Z",
+        "multi_day": false,
+        "needed_positions_count": 0,
+        "other_time_count": 0,
+        "permissions": "Administrator",
+        "plan_notes_count": 0,
+        "plan_people_count": 0,
+        "planning_center_url": "https://services.planningcenteronline.com/plans/9000017",
+        "prefers_order_view": false,
+        "public": false,
+        "public_by_schedule": false,
+        "rehearsable": false,
+        "rehearsal_time_count": 0,
+        "reminders_disabled": false,
+        "series_title": null,
+        "service_time_count": 1,
+        "short_dates": "29 Nov 2026",
+        "sort_date": "2026-11-29T10:00:00Z",
+        "title": "Culto de prueba LT",
+        "total_length": 0,
+        "updated_at": "2026-11-23T08:44:00Z"
+      },
+      "relationships": {
+        "service_type": {
+          "data": {
+            "type": "ServiceType",
+            "id": "9000016"
+          }
+        },
+        "previous_plan": {
+          "data": null
+        },
+        "next_plan": {
+          "data": null
+        },
+        "series": {
+          "data": null
+        },
+        "created_by": {
+          "data": {
+            "type": "Person",
+            "id": "9000002"
+          }
+        },
+        "updated_by": {
+          "data": {
+            "type": "Person",
+            "id": "9000002"
+          }
+        },
+        "linked_publishing_episode": {
+          "data": null
+        },
+        "attachment_types": {
+          "data": []
+        }
+      },
+      "links": {
+        "self": "https://api.planningcenteronline.com/services/v2/service_types/9000016/plans/9000017",
+        "html": "https://services.planningcenteronline.com/plans/9000017"
+      }
+    }
+  ],
+  "included": [],
+  "meta": {
+    "total_count": 1,
+    "count": 1,
+    "can_order_by": [
+      "title",
+      "created_at",
+      "updated_at",
+      "sort_date"
+    ],
+    "can_query_by": [
+      "id",
+      "created_at",
+      "updated_at",
+      "series_title",
+      "title"
+    ],
+    "can_include": [
+      "contributors",
+      "my_schedules",
+      "plan_times",
+      "series"
+    ],
+    "can_filter": [
+      "future",
+      "past",
+      "after",
+      "before",
+      "no_dates"
+    ],
+    "parent": {
+      "id": "9000016",
+      "type": "ServiceType"
+    }
+  }
+}

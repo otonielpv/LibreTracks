@@ -1,0 +1,1212 @@
+{
+  "links": {
+    "self": "https://api.planningcenteronline.com/services/v2/service_types/9000016/plans/9000017/items?include=song%2Carrangement%2Ckey"
+  },
+  "data": [
+    {
+      "type": "Item",
+      "id": "9000018",
+      "attributes": {
+        "created_at": "2026-11-23T08:40:57Z",
+        "custom_arrangement_sequence": null,
+        "custom_arrangement_sequence_full": null,
+        "custom_arrangement_sequence_short": null,
+        "description": null,
+        "html_details": null,
+        "item_type": "song",
+        "key_name": "E",
+        "length": 0,
+        "sequence": 1,
+        "service_position": "during",
+        "title": "Canción de Prueba Uno (LT test)",
+        "updated_at": "2026-11-23T08:41:13Z"
+      },
+      "relationships": {
+        "plan": {
+          "data": {
+            "type": "Plan",
+            "id": "9000017"
+          }
+        },
+        "song": {
+          "links": {
+            "related": "https://api.planningcenteronline.com/services/v2/songs/9000005"
+          },
+          "data": {
+            "type": "Song",
+            "id": "9000005"
+          }
+        },
+        "arrangement": {
+          "links": {
+            "related": "https://api.planningcenteronline.com/services/v2/service_types/9000016/plans/9000017/items/9000018/arrangement"
+          },
+          "data": {
+            "type": "Arrangement",
+            "id": "9000004"
+          }
+        },
+        "key": {
+          "links": {
+            "related": "https://api.planningcenteronline.com/services/v2/service_types/9000016/plans/9000017/items/9000018/key"
+          },
+          "data": {
+            "type": "Key",
+            "id": "9000019"
+          }
+        },
+        "selected_layout": {
+          "data": null
+        },
+        "selected_background": {
+          "data": null
+        }
+      },
+      "links": {
+        "self": "https://api.planningcenteronline.com/services/v2/service_types/9000016/plans/9000017/items/9000018"
+      }
+    },
+    {
+      "type": "Item",
+      "id": "9000020",
+      "attributes": {
+        "created_at": "2026-11-23T08:40:57Z",
+        "custom_arrangement_sequence": [
+          "Verse 1",
+          "Chorus",
+          "Verse 2",
+          "Chorus",
+          "Chorus"
+        ],
+        "custom_arrangement_sequence_full": [
+          {
+            "label": "Verse",
+            "number": "1"
+          },
+          {
+            "label": "Chorus",
+            "number": "1"
+          },
+          {
+            "label": "Verse",
+            "number": "2"
+          },
+          {
+            "label": "Chorus",
+            "number": "1"
+          },
+          {
+            "label": "Chorus",
+            "number": "1"
+          }
+        ],
+        "custom_arrangement_sequence_short": [
+          "V1",
+          "C",
+          "V2",
+          "C×2"
+        ],
+        "description": null,
+        "html_details": null,
+        "item_type": "song",
+        "key_name": null,
+        "length": 0,
+        "sequence": 2,
+        "service_position": "during",
+        "title": "Test Song Two (LT test)",
+        "updated_at": "2026-11-23T08:41:13Z"
+      },
+      "relationships": {
+        "plan": {
+          "data": {
+            "type": "Plan",
+            "id": "9000017"
+          }
+        },
+        "song": {
+          "links": {
+            "related": "https://api.planningcenteronline.com/services/v2/songs/9000009"
+          },
+          "data": {
+            "type": "Song",
+            "id": "9000009"
+          }
+        },
+        "arrangement": {
+          "links": {
+            "related": "https://api.planningcenteronline.com/services/v2/service_types/9000016/plans/9000017/items/9000020/arrangement"
+          },
+          "data": {
+            "type": "Arrangement",
+            "id": "9000010"
+          }
+        },
+        "key": {
+          "data": null
+        },
+        "selected_layout": {
+          "data": null
+        },
+        "selected_background": {
+          "data": null
+        }
+      },
+      "links": {
+        "self": "https://api.planningcenteronline.com/services/v2/service_types/9000016/plans/9000017/items/9000020"
+      }
+    },
+    {
+      "type": "Item",
+      "id": "9000021",
+      "attributes": {
+        "created_at": "2026-11-23T08:40:58Z",
+        "custom_arrangement_sequence": null,
+        "custom_arrangement_sequence_full": null,
+        "custom_arrangement_sequence_short": null,
+        "description": null,
+        "html_details": null,
+        "item_type": "song",
+        "key_name": null,
+        "length": 0,
+        "sequence": 3,
+        "service_position": "during",
+        "title": "Amazing Grace (LT test)",
+        "updated_at": "2026-11-23T08:41:14Z"
+      },
+      "relationships": {
+        "plan": {
+          "data": {
+            "type": "Plan",
+            "id": "9000017"
+          }
+        },
+        "song": {
+          "links": {
+            "related": "https://api.planningcenteronline.com/services/v2/songs/9000003"
+          },
+          "data": {
+            "type": "Song",
+            "id": "9000003"
+          }
+        },
+        "arrangement": {
+          "links": {
+            "related": "https://api.planningcenteronline.com/services/v2/service_types/9000016/plans/9000017/items/9000021/arrangement"
+          },
+          "data": {
+            "type": "Arrangement",
+            "id": "9000001"
+          }
+        },
+        "key": {
+          "data": null
+        },
+        "selected_layout": {
+          "data": null
+        },
+        "selected_background": {
+          "data": null
+        }
+      },
+      "links": {
+        "self": "https://api.planningcenteronline.com/services/v2/service_types/9000016/plans/9000017/items/9000021"
+      }
+    },
+    {
+      "type": "Item",
+      "id": "9000022",
+      "attributes": {
+        "created_at": "2026-11-23T08:40:58Z",
+        "custom_arrangement_sequence": null,
+        "custom_arrangement_sequence_full": null,
+        "custom_arrangement_sequence_short": null,
+        "description": null,
+        "html_details": null,
+        "item_type": "song",
+        "key_name": null,
+        "length": 0,
+        "sequence": 4,
+        "service_position": "during",
+        "title": "Holy, Holy, Holy (LT test)",
+        "updated_at": "2026-11-23T08:41:14Z"
+      },
+      "relationships": {
+        "plan": {
+          "data": {
+            "type": "Plan",
+            "id": "9000017"
+          }
+        },
+        "song": {
+          "links": {
+            "related": "https://api.planningcenteronline.com/services/v2/songs/9000007"
+          },
+          "data": {
+            "type": "Song",
+            "id": "9000007"
+          }
+        },
+        "arrangement": {
+          "links": {
+            "related": "https://api.planningcenteronline.com/services/v2/service_types/9000016/plans/9000017/items/9000022/arrangement"
+          },
+          "data": {
+            "type": "Arrangement",
+            "id": "9000006"
+          }
+        },
+        "key": {
+          "data": null
+        },
+        "selected_layout": {
+          "data": null
+        },
+        "selected_background": {
+          "data": null
+        }
+      },
+      "links": {
+        "self": "https://api.planningcenteronline.com/services/v2/service_types/9000016/plans/9000017/items/9000022"
+      }
+    },
+    {
+      "type": "Item",
+      "id": "9000023",
+      "attributes": {
+        "created_at": "2026-11-23T08:43:59Z",
+        "custom_arrangement_sequence": [
+          "Verse",
+          "Chorus 1",
+          "Bridge",
+          "Chorus 2",
+          "Vamp"
+        ],
+        "custom_arrangement_sequence_full": [
+          {
+            "label": "Verse",
+            "number": "1"
+          },
+          {
+            "label": "Chorus",
+            "number": "1"
+          },
+          {
+            "label": "Bridge",
+            "number": "1"
+          },
+          {
+            "label": "Chorus",
+            "number": "2"
+          },
+          {
+            "label": "Vamp",
+            "number": "1"
+          }
+        ],
+        "custom_arrangement_sequence_short": [
+          "V",
+          "C1",
+          "B",
+          "C2",
+          "Vamp"
+        ],
+        "description": null,
+        "html_details": null,
+        "item_type": "song",
+        "key_name": null,
+        "length": 0,
+        "sequence": 5,
+        "service_position": "during",
+        "title": "Rich Chart Test (LT test)",
+        "updated_at": "2026-11-23T08:43:59Z"
+      },
+      "relationships": {
+        "plan": {
+          "data": {
+            "type": "Plan",
+            "id": "9000017"
+          }
+        },
+        "song": {
+          "links": {
+            "related": "https://api.planningcenteronline.com/services/v2/songs/9000012"
+          },
+          "data": {
+            "type": "Song",
+            "id": "9000012"
+          }
+        },
+        "arrangement": {
+          "links": {
+            "related": "https://api.planningcenteronline.com/services/v2/service_types/9000016/plans/9000017/items/9000023/arrangement"
+          },
+          "data": {
+            "type": "Arrangement",
+            "id": "9000011"
+          }
+        },
+        "key": {
+          "data": null
+        },
+        "selected_layout": {
+          "data": null
+        },
+        "selected_background": {
+          "data": null
+        }
+      },
+      "links": {
+        "self": "https://api.planningcenteronline.com/services/v2/service_types/9000016/plans/9000017/items/9000023"
+      }
+    },
+    {
+      "type": "Item",
+      "id": "9000024",
+      "attributes": {
+        "created_at": "2026-11-23T08:43:59Z",
+        "custom_arrangement_sequence": null,
+        "custom_arrangement_sequence_full": null,
+        "custom_arrangement_sequence_short": null,
+        "description": null,
+        "html_details": null,
+        "item_type": "song",
+        "key_name": null,
+        "length": 0,
+        "sequence": 6,
+        "service_position": "during",
+        "title": "Canta Mi Alma (LT test)",
+        "updated_at": "2026-11-23T08:43:59Z"
+      },
+      "relationships": {
+        "plan": {
+          "data": {
+            "type": "Plan",
+            "id": "9000017"
+          }
+        },
+        "song": {
+          "links": {
+            "related": "https://api.planningcenteronline.com/services/v2/songs/9000014"
+          },
+          "data": {
+            "type": "Song",
+            "id": "9000014"
+          }
+        },
+        "arrangement": {
+          "links": {
+            "related": "https://api.planningcenteronline.com/services/v2/service_types/9000016/plans/9000017/items/9000024/arrangement"
+          },
+          "data": {
+            "type": "Arrangement",
+            "id": "9000013"
+          }
+        },
+        "key": {
+          "data": null
+        },
+        "selected_layout": {
+          "data": null
+        },
+        "selected_background": {
+          "data": null
+        }
+      },
+      "links": {
+        "self": "https://api.planningcenteronline.com/services/v2/service_types/9000016/plans/9000017/items/9000024"
+      }
+    }
+  ],
+  "included": [
+    {
+      "type": "Song",
+      "id": "9000005",
+      "attributes": {
+        "admin": null,
+        "author": "LibreTracks",
+        "ccli_number": null,
+        "copyright": null,
+        "created_at": "2026-11-23T08:40:02Z",
+        "hidden": false,
+        "last_scheduled_at": "2026-11-29T10:00:00Z",
+        "last_scheduled_short_dates": "29 Nov 2026",
+        "notes": null,
+        "themes": null,
+        "title": "Canción de Prueba Uno (LT test)",
+        "updated_at": "2026-11-23T08:40:02Z"
+      },
+      "links": {
+        "self": "https://api.planningcenteronline.com/services/v2/songs/9000005"
+      }
+    },
+    {
+      "type": "Arrangement",
+      "id": "9000004",
+      "attributes": {
+        "archived_at": null,
+        "bpm": 128,
+        "chord_chart": "INTRO\nD        A        Bm       G\n\nVERSO 1\nD                     A\nCamino por la orilla del mar\nBm                    G\nBuscando la luz al amanecer\nD                     A\nLas olas me enseñan a esperar\nBm              G\nTodo vuelve a nacer\n\nPRE-CORO\nEm            G\nY canto, y canto\nEm            A\nSin miedo a la noche\n\nCORO\nD             A\nEres mi refugio\nBm            G\nEres mi canción\nD             A\nEn cada mañana\nG       A     D\nLate mi corazón\n\nVERSO 2\nD                     A\nLas piedras del camino al pasar\nBm                    G\nMe cuentan historias de ayer\nD                     A\nEl viento no deja de soplar\nBm              G\nTodo empieza otra vez\n\nPUENTE\nG           A\nNada me detiene\nBm          A\nNada me separa\nG           A\nNada me detiene\nBm     A     D\nHoy de ti\n",
+        "chord_chart_chord_color": 0,
+        "chord_chart_columns": 1,
+        "chord_chart_font": "Courier",
+        "chord_chart_font_size": 12,
+        "chord_chart_key": "D",
+        "created_at": "2026-11-23T08:40:02Z",
+        "has_chord_chart": true,
+        "has_chords": true,
+        "length": 0,
+        "lyrics": "INTRO\n\nVERSO 1\nCamino por la orilla del mar\nBuscando la luz al amanecer\nLas olas me enseñan a esperar\nTodo vuelve a nacer\n\nPRE-CORO\nY canto, y canto\nSin miedo a la noche\n\nCORO\nEres mi refugio\nEres mi canción\nEn cada mañana\nLate mi corazón\n\nVERSO 2\nLas piedras del camino al pasar\nMe cuentan historias de ayer\nEl viento no deja de soplar\nTodo empieza otra vez\n\nPUENTE\nNada me detiene\nNada me separa\nNada me detiene\nHoy de ti",
+        "lyrics_enabled": true,
+        "meter": "4/4",
+        "name": "Default Arrangement",
+        "notes": null,
+        "number_chart_enabled": false,
+        "numeral_chart_enabled": false,
+        "print_margin": "0.5in",
+        "print_orientation": "Portrait",
+        "print_page_size": "Letter",
+        "sequence": [
+          "Intro",
+          "Verso 1",
+          "Pre-Coro",
+          "Coro",
+          "Verso 2",
+          "Pre-Coro",
+          "Coro",
+          "Puente",
+          "Coro",
+          "Coro"
+        ],
+        "sequence_full": [
+          {
+            "label": "Intro",
+            "number": "1"
+          },
+          {
+            "label": "Verso",
+            "number": "1"
+          },
+          {
+            "label": "Pre-Coro",
+            "number": "1"
+          },
+          {
+            "label": "Coro",
+            "number": "1"
+          },
+          {
+            "label": "Verso",
+            "number": "2"
+          },
+          {
+            "label": "Pre-Coro",
+            "number": "1"
+          },
+          {
+            "label": "Coro",
+            "number": "1"
+          },
+          {
+            "label": "Puente",
+            "number": "1"
+          },
+          {
+            "label": "Coro",
+            "number": "1"
+          },
+          {
+            "label": "Coro",
+            "number": "1"
+          }
+        ],
+        "sequence_short": [
+          "Intro",
+          "Verso1",
+          "Pre-Coro",
+          "Coro",
+          "Verso2",
+          "Pre-Coro",
+          "Coro",
+          "Puente",
+          "Coro×2"
+        ],
+        "updated_at": "2026-11-23T08:40:03Z"
+      },
+      "relationships": {
+        "updated_by": {
+          "data": {
+            "type": "Person",
+            "id": "9000002"
+          }
+        },
+        "created_by": {
+          "data": {
+            "type": "Person",
+            "id": "9000002"
+          }
+        },
+        "song": {
+          "data": {
+            "type": "Song",
+            "id": "9000005"
+          }
+        }
+      },
+      "links": {
+        "self": "https://api.planningcenteronline.com/services/v2/service_types/9000016/plans/9000017/items/9000018/arrangement"
+      }
+    },
+    {
+      "type": "Key",
+      "id": "9000019",
+      "attributes": {
+        "alternate_keys": [],
+        "created_at": "2026-11-23T08:41:14Z",
+        "ending_key": null,
+        "ending_minor": false,
+        "name": "Tono E",
+        "starting_key": "E",
+        "starting_minor": false,
+        "updated_at": "2026-11-23T08:41:14Z"
+      },
+      "relationships": {
+        "arrangement": {
+          "data": {
+            "type": "Arrangement",
+            "id": "9000004"
+          }
+        }
+      },
+      "links": {
+        "self": "https://api.planningcenteronline.com/services/v2/service_types/9000016/plans/9000017/items/9000018/key"
+      }
+    },
+    {
+      "type": "Song",
+      "id": "9000009",
+      "attributes": {
+        "admin": null,
+        "author": "LibreTracks",
+        "ccli_number": null,
+        "copyright": null,
+        "created_at": "2026-11-23T08:40:04Z",
+        "hidden": false,
+        "last_scheduled_at": "2026-11-29T10:00:00Z",
+        "last_scheduled_short_dates": "29 Nov 2026",
+        "notes": null,
+        "themes": null,
+        "title": "Test Song Two (LT test)",
+        "updated_at": "2026-11-23T08:40:04Z"
+      },
+      "links": {
+        "self": "https://api.planningcenteronline.com/services/v2/songs/9000009"
+      }
+    },
+    {
+      "type": "Arrangement",
+      "id": "9000010",
+      "attributes": {
+        "archived_at": null,
+        "bpm": 88,
+        "chord_chart": "VERSE 1\n[C]Morning light is [G]breaking through\n[Am]Every shadow [F]fades away\n[C]All the world is [G]waking new\n[Am]Here begins a [F]brand new day\n\nCHORUS\n[F]Lift your [G]voice and [C]sing\n[Am]Let the [F]rafters [G]ring\n[F]Every [G]heart re[Am]joice\n[F]Raise a [G]joyful [C]noise\n\nVERSE 2\n[C]Rivers run to [G]find the sea\n[Am]Mountains reach to [F]touch the sky\n[C]Every bird is [G]singing free\n[Am]Every star is [F]shining high\n\nCHORUS\n\nBRIDGE\n[Am]Higher and [G]higher\n[F]Louder and [C]louder\n[Am]Higher and [G]higher\n[F]Sing it a[G]gain\n\n(Repeat Chorus x2)\n\nTAG\n[F]Raise a [G]joyful [C]noise\n",
+        "chord_chart_chord_color": 0,
+        "chord_chart_columns": 1,
+        "chord_chart_font": "Courier",
+        "chord_chart_font_size": 12,
+        "chord_chart_key": "C",
+        "created_at": "2026-11-23T08:40:05Z",
+        "has_chord_chart": true,
+        "has_chords": true,
+        "length": 0,
+        "lyrics": "VERSE 1\nMorning light is breaking through\nEvery shadow fades away\nAll the world is waking new\nHere begins a brand new day\n\nCHORUS\nLift your voice and sing\nLet the rafters ring\nEvery heart rejoice\nRaise a joyful noise\n\nVERSE 2\nRivers run to find the sea\nMountains reach to touch the sky\nEvery bird is singing free\nEvery star is shining high\n\nCHORUS\n\nBRIDGE\nHigher and higher\nLouder and louder\nHigher and higher\nSing it again\n\n(Repeat Chorus x2)\n\nTAG\nRaise a joyful noise",
+        "lyrics_enabled": true,
+        "meter": "4/4",
+        "name": "Acoustic (D)",
+        "notes": null,
+        "number_chart_enabled": false,
+        "numeral_chart_enabled": false,
+        "print_margin": "0.5in",
+        "print_orientation": "Portrait",
+        "print_page_size": "Letter",
+        "sequence": [
+          "Verse",
+          "Chorus",
+          "Bridge",
+          "Chorus"
+        ],
+        "sequence_full": [
+          {
+            "label": "Verse",
+            "number": "1"
+          },
+          {
+            "label": "Chorus",
+            "number": "1"
+          },
+          {
+            "label": "Bridge",
+            "number": "1"
+          },
+          {
+            "label": "Chorus",
+            "number": "1"
+          }
+        ],
+        "sequence_short": [
+          "V",
+          "C",
+          "B",
+          "C"
+        ],
+        "updated_at": "2026-11-23T08:41:13Z"
+      },
+      "relationships": {
+        "updated_by": {
+          "data": {
+            "type": "Person",
+            "id": "9000002"
+          }
+        },
+        "created_by": {
+          "data": {
+            "type": "Person",
+            "id": "9000002"
+          }
+        },
+        "song": {
+          "data": {
+            "type": "Song",
+            "id": "9000009"
+          }
+        }
+      },
+      "links": {
+        "self": "https://api.planningcenteronline.com/services/v2/service_types/9000016/plans/9000017/items/9000020/arrangement"
+      }
+    },
+    {
+      "type": "Song",
+      "id": "9000003",
+      "attributes": {
+        "admin": null,
+        "author": "John Newton",
+        "ccli_number": null,
+        "copyright": null,
+        "created_at": "2026-11-23T08:39:35Z",
+        "hidden": false,
+        "last_scheduled_at": "2026-11-29T10:00:00Z",
+        "last_scheduled_short_dates": "29 Nov 2026",
+        "notes": null,
+        "themes": null,
+        "title": "Amazing Grace (LT test)",
+        "updated_at": "2026-11-23T08:39:35Z"
+      },
+      "links": {
+        "self": "https://api.planningcenteronline.com/services/v2/songs/9000003"
+      }
+    },
+    {
+      "type": "Arrangement",
+      "id": "9000001",
+      "attributes": {
+        "archived_at": null,
+        "bpm": 72,
+        "chord_chart": "INTRO\n[G] [C] [G] [D]\n\nVERSE 1\nA[G]mazing grace, how [G7]sweet the [C]sound\nThat [G]saved a wretch like [D]me\nI [G]once was lost, but [G7]now am [C]found\nWas [G]blind but [D]now I [G]see\n\nVERSE 2\n'Twas [G]grace that taught my [G7]heart to [C]fear\nAnd [G]grace my fears re[D]lieved\nHow [G]precious did that [G7]grace ap[C]pear\nThe [G]hour I [D]first be[G]lieved\n\nINSTRUMENTAL\n[G] [C] [G] [D] [G]\n\nVERSE 3\nWhen [G]we've been there ten [G7]thousand [C]years\nBright [G]shining as the [D]sun\nWe've [G]no less days to [G7]sing God's [C]praise\nThan [G]when we'd [D]first be[G]gun\n\nENDING\n[C] [D] [G]\n",
+        "chord_chart_chord_color": 0,
+        "chord_chart_columns": 1,
+        "chord_chart_font": "Courier",
+        "chord_chart_font_size": 12,
+        "chord_chart_key": "G",
+        "created_at": "2026-11-23T08:39:35Z",
+        "has_chord_chart": true,
+        "has_chords": true,
+        "length": 0,
+        "lyrics": "INTRO\n\nVERSE 1\nAmazing grace, how sweet the sound\nThat saved a wretch like me\nI once was lost, but now am found\nWas blind but now I see\n\nVERSE 2\n'Twas grace that taught my heart to fear\nAnd grace my fears relieved\nHow precious did that grace appear\nThe hour I first believed\n\nINSTRUMENTAL\n\nVERSE 3\nWhen we've been there ten thousand years\nBright shining as the sun\nWe've no less days to sing God's praise\nThan when we'd first begun\n\nENDING\n",
+        "lyrics_enabled": true,
+        "meter": "3/4",
+        "name": "Default Arrangement",
+        "notes": null,
+        "number_chart_enabled": false,
+        "numeral_chart_enabled": false,
+        "print_margin": "0.5in",
+        "print_orientation": "Portrait",
+        "print_page_size": "Letter",
+        "sequence": [
+          "Intro",
+          "Verse 1",
+          "Verse 2",
+          "Instrumental",
+          "Verse 3",
+          "Ending"
+        ],
+        "sequence_full": [
+          {
+            "label": "Intro",
+            "number": "1"
+          },
+          {
+            "label": "Verse",
+            "number": "1"
+          },
+          {
+            "label": "Verse",
+            "number": "2"
+          },
+          {
+            "label": "Instrumental",
+            "number": "1"
+          },
+          {
+            "label": "Verse",
+            "number": "3"
+          },
+          {
+            "label": "Ending",
+            "number": "1"
+          }
+        ],
+        "sequence_short": [
+          "Intro",
+          "V1",
+          "V2",
+          "Inst",
+          "V3",
+          "E"
+        ],
+        "updated_at": "2026-11-23T08:40:02Z"
+      },
+      "relationships": {
+        "updated_by": {
+          "data": {
+            "type": "Person",
+            "id": "9000002"
+          }
+        },
+        "created_by": {
+          "data": {
+            "type": "Person",
+            "id": "9000002"
+          }
+        },
+        "song": {
+          "data": {
+            "type": "Song",
+            "id": "9000003"
+          }
+        }
+      },
+      "links": {
+        "self": "https://api.planningcenteronline.com/services/v2/service_types/9000016/plans/9000017/items/9000021/arrangement"
+      }
+    },
+    {
+      "type": "Song",
+      "id": "9000007",
+      "attributes": {
+        "admin": null,
+        "author": "Reginald Heber",
+        "ccli_number": null,
+        "copyright": null,
+        "created_at": "2026-11-23T08:40:03Z",
+        "hidden": false,
+        "last_scheduled_at": "2026-11-29T10:00:00Z",
+        "last_scheduled_short_dates": "29 Nov 2026",
+        "notes": null,
+        "themes": null,
+        "title": "Holy, Holy, Holy (LT test)",
+        "updated_at": "2026-11-23T08:40:03Z"
+      },
+      "links": {
+        "self": "https://api.planningcenteronline.com/services/v2/songs/9000007"
+      }
+    },
+    {
+      "type": "Arrangement",
+      "id": "9000006",
+      "attributes": {
+        "archived_at": null,
+        "bpm": 66,
+        "chord_chart": "VERSE 1\nHoly, holy, holy! Lord God Almighty!\nEarly in the morning our song shall rise to Thee\nHoly, holy, holy! Merciful and mighty!\nGod in three Persons, blessed Trinity!\n\nVERSE 2\nHoly, holy, holy! All the saints adore Thee\nCasting down their golden crowns around the glassy sea\nCherubim and seraphim falling down before Thee\nWhich wert, and art, and evermore shalt be\n\nVERSE 3\nHoly, holy, holy! Though the darkness hide Thee\nThough the eye of sinful man Thy glory may not see\nOnly Thou art holy; there is none beside Thee\nPerfect in power, in love, and purity\n",
+        "chord_chart_chord_color": 0,
+        "chord_chart_columns": 1,
+        "chord_chart_font": "Courier",
+        "chord_chart_font_size": 12,
+        "chord_chart_key": "Eb",
+        "created_at": "2026-11-23T08:40:03Z",
+        "has_chord_chart": true,
+        "has_chords": false,
+        "length": 0,
+        "lyrics": "VERSE 1\nHoly, holy, holy! Lord God Almighty!\nEarly in the morning our song shall rise to Thee\nHoly, holy, holy! Merciful and mighty!\nGod in three Persons, blessed Trinity!\n\nVERSE 2\nHoly, holy, holy! All the saints adore Thee\nCasting down their golden crowns around the glassy sea\nCherubim and seraphim falling down before Thee\nWhich wert, and art, and evermore shalt be\n\nVERSE 3\nHoly, holy, holy! Though the darkness hide Thee\nThough the eye of sinful man Thy glory may not see\nOnly Thou art holy; there is none beside Thee\nPerfect in power, in love, and purity",
+        "lyrics_enabled": true,
+        "meter": "4/4",
+        "name": "Default Arrangement",
+        "notes": null,
+        "number_chart_enabled": false,
+        "numeral_chart_enabled": false,
+        "print_margin": "0.5in",
+        "print_orientation": "Portrait",
+        "print_page_size": "Letter",
+        "sequence": [
+          "Verse 1",
+          "Verse 2",
+          "Verse 3"
+        ],
+        "sequence_full": [
+          {
+            "label": "Verse",
+            "number": "1"
+          },
+          {
+            "label": "Verse",
+            "number": "2"
+          },
+          {
+            "label": "Verse",
+            "number": "3"
+          }
+        ],
+        "sequence_short": [
+          "V1",
+          "V2",
+          "V3"
+        ],
+        "updated_at": "2026-11-23T08:40:17Z"
+      },
+      "relationships": {
+        "updated_by": {
+          "data": {
+            "type": "Person",
+            "id": "9000002"
+          }
+        },
+        "created_by": {
+          "data": {
+            "type": "Person",
+            "id": "9000002"
+          }
+        },
+        "song": {
+          "data": {
+            "type": "Song",
+            "id": "9000007"
+          }
+        }
+      },
+      "links": {
+        "self": "https://api.planningcenteronline.com/services/v2/service_types/9000016/plans/9000017/items/9000022/arrangement"
+      }
+    },
+    {
+      "type": "Song",
+      "id": "9000012",
+      "attributes": {
+        "admin": null,
+        "author": "LibreTracks",
+        "ccli_number": null,
+        "copyright": null,
+        "created_at": "2026-11-23T08:43:57Z",
+        "hidden": false,
+        "last_scheduled_at": "2026-11-29T10:00:00Z",
+        "last_scheduled_short_dates": "29 Nov 2026",
+        "notes": null,
+        "themes": null,
+        "title": "Rich Chart Test (LT test)",
+        "updated_at": "2026-11-23T08:43:57Z"
+      },
+      "links": {
+        "self": "https://api.planningcenteronline.com/services/v2/songs/9000012"
+      }
+    },
+    {
+      "type": "Arrangement",
+      "id": "9000011",
+      "attributes": {
+        "archived_at": null,
+        "bpm": 74,
+        "chord_chart": "{title: Rich Chart Test}\n{key: A}\n{tempo: 74}\n{comment: Intro suave, solo piano}\n\nINTRO\n| A . . . | E/G# . . . | F#m7 . . . | Dmaj7 . . . |\n\nVERSE 1\n{c: Hombres}\n[A]Every morning [E/G#]brings a song\n[F#m7]Every evening [Dmaj7]calls us home\n[A]Through the valley, [E/G#]steady on\n[Bm7]You are near, [Esus4]I'm not a[E]lone\n\nVERSE 2\n{c: Mujeres, una octava arriba}\n[A]When the river [E/G#]overflows\n[F#m7]When the winter [Dmaj7]wind still blows\n[A]I will trust the [E/G#]way You go\n[Bm7]You are near, [Esus4]You al[E]ways know\n\nPRE-CHORUS\n[D]Oh, [E]oh, [F#m]oh (x2)\n[D]Lift it [E]higher, [Bm7]N.C.\n\n{soc}\nCHORUS\n[A]Light up the [E]sky\n[F#m7]Let every [D]heart be [Dadd9]open wide\n[A]Light up the [E]sky\n[Bm7]We will [Dmaj7/E]sing to[A]night\n{eoc}\n\nCOLUMN_BREAK\n\nINTERLUDE\n{comment: Guitarra lidera, 4 compases}\n| D . E . | F#m . E/G# . | A . . . | A . . . |\n\nBRIDGE\n{c: Crescendo, todos}\n[D]Nothing can [E]stand against [F#m]Your love\n[D]Nothing can [E]stand against [F#m]Your love\n[Bm7]Nothing can [C#m7]stand, nothing can [D]stand\n[E]Nothing can [E7sus4]stand (Stop)\n\nPAGE_BREAK\n\nCHORUS 2\n{comment: Coro final, cambia la última línea}\n[A]Light up the [E]sky\n[F#m7]Let every [D]heart be [Dadd9]open wide\n[A]Light up the [E]sky\n[Bm7]Forever [Dmaj7/E]we will [A]shine\n\nTAG\n[Bm7]We will [Dmaj7/E]sing to[A]night (x3)\n\nVAMP\n{comment: Repetir hasta señal del director}\n| A . . . | E/G# . . . | F#m7 . . . | Dmaj7 . . . |\n\nOUTRO\n[A] [E/G#] [F#m7] [D] [A]\n",
+        "chord_chart_chord_color": 0,
+        "chord_chart_columns": 1,
+        "chord_chart_font": "Courier",
+        "chord_chart_font_size": 12,
+        "chord_chart_key": "A",
+        "created_at": "2026-11-23T08:43:57Z",
+        "has_chord_chart": true,
+        "has_chords": true,
+        "length": 0,
+        "lyrics": "title: Rich Chart Test\nkey: A\ntempo: 74\ncomment: Intro suave, solo piano\n\nINTRO\nA . . . . . . . . . . . .\n\nVERSE 1\nc: Hombres\nEvery morning brings a song\nEvery evening calls us home\nThrough the valley, steady on\nYou are near, I'm not alone\n\nVERSE 2\nc: Mujeres, una octava arriba\nWhen the river overflows\nWhen the winter wind still blows\nI will trust the way You go\nYou are near, You always know\n\nPRE-CHORUS\nOh, oh, oh (x2)\nLift it higher, N.C.\n\nsoc\nCHORUS\nLight up the sky\nLet every heart be open wide\nLight up the sky\nWe will sing tonight\neoc\n\n\n\nINTERLUDE\ncomment: Guitarra lidera, 4 compases\n. E . . . A . . . A . . .\n\nBRIDGE\nc: Crescendo, todos\nNothing can stand against Your love\nNothing can stand against Your love\nNothing can stand, nothing can stand\nNothing can stand (Stop)\n\n\n\nCHORUS 2\ncomment: Coro final, cambia la última línea\nLight up the sky\nLet every heart be open wide\nLight up the sky\nForever we will shine\n\nTAG\nWe will sing tonight (x3)\n\nVAMP\ncomment: Repetir hasta señal del director\nA . . . . . . . . . . . .\n\nOUTRO\n",
+        "lyrics_enabled": true,
+        "meter": "4/4",
+        "name": "Default Arrangement",
+        "notes": null,
+        "number_chart_enabled": false,
+        "numeral_chart_enabled": false,
+        "print_margin": "0.5in",
+        "print_orientation": "Portrait",
+        "print_page_size": "Letter",
+        "sequence": [
+          "Intro",
+          "Verse 1",
+          "Verse 2",
+          "Pre-Chorus",
+          "Chorus 1",
+          "Interlude",
+          "Bridge",
+          "Bridge",
+          "Chorus 2",
+          "Tag",
+          "Vamp",
+          "Outro"
+        ],
+        "sequence_full": [
+          {
+            "label": "Intro",
+            "number": "1"
+          },
+          {
+            "label": "Verse",
+            "number": "1"
+          },
+          {
+            "label": "Verse",
+            "number": "2"
+          },
+          {
+            "label": "Pre-Chorus",
+            "number": "1"
+          },
+          {
+            "label": "Chorus",
+            "number": "1"
+          },
+          {
+            "label": "Interlude",
+            "number": "1"
+          },
+          {
+            "label": "Bridge",
+            "number": "1"
+          },
+          {
+            "label": "Bridge",
+            "number": "1"
+          },
+          {
+            "label": "Chorus",
+            "number": "2"
+          },
+          {
+            "label": "Tag",
+            "number": "1"
+          },
+          {
+            "label": "Vamp",
+            "number": "1"
+          },
+          {
+            "label": "Outro",
+            "number": "1"
+          }
+        ],
+        "sequence_short": [
+          "Intro",
+          "V1",
+          "V2",
+          "Pre-Chorus",
+          "C1",
+          "Inter",
+          "B×2",
+          "C2",
+          "Tag",
+          "Vamp",
+          "Outro"
+        ],
+        "updated_at": "2026-11-23T08:43:59Z"
+      },
+      "relationships": {
+        "updated_by": {
+          "data": {
+            "type": "Person",
+            "id": "9000002"
+          }
+        },
+        "created_by": {
+          "data": {
+            "type": "Person",
+            "id": "9000002"
+          }
+        },
+        "song": {
+          "data": {
+            "type": "Song",
+            "id": "9000012"
+          }
+        }
+      },
+      "links": {
+        "self": "https://api.planningcenteronline.com/services/v2/service_types/9000016/plans/9000017/items/9000023/arrangement"
+      }
+    },
+    {
+      "type": "Song",
+      "id": "9000014",
+      "attributes": {
+        "admin": null,
+        "author": "LibreTracks",
+        "ccli_number": null,
+        "copyright": null,
+        "created_at": "2026-11-23T08:43:58Z",
+        "hidden": false,
+        "last_scheduled_at": "2026-11-29T10:00:00Z",
+        "last_scheduled_short_dates": "29 Nov 2026",
+        "notes": null,
+        "themes": null,
+        "title": "Canta Mi Alma (LT test)",
+        "updated_at": "2026-11-23T08:43:58Z"
+      },
+      "links": {
+        "self": "https://api.planningcenteronline.com/services/v2/songs/9000014"
+      }
+    },
+    {
+      "type": "Arrangement",
+      "id": "9000013",
+      "attributes": {
+        "archived_at": null,
+        "bpm": 110,
+        "chord_chart": "ESTROFA I\nDo              Sol/Si\n  Hay un río que corre sin fin\nLam             Fa\n  Y una voz que me llama a seguir\nDo              Sol/Si\n  Hay un monte que puedo subir\nRem7      Fa       Sol\n  Contigo voy hasta el final\n\nPRE-ESTRIBILLO\nFa        Sol       Lam   Sol/Si\n  Y no me canso de cantar\nFa        Sol\n  (todos juntos)\n\nESTRIBILLO\nDo         Sol\n  Canta mi alma, canta\nLam        Fa\n  Canta sin parar\nDo         Sol\n  Canta mi alma, canta\nFa    Sol     Do\n  Hoy y siempre más\n\nINTERLUDIO\n| Do  Sol/Si | Lam  Fa | Do  Sol | Fa  Sol |\n\nESTROFA II\nDo              Sol/Si\n  Las estrellas me hablan de ti\nLam             Fa\n  El silencio me enseña a vivir\nDo              Sol/Si\n  Cada paso me acerca a ti\nRem7      Fa       Sol\n  Contigo voy hasta el final\n\nESTRIBILLO (x2)\n\nPUENTE\nLam    Sol      Fa       Do/Mi\n  Más alto, más alto, más alto\nRem7   Do/Mi    Fa       Sol\n  Más fuerte, más fuerte (tacet)\n\nFINAL\nFa    Sol     Do\n  Hoy y siempre más\n(ritardando)\n",
+        "chord_chart_chord_color": 0,
+        "chord_chart_columns": 1,
+        "chord_chart_font": "Courier",
+        "chord_chart_font_size": 12,
+        "chord_chart_key": "C",
+        "created_at": "2026-11-23T08:43:58Z",
+        "has_chord_chart": true,
+        "has_chords": false,
+        "length": 0,
+        "lyrics": "ESTROFA I\nDo SolSi\nHay un río que corre sin fin\nLam Fa\nY una voz que me llama a seguir\nDo SolSi\nHay un monte que puedo subir\nRem7 Fa Sol\nContigo voy hasta el final\n\nPRE-ESTRIBILLO\nFa Sol Lam SolSi\nY no me canso de cantar\nFa Sol\n(todos juntos)\n\nESTRIBILLO\nDo Sol\nCanta mi alma, canta\nLam Fa\nCanta sin parar\nDo Sol\nCanta mi alma, canta\nFa Sol Do\nHoy y siempre más\n\nINTERLUDIO\nDo SolSi Lam Fa Do Sol Fa Sol\n\nESTROFA II\nDo SolSi\nLas estrellas me hablan de ti\nLam Fa\nEl silencio me enseña a vivir\nDo SolSi\nCada paso me acerca a ti\nRem7 Fa Sol\nContigo voy hasta el final\n\nESTRIBILLO (x2)\n\nPUENTE\nLam Sol Fa DoMi\nMás alto, más alto, más alto\nRem7 DoMi Fa Sol\nMás fuerte, más fuerte (tacet)\n\nFINAL\nFa Sol Do\nHoy y siempre más\n(ritardando)",
+        "lyrics_enabled": true,
+        "meter": "6/8",
+        "name": "Default Arrangement",
+        "notes": null,
+        "number_chart_enabled": false,
+        "numeral_chart_enabled": false,
+        "print_margin": "0.5in",
+        "print_orientation": "Portrait",
+        "print_page_size": "Letter",
+        "sequence": [
+          "Estrofa 1",
+          "Pre-Estribillo",
+          "Estribillo",
+          "Interludio",
+          "Estrofa 2",
+          "Pre-Estribillo",
+          "Estribillo",
+          "Estribillo",
+          "Puente",
+          "Estribillo",
+          "Final"
+        ],
+        "sequence_full": [
+          {
+            "label": "Estrofa",
+            "number": "1"
+          },
+          {
+            "label": "Pre-Estribillo",
+            "number": "1"
+          },
+          {
+            "label": "Estribillo",
+            "number": "1"
+          },
+          {
+            "label": "Interludio",
+            "number": "1"
+          },
+          {
+            "label": "Estrofa",
+            "number": "2"
+          },
+          {
+            "label": "Pre-Estribillo",
+            "number": "1"
+          },
+          {
+            "label": "Estribillo",
+            "number": "1"
+          },
+          {
+            "label": "Estribillo",
+            "number": "1"
+          },
+          {
+            "label": "Puente",
+            "number": "1"
+          },
+          {
+            "label": "Estribillo",
+            "number": "1"
+          },
+          {
+            "label": "Final",
+            "number": "1"
+          }
+        ],
+        "sequence_short": [
+          "Estrofa1",
+          "Pre-Estribillo",
+          "Estribillo",
+          "Interludio",
+          "Estrofa2",
+          "Pre-Estribillo",
+          "Estribillo×2",
+          "Puente",
+          "Estribillo",
+          "Final"
+        ],
+        "updated_at": "2026-11-23T08:43:58Z"
+      },
+      "relationships": {
+        "updated_by": {
+          "data": {
+            "type": "Person",
+            "id": "9000002"
+          }
+        },
+        "created_by": {
+          "data": {
+            "type": "Person",
+            "id": "9000002"
+          }
+        },
+        "song": {
+          "data": {
+            "type": "Song",
+            "id": "9000014"
+          }
+        }
+      },
+      "links": {
+        "self": "https://api.planningcenteronline.com/services/v2/service_types/9000016/plans/9000017/items/9000024/arrangement"
+      }
+    }
+  ],
+  "meta": {
+    "total_count": 6,
+    "count": 6,
+    "can_include": [
+      "arrangement",
+      "item_assignments",
+      "item_notes",
+      "item_times",
+      "key",
+      "media",
+      "selected_attachment",
+      "song"
+    ],
+    "parent": {
+      "id": "9000017",
+      "type": "Plan"
+    }
+  }
+}

@@ -1,0 +1,114 @@
+{
+  "data": {
+    "type": "Arrangement",
+    "id": "9000001",
+    "attributes": {
+      "archived_at": null,
+      "bpm": 72,
+      "chord_chart": "INTRO\n[G] [C] [G] [D]\n\nVERSE 1\nA[G]mazing grace, how [G7]sweet the [C]sound\nThat [G]saved a wretch like [D]me\nI [G]once was lost, but [G7]now am [C]found\nWas [G]blind but [D]now I [G]see\n\nVERSE 2\n'Twas [G]grace that taught my [G7]heart to [C]fear\nAnd [G]grace my fears re[D]lieved\nHow [G]precious did that [G7]grace ap[C]pear\nThe [G]hour I [D]first be[G]lieved\n\nINSTRUMENTAL\n[G] [C] [G] [D] [G]\n\nVERSE 3\nWhen [G]we've been there ten [G7]thousand [C]years\nBright [G]shining as the [D]sun\nWe've [G]no less days to [G7]sing God's [C]praise\nThan [G]when we'd [D]first be[G]gun\n\nENDING\n[C] [D] [G]\n",
+      "chord_chart_chord_color": 0,
+      "chord_chart_columns": 1,
+      "chord_chart_font": "Courier",
+      "chord_chart_font_size": 12,
+      "chord_chart_key": "G",
+      "created_at": "2026-11-23T08:39:35Z",
+      "has_chord_chart": true,
+      "has_chords": true,
+      "length": 0,
+      "lyrics": "INTRO\n\nVERSE 1\nAmazing grace, how sweet the sound\nThat saved a wretch like me\nI once was lost, but now am found\nWas blind but now I see\n\nVERSE 2\n'Twas grace that taught my heart to fear\nAnd grace my fears relieved\nHow precious did that grace appear\nThe hour I first believed\n\nINSTRUMENTAL\n\nVERSE 3\nWhen we've been there ten thousand years\nBright shining as the sun\nWe've no less days to sing God's praise\nThan when we'd first begun\n\nENDING\n",
+      "lyrics_enabled": true,
+      "meter": "3/4",
+      "name": "Default Arrangement",
+      "notes": null,
+      "number_chart_enabled": false,
+      "numeral_chart_enabled": false,
+      "print_margin": "0.5in",
+      "print_orientation": "Portrait",
+      "print_page_size": "Letter",
+      "sequence": [
+        "Intro",
+        "Verse 1",
+        "Verse 2",
+        "Instrumental",
+        "Verse 3",
+        "Ending"
+      ],
+      "sequence_full": [
+        {
+          "label": "Intro",
+          "number": "1"
+        },
+        {
+          "label": "Verse",
+          "number": "1"
+        },
+        {
+          "label": "Verse",
+          "number": "2"
+        },
+        {
+          "label": "Instrumental",
+          "number": "1"
+        },
+        {
+          "label": "Verse",
+          "number": "3"
+        },
+        {
+          "label": "Ending",
+          "number": "1"
+        }
+      ],
+      "sequence_short": [
+        "Intro",
+        "V1",
+        "V2",
+        "Inst",
+        "V3",
+        "E"
+      ],
+      "updated_at": "2026-11-23T08:40:02Z"
+    },
+    "relationships": {
+      "updated_by": {
+        "data": {
+          "type": "Person",
+          "id": "9000002"
+        }
+      },
+      "created_by": {
+        "data": {
+          "type": "Person",
+          "id": "9000002"
+        }
+      },
+      "song": {
+        "data": {
+          "type": "Song",
+          "id": "9000003"
+        }
+      }
+    },
+    "links": {
+      "archive": "https://api.planningcenteronline.com/services/v2/songs/9000003/arrangements/9000001/archive",
+      "assign_tags": "https://api.planningcenteronline.com/services/v2/songs/9000003/arrangements/9000001/assign_tags",
+      "attachments": "https://api.planningcenteronline.com/services/v2/songs/9000003/arrangements/9000001/attachments",
+      "keys": "https://api.planningcenteronline.com/services/v2/songs/9000003/arrangements/9000001/keys",
+      "sections": "https://api.planningcenteronline.com/services/v2/songs/9000003/arrangements/9000001/sections",
+      "tags": "https://api.planningcenteronline.com/services/v2/songs/9000003/arrangements/9000001/tags",
+      "unarchive": "https://api.planningcenteronline.com/services/v2/songs/9000003/arrangements/9000001/unarchive",
+      "self": "https://api.planningcenteronline.com/services/v2/songs/9000003/arrangements/9000001"
+    }
+  },
+  "included": [],
+  "meta": {
+    "can_include": [
+      "keys",
+      "sections"
+    ],
+    "parent": {
+      "id": "9000003",
+      "type": "Song"
+    }
+  }
+}

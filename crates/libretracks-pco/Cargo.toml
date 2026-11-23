@@ -1,0 +1,23 @@
+[package]
+name = "libretracks-pco"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+# Planning Center Services: sign-in (OAuth 2 + PKCE, through
+# libretracks-cloud) and the few read-only calls the chart import needs. All
+# the HTTP of the chart sources lives here, never in the frontend.
+
+[dependencies]
+async-trait = "0.1"
+libretracks-cloud = { path = "../libretracks-cloud" }
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio = { version = "1", features = ["time"] }
+url = "2"
+
+[dev-dependencies]
+libretracks-test-http = { path = "../libretracks-test-http" }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "time"] }

@@ -1,0 +1,172 @@
+{
+  "links": {
+    "self": "https://api.planningcenteronline.com/services/v2/songs?per_page=10&where[title]=LT+test"
+  },
+  "data": [
+    {
+      "type": "Song",
+      "id": "9000003",
+      "attributes": {
+        "admin": null,
+        "author": "John Newton",
+        "ccli_number": null,
+        "copyright": null,
+        "created_at": "2026-11-23T08:39:35Z",
+        "hidden": false,
+        "last_scheduled_at": "2026-11-29T10:00:00Z",
+        "last_scheduled_short_dates": "29 Nov 2026",
+        "notes": null,
+        "themes": null,
+        "title": "Amazing Grace (LT test)",
+        "updated_at": "2026-11-23T08:39:35Z"
+      },
+      "links": {
+        "self": "https://api.planningcenteronline.com/services/v2/songs/9000003"
+      }
+    },
+    {
+      "type": "Song",
+      "id": "9000005",
+      "attributes": {
+        "admin": null,
+        "author": "LibreTracks",
+        "ccli_number": null,
+        "copyright": null,
+        "created_at": "2026-11-23T08:40:02Z",
+        "hidden": false,
+        "last_scheduled_at": "2026-11-29T10:00:00Z",
+        "last_scheduled_short_dates": "29 Nov 2026",
+        "notes": null,
+        "themes": null,
+        "title": "Canción de Prueba Uno (LT test)",
+        "updated_at": "2026-11-23T08:40:02Z"
+      },
+      "links": {
+        "self": "https://api.planningcenteronline.com/services/v2/songs/9000005"
+      }
+    },
+    {
+      "type": "Song",
+      "id": "9000007",
+      "attributes": {
+        "admin": null,
+        "author": "Reginald Heber",
+        "ccli_number": null,
+        "copyright": null,
+        "created_at": "2026-11-23T08:40:03Z",
+        "hidden": false,
+        "last_scheduled_at": "2026-11-29T10:00:00Z",
+        "last_scheduled_short_dates": "29 Nov 2026",
+        "notes": null,
+        "themes": null,
+        "title": "Holy, Holy, Holy (LT test)",
+        "updated_at": "2026-11-23T08:40:03Z"
+      },
+      "links": {
+        "self": "https://api.planningcenteronline.com/services/v2/songs/9000007"
+      }
+    },
+    {
+      "type": "Song",
+      "id": "9000009",
+      "attributes": {
+        "admin": null,
+        "author": "LibreTracks",
+        "ccli_number": null,
+        "copyright": null,
+        "created_at": "2026-11-23T08:40:04Z",
+        "hidden": false,
+        "last_scheduled_at": "2026-11-29T10:00:00Z",
+        "last_scheduled_short_dates": "29 Nov 2026",
+        "notes": null,
+        "themes": null,
+        "title": "Test Song Two (LT test)",
+        "updated_at": "2026-11-23T08:40:04Z"
+      },
+      "links": {
+        "self": "https://api.planningcenteronline.com/services/v2/songs/9000009"
+      }
+    },
+    {
+      "type": "Song",
+      "id": "9000012",
+      "attributes": {
+        "admin": null,
+        "author": "LibreTracks",
+        "ccli_number": null,
+        "copyright": null,
+        "created_at": "2026-11-23T08:43:57Z",
+        "hidden": false,
+        "last_scheduled_at": "2026-11-29T10:00:00Z",
+        "last_scheduled_short_dates": "29 Nov 2026",
+        "notes": null,
+        "themes": null,
+        "title": "Rich Chart Test (LT test)",
+        "updated_at": "2026-11-23T08:43:57Z"
+      },
+      "links": {
+        "self": "https://api.planningcenteronline.com/services/v2/songs/9000012"
+      }
+    },
+    {
+      "type": "Song",
+      "id": "9000014",
+      "attributes": {
+        "admin": null,
+        "author": "LibreTracks",
+        "ccli_number": null,
+        "copyright": null,
+        "created_at": "2026-11-23T08:43:58Z",
+        "hidden": false,
+        "last_scheduled_at": "2026-11-29T10:00:00Z",
+        "last_scheduled_short_dates": "29 Nov 2026",
+        "notes": null,
+        "themes": null,
+        "title": "Canta Mi Alma (LT test)",
+        "updated_at": "2026-11-23T08:43:58Z"
+      },
+      "links": {
+        "self": "https://api.planningcenteronline.com/services/v2/songs/9000014"
+      }
+    }
+  ],
+  "included": [],
+  "meta": {
+    "total_count": 6,
+    "count": 6,
+    "can_order_by": [
+      "title",
+      "created_at",
+      "updated_at",
+      "last_scheduled_at"
+    ],
+    "can_query_by": [
+      "arrangement_name",
+      "arrangement_rehearsal_mix_id",
+      "arrangement_tag_group_ids",
+      "arrangement_tag_ids",
+      "author",
+      "bpm_max",
+      "bpm_min",
+      "ccli_number",
+      "ending_key",
+      "ending_key_minor",
+      "folder_id",
+      "hidden",
+      "key_name",
+      "lyrics",
+      "meter",
+      "service_type_id",
+      "song_tag_group_ids",
+      "song_tag_ids",
+      "starting_key",
+      "starting_key_minor",
+      "themes",
+      "title"
+    ],
+    "parent": {
+      "id": "9000026",
+      "type": "Organization"
+    }
+  }
+}

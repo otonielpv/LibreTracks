@@ -1,0 +1,76 @@
+{
+  "links": {
+    "self": "https://api.planningcenteronline.com/services/v2/service_types"
+  },
+  "data": [
+    {
+      "type": "ServiceType",
+      "id": "9000016",
+      "attributes": {
+        "archived_at": null,
+        "attachment_types_enabled": false,
+        "background_check_permissions": "default",
+        "comment_permissions": "DEPRECATED",
+        "created_at": "2026-11-23T08:40:42Z",
+        "custom_item_types": [],
+        "deleted_at": null,
+        "frequency": "Weekly",
+        "last_plan_from": "organization",
+        "name": "Domingo (LT test)",
+        "permissions": "Administrator",
+        "scheduled_publish": false,
+        "sequence": 0,
+        "standard_item_types": [
+          {
+            "name": "Header",
+            "index": 6,
+            "color": "#eaebeb"
+          },
+          {
+            "name": "Media",
+            "index": 7,
+            "color": "#ffffff"
+          },
+          {
+            "name": "Song",
+            "index": 7,
+            "color": "#ffffff"
+          }
+        ],
+        "updated_at": "2026-11-23T08:40:42Z"
+      },
+      "relationships": {
+        "parent": {
+          "data": null
+        }
+      },
+      "links": {
+        "self": "https://api.planningcenteronline.com/services/v2/service_types/9000016"
+      }
+    }
+  ],
+  "included": [],
+  "meta": {
+    "total_count": 1,
+    "count": 1,
+    "can_order_by": [
+      "sequence",
+      "name"
+    ],
+    "can_query_by": [
+      "id",
+      "name",
+      "parent_id"
+    ],
+    "can_include": [
+      "time_preference_options"
+    ],
+    "can_filter": [
+      "no_parent"
+    ],
+    "parent": {
+      "id": "9000026",
+      "type": "Organization"
+    }
+  }
+}

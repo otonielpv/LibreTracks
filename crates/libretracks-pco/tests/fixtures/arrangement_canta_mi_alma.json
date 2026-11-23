@@ -1,0 +1,143 @@
+{
+  "data": {
+    "type": "Arrangement",
+    "id": "9000013",
+    "attributes": {
+      "archived_at": null,
+      "bpm": 110,
+      "chord_chart": "ESTROFA I\nDo              Sol/Si\n  Hay un río que corre sin fin\nLam             Fa\n  Y una voz que me llama a seguir\nDo              Sol/Si\n  Hay un monte que puedo subir\nRem7      Fa       Sol\n  Contigo voy hasta el final\n\nPRE-ESTRIBILLO\nFa        Sol       Lam   Sol/Si\n  Y no me canso de cantar\nFa        Sol\n  (todos juntos)\n\nESTRIBILLO\nDo         Sol\n  Canta mi alma, canta\nLam        Fa\n  Canta sin parar\nDo         Sol\n  Canta mi alma, canta\nFa    Sol     Do\n  Hoy y siempre más\n\nINTERLUDIO\n| Do  Sol/Si | Lam  Fa | Do  Sol | Fa  Sol |\n\nESTROFA II\nDo              Sol/Si\n  Las estrellas me hablan de ti\nLam             Fa\n  El silencio me enseña a vivir\nDo              Sol/Si\n  Cada paso me acerca a ti\nRem7      Fa       Sol\n  Contigo voy hasta el final\n\nESTRIBILLO (x2)\n\nPUENTE\nLam    Sol      Fa       Do/Mi\n  Más alto, más alto, más alto\nRem7   Do/Mi    Fa       Sol\n  Más fuerte, más fuerte (tacet)\n\nFINAL\nFa    Sol     Do\n  Hoy y siempre más\n(ritardando)\n",
+      "chord_chart_chord_color": 0,
+      "chord_chart_columns": 1,
+      "chord_chart_font": "Courier",
+      "chord_chart_font_size": 12,
+      "chord_chart_key": "C",
+      "created_at": "2026-11-23T08:43:58Z",
+      "has_chord_chart": true,
+      "has_chords": false,
+      "length": 0,
+      "lyrics": "ESTROFA I\nDo SolSi\nHay un río que corre sin fin\nLam Fa\nY una voz que me llama a seguir\nDo SolSi\nHay un monte que puedo subir\nRem7 Fa Sol\nContigo voy hasta el final\n\nPRE-ESTRIBILLO\nFa Sol Lam SolSi\nY no me canso de cantar\nFa Sol\n(todos juntos)\n\nESTRIBILLO\nDo Sol\nCanta mi alma, canta\nLam Fa\nCanta sin parar\nDo Sol\nCanta mi alma, canta\nFa Sol Do\nHoy y siempre más\n\nINTERLUDIO\nDo SolSi Lam Fa Do Sol Fa Sol\n\nESTROFA II\nDo SolSi\nLas estrellas me hablan de ti\nLam Fa\nEl silencio me enseña a vivir\nDo SolSi\nCada paso me acerca a ti\nRem7 Fa Sol\nContigo voy hasta el final\n\nESTRIBILLO (x2)\n\nPUENTE\nLam Sol Fa DoMi\nMás alto, más alto, más alto\nRem7 DoMi Fa Sol\nMás fuerte, más fuerte (tacet)\n\nFINAL\nFa Sol Do\nHoy y siempre más\n(ritardando)",
+      "lyrics_enabled": true,
+      "meter": "6/8",
+      "name": "Default Arrangement",
+      "notes": null,
+      "number_chart_enabled": false,
+      "numeral_chart_enabled": false,
+      "print_margin": "0.5in",
+      "print_orientation": "Portrait",
+      "print_page_size": "Letter",
+      "sequence": [
+        "Estrofa 1",
+        "Pre-Estribillo",
+        "Estribillo",
+        "Interludio",
+        "Estrofa 2",
+        "Pre-Estribillo",
+        "Estribillo",
+        "Estribillo",
+        "Puente",
+        "Estribillo",
+        "Final"
+      ],
+      "sequence_full": [
+        {
+          "label": "Estrofa",
+          "number": "1"
+        },
+        {
+          "label": "Pre-Estribillo",
+          "number": "1"
+        },
+        {
+          "label": "Estribillo",
+          "number": "1"
+        },
+        {
+          "label": "Interludio",
+          "number": "1"
+        },
+        {
+          "label": "Estrofa",
+          "number": "2"
+        },
+        {
+          "label": "Pre-Estribillo",
+          "number": "1"
+        },
+        {
+          "label": "Estribillo",
+          "number": "1"
+        },
+        {
+          "label": "Estribillo",
+          "number": "1"
+        },
+        {
+          "label": "Puente",
+          "number": "1"
+        },
+        {
+          "label": "Estribillo",
+          "number": "1"
+        },
+        {
+          "label": "Final",
+          "number": "1"
+        }
+      ],
+      "sequence_short": [
+        "Estrofa1",
+        "Pre-Estribillo",
+        "Estribillo",
+        "Interludio",
+        "Estrofa2",
+        "Pre-Estribillo",
+        "Estribillo×2",
+        "Puente",
+        "Estribillo",
+        "Final"
+      ],
+      "updated_at": "2026-11-23T08:43:58Z"
+    },
+    "relationships": {
+      "updated_by": {
+        "data": {
+          "type": "Person",
+          "id": "9000002"
+        }
+      },
+      "created_by": {
+        "data": {
+          "type": "Person",
+          "id": "9000002"
+        }
+      },
+      "song": {
+        "data": {
+          "type": "Song",
+          "id": "9000014"
+        }
+      }
+    },
+    "links": {
+      "archive": "https://api.planningcenteronline.com/services/v2/songs/9000014/arrangements/9000013/archive",
+      "assign_tags": "https://api.planningcenteronline.com/services/v2/songs/9000014/arrangements/9000013/assign_tags",
+      "attachments": "https://api.planningcenteronline.com/services/v2/songs/9000014/arrangements/9000013/attachments",
+      "keys": "https://api.planningcenteronline.com/services/v2/songs/9000014/arrangements/9000013/keys",
+      "sections": "https://api.planningcenteronline.com/services/v2/songs/9000014/arrangements/9000013/sections",
+      "tags": "https://api.planningcenteronline.com/services/v2/songs/9000014/arrangements/9000013/tags",
+      "unarchive": "https://api.planningcenteronline.com/services/v2/songs/9000014/arrangements/9000013/unarchive",
+      "self": "https://api.planningcenteronline.com/services/v2/songs/9000014/arrangements/9000013"
+    }
+  },
+  "included": [],
+  "meta": {
+    "can_include": [
+      "keys",
+      "sections"
+    ],
+    "parent": {
+      "id": "9000014",
+      "type": "Song"
+    }
+  }
+}

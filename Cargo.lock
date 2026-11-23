@@ -2701,6 +2701,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "libretracks-pco"
+version = "0.0.1"
+dependencies = [
+ "async-trait",
+ "libretracks-cloud",
+ "libretracks-test-http",
+ "reqwest 0.12.28",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "tokio",
+ "url",
+]
+
+[[package]]
 name = "libretracks-project"
 version = "0.0.1"
 dependencies = [

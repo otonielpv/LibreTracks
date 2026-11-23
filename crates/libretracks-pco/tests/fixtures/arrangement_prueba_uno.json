@@ -1,0 +1,137 @@
+{
+  "data": {
+    "type": "Arrangement",
+    "id": "9000004",
+    "attributes": {
+      "archived_at": null,
+      "bpm": 128,
+      "chord_chart": "INTRO\nD        A        Bm       G\n\nVERSO 1\nD                     A\nCamino por la orilla del mar\nBm                    G\nBuscando la luz al amanecer\nD                     A\nLas olas me enseñan a esperar\nBm              G\nTodo vuelve a nacer\n\nPRE-CORO\nEm            G\nY canto, y canto\nEm            A\nSin miedo a la noche\n\nCORO\nD             A\nEres mi refugio\nBm            G\nEres mi canción\nD             A\nEn cada mañana\nG       A     D\nLate mi corazón\n\nVERSO 2\nD                     A\nLas piedras del camino al pasar\nBm                    G\nMe cuentan historias de ayer\nD                     A\nEl viento no deja de soplar\nBm              G\nTodo empieza otra vez\n\nPUENTE\nG           A\nNada me detiene\nBm          A\nNada me separa\nG           A\nNada me detiene\nBm     A     D\nHoy de ti\n",
+      "chord_chart_chord_color": 0,
+      "chord_chart_columns": 1,
+      "chord_chart_font": "Courier",
+      "chord_chart_font_size": 12,
+      "chord_chart_key": "D",
+      "created_at": "2026-11-23T08:40:02Z",
+      "has_chord_chart": true,
+      "has_chords": true,
+      "length": 0,
+      "lyrics": "INTRO\n\nVERSO 1\nCamino por la orilla del mar\nBuscando la luz al amanecer\nLas olas me enseñan a esperar\nTodo vuelve a nacer\n\nPRE-CORO\nY canto, y canto\nSin miedo a la noche\n\nCORO\nEres mi refugio\nEres mi canción\nEn cada mañana\nLate mi corazón\n\nVERSO 2\nLas piedras del camino al pasar\nMe cuentan historias de ayer\nEl viento no deja de soplar\nTodo empieza otra vez\n\nPUENTE\nNada me detiene\nNada me separa\nNada me detiene\nHoy de ti",
+      "lyrics_enabled": true,
+      "meter": "4/4",
+      "name": "Default Arrangement",
+      "notes": null,
+      "number_chart_enabled": false,
+      "numeral_chart_enabled": false,
+      "print_margin": "0.5in",
+      "print_orientation": "Portrait",
+      "print_page_size": "Letter",
+      "sequence": [
+        "Intro",
+        "Verso 1",
+        "Pre-Coro",
+        "Coro",
+        "Verso 2",
+        "Pre-Coro",
+        "Coro",
+        "Puente",
+        "Coro",
+        "Coro"
+      ],
+      "sequence_full": [
+        {
+          "label": "Intro",
+          "number": "1"
+        },
+        {
+          "label": "Verso",
+          "number": "1"
+        },
+        {
+          "label": "Pre-Coro",
+          "number": "1"
+        },
+        {
+          "label": "Coro",
+          "number": "1"
+        },
+        {
+          "label": "Verso",
+          "number": "2"
+        },
+        {
+          "label": "Pre-Coro",
+          "number": "1"
+        },
+        {
+          "label": "Coro",
+          "number": "1"
+        },
+        {
+          "label": "Puente",
+          "number": "1"
+        },
+        {
+          "label": "Coro",
+          "number": "1"
+        },
+        {
+          "label": "Coro",
+          "number": "1"
+        }
+      ],
+      "sequence_short": [
+        "Intro",
+        "Verso1",
+        "Pre-Coro",
+        "Coro",
+        "Verso2",
+        "Pre-Coro",
+        "Coro",
+        "Puente",
+        "Coro×2"
+      ],
+      "updated_at": "2026-11-23T08:40:03Z"
+    },
+    "relationships": {
+      "updated_by": {
+        "data": {
+          "type": "Person",
+          "id": "9000002"
+        }
+      },
+      "created_by": {
+        "data": {
+          "type": "Person",
+          "id": "9000002"
+        }
+      },
+      "song": {
+        "data": {
+          "type": "Song",
+          "id": "9000005"
+        }
+      }
+    },
+    "links": {
+      "archive": "https://api.planningcenteronline.com/services/v2/songs/9000005/arrangements/9000004/archive",
+      "assign_tags": "https://api.planningcenteronline.com/services/v2/songs/9000005/arrangements/9000004/assign_tags",
+      "attachments": "https://api.planningcenteronline.com/services/v2/songs/9000005/arrangements/9000004/attachments",
+      "keys": "https://api.planningcenteronline.com/services/v2/songs/9000005/arrangements/9000004/keys",
+      "sections": "https://api.planningcenteronline.com/services/v2/songs/9000005/arrangements/9000004/sections",
+      "tags": "https://api.planningcenteronline.com/services/v2/songs/9000005/arrangements/9000004/tags",
+      "unarchive": "https://api.planningcenteronline.com/services/v2/songs/9000005/arrangements/9000004/unarchive",
+      "self": "https://api.planningcenteronline.com/services/v2/songs/9000005/arrangements/9000004"
+    }
+  },
+  "included": [],
+  "meta": {
+    "can_include": [
+      "keys",
+      "sections"
+    ],
+    "parent": {
+      "id": "9000005",
+      "type": "Song"
+    }
+  }
+}

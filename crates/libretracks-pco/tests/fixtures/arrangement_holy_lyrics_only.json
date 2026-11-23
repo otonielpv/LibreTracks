@@ -1,0 +1,96 @@
+{
+  "data": {
+    "type": "Arrangement",
+    "id": "9000006",
+    "attributes": {
+      "archived_at": null,
+      "bpm": 66,
+      "chord_chart": "VERSE 1\nHoly, holy, holy! Lord God Almighty!\nEarly in the morning our song shall rise to Thee\nHoly, holy, holy! Merciful and mighty!\nGod in three Persons, blessed Trinity!\n\nVERSE 2\nHoly, holy, holy! All the saints adore Thee\nCasting down their golden crowns around the glassy sea\nCherubim and seraphim falling down before Thee\nWhich wert, and art, and evermore shalt be\n\nVERSE 3\nHoly, holy, holy! Though the darkness hide Thee\nThough the eye of sinful man Thy glory may not see\nOnly Thou art holy; there is none beside Thee\nPerfect in power, in love, and purity\n",
+      "chord_chart_chord_color": 0,
+      "chord_chart_columns": 1,
+      "chord_chart_font": "Courier",
+      "chord_chart_font_size": 12,
+      "chord_chart_key": "Eb",
+      "created_at": "2026-11-23T08:40:03Z",
+      "has_chord_chart": true,
+      "has_chords": false,
+      "length": 0,
+      "lyrics": "VERSE 1\nHoly, holy, holy! Lord God Almighty!\nEarly in the morning our song shall rise to Thee\nHoly, holy, holy! Merciful and mighty!\nGod in three Persons, blessed Trinity!\n\nVERSE 2\nHoly, holy, holy! All the saints adore Thee\nCasting down their golden crowns around the glassy sea\nCherubim and seraphim falling down before Thee\nWhich wert, and art, and evermore shalt be\n\nVERSE 3\nHoly, holy, holy! Though the darkness hide Thee\nThough the eye of sinful man Thy glory may not see\nOnly Thou art holy; there is none beside Thee\nPerfect in power, in love, and purity",
+      "lyrics_enabled": true,
+      "meter": "4/4",
+      "name": "Default Arrangement",
+      "notes": null,
+      "number_chart_enabled": false,
+      "numeral_chart_enabled": false,
+      "print_margin": "0.5in",
+      "print_orientation": "Portrait",
+      "print_page_size": "Letter",
+      "sequence": [
+        "Verse 1",
+        "Verse 2",
+        "Verse 3"
+      ],
+      "sequence_full": [
+        {
+          "label": "Verse",
+          "number": "1"
+        },
+        {
+          "label": "Verse",
+          "number": "2"
+        },
+        {
+          "label": "Verse",
+          "number": "3"
+        }
+      ],
+      "sequence_short": [
+        "V1",
+        "V2",
+        "V3"
+      ],
+      "updated_at": "2026-11-23T08:40:17Z"
+    },
+    "relationships": {
+      "updated_by": {
+        "data": {
+          "type": "Person",
+          "id": "9000002"
+        }
+      },
+      "created_by": {
+        "data": {
+          "type": "Person",
+          "id": "9000002"
+        }
+      },
+      "song": {
+        "data": {
+          "type": "Song",
+          "id": "9000007"
+        }
+      }
+    },
+    "links": {
+      "archive": "https://api.planningcenteronline.com/services/v2/songs/9000007/arrangements/9000006/archive",
+      "assign_tags": "https://api.planningcenteronline.com/services/v2/songs/9000007/arrangements/9000006/assign_tags",
+      "attachments": "https://api.planningcenteronline.com/services/v2/songs/9000007/arrangements/9000006/attachments",
+      "keys": "https://api.planningcenteronline.com/services/v2/songs/9000007/arrangements/9000006/keys",
+      "sections": "https://api.planningcenteronline.com/services/v2/songs/9000007/arrangements/9000006/sections",
+      "tags": "https://api.planningcenteronline.com/services/v2/songs/9000007/arrangements/9000006/tags",
+      "unarchive": "https://api.planningcenteronline.com/services/v2/songs/9000007/arrangements/9000006/unarchive",
+      "self": "https://api.planningcenteronline.com/services/v2/songs/9000007/arrangements/9000006"
+    }
+  },
+  "included": [],
+  "meta": {
+    "can_include": [
+      "keys",
+      "sections"
+    ],
+    "parent": {
+      "id": "9000007",
+      "type": "Song"
+    }
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "_note": "Built by hand (step 01): the 429 was not provoked against the real API. Headers seen on real answers: X-PCO-API-Request-Rate-Limit: 100, X-PCO-API-Request-Rate-Period: 20, X-PCO-API-Request-Rate-Count. Serve with Retry-After.",
+  "headers": {
+    "Retry-After": "1",
+    "X-PCO-API-Request-Rate-Limit": "100",
+    "X-PCO-API-Request-Rate-Period": "20",
+    "X-PCO-API-Request-Rate-Count": "101"
+  },
+  "body": {
+    "errors": [
+      { "status": "429", "title": "Too Many Requests", "detail": "Rate limit exceeded: 101 of 100 requests per 20 seconds" }
+    ]
+  }
+}

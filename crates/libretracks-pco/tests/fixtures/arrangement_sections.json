@@ -1,0 +1,40 @@
+{
+  "data": {
+    "type": "ArrangementSections",
+    "id": "9000004",
+    "attributes": {
+      "sections": [
+        {
+          "label": "Verso 1",
+          "lyrics": "Camino por la orilla del mar\n\rBuscando la luz al amanecer\n\rLas olas me enseñan a esperar\n\rTodo vuelve a nacer\n\rPRE-CORO\n\rY canto, y canto\n\rSin miedo a la noche",
+          "breaks_at": null
+        },
+        {
+          "label": "Coro",
+          "lyrics": "Eres mi refugio\n\rEres mi canción\n\rEn cada mañana\n\rLate mi corazón",
+          "breaks_at": null
+        },
+        {
+          "label": "Verso 2",
+          "lyrics": "Las piedras del camino al pasar\n\rMe cuentan historias de ayer\n\rEl viento no deja de soplar\n\rTodo empieza otra vez",
+          "breaks_at": null
+        },
+        {
+          "label": "Puente",
+          "lyrics": "Nada me detiene\n\rNada me separa\n\rNada me detiene\n\rHoy de ti",
+          "breaks_at": null
+        }
+      ]
+    },
+    "links": {
+      "self": "https://api.planningcenteronline.com/services/v2/songs/9000005/arrangements/9000004/sections"
+    }
+  },
+  "included": [],
+  "meta": {
+    "parent": {
+      "id": "9000004",
+      "type": "Arrangement"
+    }
+  }
+}
