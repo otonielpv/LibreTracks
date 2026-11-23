@@ -43,6 +43,7 @@ export type SheetChange =
   | { kind: "layout"; count: number }
   | { kind: "headerChords"; label: string }
   | { kind: "repeatMarks"; label: string }
+  | { kind: "repeatLines"; label: string; line: string; count: number }
   | { kind: "reference"; label: string }
   | { kind: "repeatLine"; label: string }
   | { kind: "duplicate"; label: string }
@@ -135,7 +136,13 @@ const CLOSE_MARK = /\s*(\/{2,})\s*$/;
  * marks, or a header ending in them ("INTRO //"), reports how many times, so
  * the matcher may let two markers in a row stay on it.
  */
-function foldRepeatMarks(section: ChartSection): { section: ChartSection; repeat: number; marks: boolean } {
+function foldRepeatMarks(section: ChartSection): {
+  section: ChartSection;
+  repeat: number;
+  marks: boolean;
+  /** Blocks inside the section written out as many times as they are sung. */
+  expanded: Array<{ line: string; count: number }>;
+} {
   const bare = section.label.replace(/\s*(\/{2,})\s*$/, "");
   const headerMarks = /(\/{2,})\s*$/.exec(section.label)?.[1].length ?? 0;
   const label = parseSectionHeader(bare)?.label ?? bare;
@@ -168,7 +175,30 @@ function foldRepeatMarks(section: ChartSection): { section: ChartSection; repeat
   const whole =
     blocks.length === 1 && blocks[0].from === lyricIndexes[0] && blocks[0].to === lyricIndexes[lyricIndexes.length - 1];
   const repeat = Math.max(headerMarks, whole ? blocks[0].count : 1, sectionRepeat(label));
-  return { section: { ...section, label, lines }, repeat, marks: headerMarks > 0 || blocks.length > 0 };
+  // A block inside the section ("// line //" then a last line): written out
+  // as many times as it is sung, so the sheet shows what is sung and Live
+  // times each line. Saving to Planning Center with slashes joins them again.
+  const expanded: Array<{ line: string; count: number }> = [];
+  let written = lines;
+  if (!whole) {
+    for (const block of [...blocks].sort((left, right) => right.from - left.from)) {
+      if (block.count < 2) continue;
+      const copy = written.slice(block.from, block.to + 1);
+      written = [
+        ...written.slice(0, block.to + 1),
+        ...Array.from({ length: block.count - 1 }, () => copy.map((line) => structuredClone(line))).flat(),
+        ...written.slice(block.to + 1),
+      ];
+      const first = copy.find((line) => line.kind === "lyrics");
+      expanded.unshift({ line: first ? lineText(first) : "", count: block.count });
+    }
+  }
+  return {
+    section: { ...section, label, lines: written },
+    repeat,
+    marks: headerMarks > 0 || blocks.length > 0,
+    expanded,
+  };
 }
 
 export function normalizeImportedChart(chart: ImportedChart): {
@@ -185,7 +215,12 @@ export function normalizeImportedChart(chart: ImportedChart): {
   if (layout > 0) changes.push({ kind: "layout", count: layout });
   const doc = parseChordPro(splitHeaderWithChords(stripLayoutMarks(chart.text), changes));
   const folded = doc.sections.map(foldRepeatMarks);
-  for (const { section, marks } of folded) if (marks) changes.push({ kind: "repeatMarks", label: section.label });
+  for (const { section, marks, expanded } of folded) {
+    if (marks) changes.push({ kind: "repeatMarks", label: section.label });
+    for (const block of expanded) {
+      changes.push({ kind: "repeatLines", label: section.label, line: block.line, count: block.count });
+    }
+  }
   const repeatOf = new Map(folded.map(({ section, repeat }) => [section, repeat] as const));
   doc.sections = folded.map(({ section }) => section);
   const kept: ChartSection[] = [];

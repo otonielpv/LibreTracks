@@ -234,7 +234,12 @@ describe("Planning Center repeat marks", () => {
     const sections = doc().sections;
     expect(sections.map((section) => section.label)).toEqual(["Intro", "Verso 1", "Coro 1", "Coro 2", "Puente", "Coro 3"]);
     expect(sections[3].lines.map(words)).toEqual(["Te canto hoy", "porque tú me esperas"]);
+    // The /// block inside the bridge is written out three times, as sung.
     expect(sections[4].lines.map(words)).toEqual([
+      "Ahora vuelvo   Ahora canto",
+      "Y tu camino es mi casa",
+      "Ahora vuelvo   Ahora canto",
+      "Y tu camino es mi casa",
       "Ahora vuelvo   Ahora canto",
       "Y tu camino es mi casa",
       "Ahora vuelvo   Ahora canto",

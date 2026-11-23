@@ -24,7 +24,34 @@ const hasWords = (section: ChartSection, index: number) => {
  * between sections. Title, artist and key go in their own fields. `marks`
  * wraps a section in repeat slashes (2 = "// … //").
  */
-export function toPlanningCenterChart(text: string, marks: ReadonlyMap<number, number> = new Map()): string {
+/**
+ * Lines sung again right after themselves ("A A B", "A B A B C"), joined into
+ * one block with its count: what LibreTracks writes out, Planning Center
+ * writes once between slashes.
+ */
+function joinRepeatedLines(lines: readonly string[]): Array<{ lines: string[]; count: number }> {
+  const blocks: Array<{ lines: string[]; count: number }> = [];
+  let index = 0;
+  while (index < lines.length) {
+    let best = { length: 1, count: 1 };
+    for (let length = 1; index + length * 2 <= lines.length; length += 1) {
+      const block = lines.slice(index, index + length);
+      if (!block.some((line) => /\p{L}/u.test(line))) continue;
+      let count = 1;
+      while (lines.slice(index + count * length, index + (count + 1) * length).join("\n") === block.join("\n")) count += 1;
+      if (count >= 2 && length * count > best.length * best.count) best = { length, count };
+    }
+    blocks.push({ lines: lines.slice(index, index + best.length), count: best.count });
+    index += best.length * best.count;
+  }
+  return blocks;
+}
+
+export function toPlanningCenterChart(
+  text: string,
+  marks: ReadonlyMap<number, number> = new Map(),
+  joinLines = false,
+): string {
   const doc = parseChordPro(text);
   const blocks = doc.sections.map((section, sectionIndex) => {
     const times = marks.get(sectionIndex) ?? 1;
@@ -37,18 +64,34 @@ export function toPlanningCenterChart(text: string, marks: ReadonlyMap<number, n
       // A part without words ("INTRO") carries its marks on the header.
       lines.push(`${section.label.toUpperCase()}${slashes && first === undefined ? ` ${slashes}` : ""}`);
     }
+    const body: string[] = [];
     section.lines.forEach((line, index) => {
       if (line.kind === "lyrics") {
         let written = serializeLyricLine(line.segments);
         if (slashes && index === first) written = `${slashes} ${written}`;
         if (slashes && index === last) written = `${written.replace(/\s+$/, "")} ${slashes}`;
-        lines.push(written);
+        body.push(written);
       } else if (line.kind === "comment") {
-        lines.push(`(${line.text})`);
+        body.push(`(${line.text})`);
       } else {
-        lines.push(line.text);
+        body.push(line.text);
       }
     });
+    if (joinLines && !slashes) {
+      for (const block of joinRepeatedLines(body)) {
+        if (block.count < 2) {
+          lines.push(...block.lines);
+          continue;
+        }
+        const marked = "/".repeat(block.count);
+        const joined = [...block.lines];
+        joined[0] = `${marked} ${joined[0]}`;
+        joined[joined.length - 1] = `${joined[joined.length - 1].replace(/\s+$/, "")} ${marked}`;
+        lines.push(...joined);
+      }
+    } else {
+      lines.push(...body);
+    }
     return lines.join("\n");
   });
   return `${blocks.filter((block) => block.trim()).join("\n\n")}\n`;
@@ -90,7 +133,7 @@ export function planningCenterExport(
     const times = Math.max(1, Math.round(entry.passes / inSheet));
     return Array.from({ length: times }, () => doc.sections[entry.section].label);
   });
-  return { chordChart: toPlanningCenterChart(text, marks), sequence };
+  return { chordChart: toPlanningCenterChart(text, marks, style === "marks"), sequence };
 }
 
 /** The sequence alone, with the repeats in it. */

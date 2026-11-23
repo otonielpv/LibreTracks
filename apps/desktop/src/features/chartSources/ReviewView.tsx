@@ -121,7 +121,9 @@ export function SheetChangesList({ changes }: { changes: readonly SheetChange[] 
             <li key={index} data-testid="sheet-change">
               {change.kind === "layout"
                 ? t("chartSources.adjust.change.layout", { count: change.count })
-                : t(`chartSources.adjust.change.${change.kind}`, { label: change.label })}
+                : change.kind === "repeatLines"
+                  ? t("chartSources.adjust.change.repeatLines", { label: change.label, line: change.line, count: change.count })
+                  : t(`chartSources.adjust.change.${change.kind}`, { label: change.label })}
             </li>
           ))}
         </ul>
