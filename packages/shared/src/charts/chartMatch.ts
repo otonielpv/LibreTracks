@@ -1,6 +1,6 @@
 import type { ChartLink, SectionMarkerSummary } from "../models";
 
-import { parseSectionHeader, sectionRepeat, type ChartDoc } from "./chordChart";
+import { parseSectionHeader, type ChartDoc } from "./chordChart";
 import { canonicalLabel, chartKind, isLyricless, sectionFamily, vocabTokens } from "./sectionVocab";
 
 /**
@@ -212,9 +212,6 @@ export function matchChartToMarkers(
   const pinned = sequence ? alignWithSequence(meanings, sequence, doc) : new Map<number, number>();
 
   const families = doc.sections.map((section) => sectionFamily(section.kind));
-  const repeats = doc.sections.map(
-    (section, index) => options.sectionRepeats?.[index] ?? sectionRepeat(section.label),
-  );
   // countBefore[family][i] = sections of that family in [0, i).
   const countBefore = new Map<string, number[]>();
   for (const family of new Set(families)) {
@@ -232,10 +229,6 @@ export function matchChartToMarkers(
     const family = families[section];
     if (!family) return position < section ? 0 : BACK_COST;
     if (section > position) return SKIP_COST * between(family, position + 1, section);
-    // A section the sheet marks as played several times in a row ("Coro 2
-    // (x2)", Planning Center's "// … //"): the next marker staying on it is
-    // just reading on.
-    if (section === position && repeats[section] > 1) return 0;
     // Two markers of the same part in a row (Coro, Coro) are most often the
     // same section sung again: cheaper than going back, still dearer than
     // reading on to a section written next.

@@ -55,6 +55,24 @@ const uniformMeasure: MeasureText = (text, width) => {
   return Array.from({ length: text.length }, (_, index) => index * step);
 };
 
+/**
+ * Planning Center shows chord lines in a proportional font, where a space is
+ * about half as wide as a letter: chords typed over the words there sit, in
+ * plain columns, far to the right of them ("                             G"
+ * over a 28-letter line). Measuring both lines this way puts each chord back
+ * over the syllable Planning Center draws it on. Offsets in letter widths,
+ * the same for every line.
+ */
+export const proportionalMeasure: MeasureText = (text) => {
+  const offsets: number[] = [];
+  let x = 0;
+  for (let index = 0; index < text.length; index += 1) {
+    offsets.push(x);
+    x += text[index] === " " ? 0.55 : 1;
+  }
+  return offsets;
+};
+
 const META_RE =
   /\bccli\b|©|\(c\)\s*\d{4}|copyright|derechos reservados|all rights reserved|www\.|https?:\/\/|[\w.+-]+@[\w-]+\.[\w.]+|\bprohib|uso (?:exclusivo|privado|personal)|fines comerciales|personal use only|educational purposes|^\s*(?:page|p[aá]gina|p[aá]g\.?)\s*\d+|^\s*\d+\s*(?:\/|of|de)\s*\d+\s*$|^\s*\d{1,3}\s*$|^\s*-\s*\d+\s*-\s*$/i;
 const KEY_RE = /^\s*(?:key|tono|tonalidad|clave)\s*[:=-]\s*([A-G](?:#|b)?m?|(?:Do|Re|Mi|Fa|Sol|La|Si)(?:#|b)?m?)\b/i;
@@ -455,7 +473,60 @@ export function looksLikeChordPro(text: string): boolean {
   const lines = text.split(/\r?\n/);
   const directives = lines.filter((line) => /^\s*\{[a-z_]+(?::.*)?\}\s*$/i.test(line)).length;
   const inline = lines.filter((line) => /\[[^\]\s]{1,12}\][^\s[]/.test(line) || /\[[^\]\s]{1,12}\]\s*$/.test(line)).length;
-  return directives > 0 || inline >= 2;
+  // A sheet of chords written over the words with a few [C] lines in it (one
+  // "Somos el pueblo de [G]Dios" among chord lines) is a plain sheet: the
+  // analyser reads both kinds of line.
+  const chordLines = lines.filter(isChordOnlyLine).length;
+  return directives > 0 || (inline >= 2 && chordLines < inline);
+}
+
+/** A line of only chords and bar marks ("C   G/B", "| F - Am |"). */
+function isChordOnlyLine(line: string): boolean {
+  const tokens = line.replace(/\|/g, " | ").trim().split(/\s+/).filter(Boolean);
+  return tokens.length > 0 && tokens.some(isChord) && tokens.every((token) => isChord(token) || isChordLineFiller(token));
+}
+
+/**
+ * Section header lines that carry something after the name, split so the
+ * name is a header of its own: "PUENTE (bajamos todos)", "PUENTE SEGUIDO",
+ * "INTRO PIANOS: C G C G", "Intro: E Esus2", "INTRO |F - Am - G - C/E |".
+ * The rest stays: chords as a line of chords (`[C]` in ChordPro), anything
+ * else as a note. Spaced repeat marks ("/ / /") are joined ("///").
+ */
+export function splitSectionHeaderLines(text: string, chordPro = looksLikeChordPro(text)): string {
+  return text
+    .replace(/\r\n?/g, "\n")
+    .split("\n")
+    .flatMap((raw) => {
+      const line = raw.replace(/(^|\s)\/(?:\s+\/)+(?=\s|$)/g, (match, lead: string) => `${lead}${match.replace(/\s+/g, "")}`.replace(/^(\s?)\s*/, "$1"));
+      if (/[[{]/.test(line) || !line.trim() || parseSectionHeader(line)) return [line];
+      const words = line.trim().split(/\s+/);
+      for (let size = Math.min(3, words.length - 1); size >= 1; size -= 1) {
+        const head = words.slice(0, size).join(" ");
+        const colon = head.endsWith(":");
+        const name = head.replace(/:$/, "");
+        const header = parseSectionHeader(name);
+        if (!header) continue;
+        const rest = words.slice(size).join(" ").replace(/^:\s*/, "");
+        const restTokens = rest.replace(/\|/g, " | ").split(/\s+/).filter(Boolean);
+        const chordsAt = restTokens.findIndex(isChord);
+        const chords = chordsAt >= 0 && restTokens.slice(chordsAt).every((token) => isChord(token) || isChordLineFiller(token));
+        const note = chordsAt > 0 ? restTokens.slice(0, chordsAt).join(" ").replace(/:$/, "") : chordsAt < 0 ? rest : "";
+        const parenthetical = /^\(.*\)$/.test(rest.trim());
+        const caps = line === line.toUpperCase() && /\p{L}/u.test(rest) && rest.split(/\s+/).length <= 3;
+        if (!chords && !colon && !parenthetical && !caps) continue;
+        const out = [name];
+        const noteText = note.replace(/^\((.*)\)$/, "$1").trim();
+        if (noteText) out.push(chordPro ? `{comment: ${noteText}}` : `(${noteText})`);
+        if (chords) {
+          const chordTokens = restTokens.slice(chordsAt);
+          out.push(chordPro ? chordTokens.map((token) => (isChord(token) ? `[${token}]` : token)).join(" ") : chordTokens.join(" "));
+        }
+        return out;
+      }
+      return [line];
+    })
+    .join("\n");
 }
 
 /** Plain text (a .txt, an e-mail, a web page pasted) → lines in characters.
@@ -477,7 +548,9 @@ export function textToSourceLines(text: string): SourceLine[] {
 }
 
 /** Any text → ChordPro: kept as is if it already is ChordPro, analysed if not. */
-export function chordProFromText(text: string): string {
-  if (looksLikeChordPro(text)) return serializeChordPro(parseChordPro(text));
-  return serializeChordPro(analyzeSongSheet(textToSourceLines(text)));
+export function chordProFromText(text: string, measure: MeasureText = uniformMeasure): string {
+  const chordPro = looksLikeChordPro(text);
+  const split = splitSectionHeaderLines(text, chordPro);
+  if (chordPro) return serializeChordPro(parseChordPro(split));
+  return serializeChordPro(analyzeSongSheet(textToSourceLines(split), measure));
 }

@@ -125,14 +125,14 @@ describe("how many times a section plays inside its marker", () => {
     expect(links.find((link) => link.markerId === "v1")?.repeat).toBeUndefined();
   });
 
-  it("without marks, a marker twice as long as the shortest of its section is two passes", () => {
+  it("without marks in the sheet, every marker sings its section once, however long", () => {
     const review = buildImportReview(imported(["VERSO", "Uno", "CORO", "Luz"].join("\n")), song, null, [], timing);
     // c1 is 28 s, c2 and c3 28 s too: all one pass (no shorter chorus).
     expect(review.rows.filter((row) => row.markerId.startsWith("c")).map((row) => row.passes)).toEqual([1, 1, 1]);
     const short = song.map((marker) => (marker.id === "c3" ? { ...marker, startSeconds: 98 } : marker));
     const uneven = buildImportReview(imported(["VERSO", "Uno", "CORO", "Luz"].join("\n")), short, null, [], timing);
     expect(uneven.rows.find((row) => row.markerId === "c3")?.passes).toBe(1);
-    expect(uneven.rows.find((row) => row.markerId === "c1")?.passes).toBe(2);
+    expect(uneven.rows.find((row) => row.markerId === "c1")?.passes).toBe(1);
   });
 
   it("keeps the passes the user set", () => {

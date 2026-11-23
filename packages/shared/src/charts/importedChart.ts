@@ -1,6 +1,6 @@
 import type { ChartSource } from "../models";
 
-import { chordProFromText, looksLikeChordPro } from "./chartImport";
+import { chordProFromText, looksLikeChordPro, proportionalMeasure, splitSectionHeaderLines } from "./chartImport";
 import { isChord, isChordLineFiller } from "./chordNotation";
 import {
   parseChordPro,
@@ -172,6 +172,18 @@ function foldRepeatMarks(section: ChartSection): {
     }
   }
   if (open) blocks.push({ from: open.line, to: open.line, count: open.count });
+  // "Sé que lo harás otra vez, x2": a line that says how many times it is sung.
+  for (const index of lyricIndexes) {
+    const line = lines[index];
+    if (line.kind !== "lyrics" || blocks.some((block) => index >= block.from && index <= block.to)) continue;
+    const last = [...line.segments].reverse().find((segment) => segment.text.trim());
+    const times = last ? /[,;\s]+\(?x\s?([2-8])\)?\s*$/i.exec(last.text) : null;
+    if (last && times) {
+      last.text = last.text.slice(0, times.index);
+      blocks.push({ from: index, to: index, count: Number(times[1]) });
+    }
+  }
+  blocks.sort((left, right) => left.from - right.from);
   const whole =
     blocks.length === 1 && blocks[0].from === lyricIndexes[0] && blocks[0].to === lyricIndexes[lyricIndexes.length - 1];
   const repeat = Math.max(headerMarks, whole ? blocks[0].count : 1, sectionRepeat(label));
@@ -345,7 +357,7 @@ export function planningCenterToImported(arrangement: PcoArrangement, item?: Pco
   if (!raw) throw new ChartImportError("noText");
   // As it comes: converted to ChordPro, never cleaned or adjusted here. The
   // user adjusts it to the song with "Adjust to the sequence".
-  const text = looksLikeChordPro(raw) ? raw : chordProFromText(raw);
+  const text = looksLikeChordPro(raw) ? splitSectionHeaderLines(raw, true) : chordProFromText(raw, proportionalMeasure);
   const key = item?.keyName?.trim() || arrangement.chordChartKey?.trim() || null;
   const sequence = sequenceLabels(item?.customArrangementSequenceFull) ?? sequenceLabels(arrangement.sequenceFull);
   return {

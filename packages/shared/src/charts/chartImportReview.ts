@@ -128,7 +128,8 @@ export function estimatePasses(
       // long markers is 2 + 2 + 2.
       for (const entry of entries) {
         const lineBars = Math.max(1, Math.round(SECONDS_PER_LINE / barSeconds.get(entry.markerId)!));
-        const times = Math.min(8, Math.max(1, Math.round(bars.get(entry.markerId)! / (lines * lineBars))));
+        // One marker never sings it more times than the sheet says in all.
+        const times = Math.min(sheet, 8, Math.max(1, Math.round(bars.get(entry.markerId)! / (lines * lineBars))));
         if (times >= 2) passes[entry.markerId] = times;
       }
       continue;
@@ -138,7 +139,9 @@ export function estimatePasses(
     if (!(pass > 0)) continue;
     for (const entry of entries) {
       const ratio = entry.length / pass;
-      const times = sheet > 1 ? Math.round(ratio) : lines > 0 && ratio >= 1.8 ? Math.round(ratio) : 1;
+      // Without a count in the sheet, once: comparing markers' lengths
+      // mistook a long chorus for a double one.
+      const times = sheet > 1 ? Math.round(ratio) : 1;
       if (times >= 2) passes[entry.markerId] = Math.min(8, times);
     }
   }
