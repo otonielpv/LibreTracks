@@ -13,7 +13,7 @@
   "scenes": [
     {
       "id": "01-intro",
-      "text": "Libre Tracks uno punto dieciocho punto cero llega con un ecualizador en cada pista, loops de batería, la letra que cambia sola en tu programa de proyección y un cambio de tono pensado para equipos modestos."
+      "text": "Libre Tracks uno punto dieciocho punto cero llega con un ecualizador en cada pista, loops de batería, la letra que cambia sola en tu programa de proyección, letra y acordes desde Planning Center y un cambio de tono pensado para equipos modestos."
     },
     {
       "id": "02-eq",
@@ -33,15 +33,23 @@
     },
     {
       "id": "06-letra-ajustes",
-      "text": "La letra puede cambiar sola en Pro Presenter, Free Show u Holi rics. En Configuración, pestaña Letras, actívalo, elige tu programa y pulsa Buscar en la red: Libre Tracks lo encuentra y rellena la dirección."
+      "text": "La letra puede cambiar sola en Pro Presenter, Free Show u Holi rics. En Configuración, pestaña Proyección, actívalo, elige tu programa y pulsa Buscar en la red: Libre Tracks lo encuentra y rellena la dirección."
     },
     {
       "id": "07-letra-cancion",
-      "text": "Las canciones se vinculan solas por el nombre. Con clic derecho sobre la canción, Letra en proyección, ves qué parte de la letra sale en cada marca y puedes corregirla."
+      "text": "Las canciones se vinculan solas por el nombre. Con clic derecho sobre la canción, Proyección, ves qué parte de la letra sale en cada marca y puedes corregirla."
     },
     {
       "id": "08-letra-directo",
       "text": "Y al reproducir, cada sección cambia la letra en el programa un poco antes de que empiece, siguiendo también los saltos y los vamps. Sin MIDI y sin programar canción a canción."
+    },
+    {
+      "id": "08b-planning",
+      "text": "Si tu iglesia usa Planning Center, conecta tu cuenta en Archivo, Nube. Luego, con clic derecho sobre la canción, Letra desde Planning Center, buscas la canción y eliges el arreglo."
+    },
+    {
+      "id": "08c-planning-ajustar",
+      "text": "Libre Tracks ajusta la hoja a las marcas de tu canción, aunque los nombres de las secciones no coincidan, y te enseña qué cambiaría antes de guardar. Después puedes actualizarla desde Planning Center o guardar allí la letra corregida."
     },
     {
       "id": "09-tono",
@@ -62,6 +70,11 @@
     {
       "id": "13-movil",
       "text": "En el móvil, selecciona una pista y pulsa EQ en su panel. El panel Ritmo se abre desde su botón de la barra.",
+      "subtitles": "mobile"
+    },
+    {
+      "id": "13b-movil-vertical",
+      "text": "Y en el teléfono, los menús de escribir letra se ponen en vertical para escribir cómodo.",
       "subtitles": "mobile"
     },
     {

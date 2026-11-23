@@ -44,7 +44,7 @@ const only = (process.env.LT_TUTORIAL_SCENES ?? "").split(",").filter(Boolean);
 const loopback = path.join(repoRoot, "scripts", "tutorial-video", "loopback.py");
 const FREESHOW_OUTPUT = process.env.LT_FREESHOW_OUTPUT ?? "http://127.0.0.1:5513/";
 const TITLES = {
-  intro: ["Novedades de LibreTracks 1.18.0", "Ecualizador por pista, loops de batería, letra en proyección y tono preparado"],
+  intro: ["Novedades de LibreTracks 1.18.0", "Ecualizador por pista, loops de batería, letra en proyección, Planning Center y tono preparado"],
   end: ["LibreTracks 1.18.0", "Gratis en libretracks.com"],
   fixes: "Y además",
 };
@@ -57,6 +57,8 @@ const FIXES = [
   "Se comprueba el espacio libre antes de escribir en disco",
   "En iPhone la pantalla ya no se queda en blanco",
   "Un coro copiado con sus tiempos en el editor de letra ya no pasa de golpe",
+  "Al abrir otra sesión ya no sigue sonando el clic de la anterior",
+  "Menos memoria al reproducir sesiones grandes",
 ];
 
 const tour = (id: string) => `[data-lt-tour="${id}"]`;
@@ -449,6 +451,8 @@ describe("release video (desktop scenes)", function () {
       return found;
     };
 
+    const fileMenu = `${tour("topbar-file-menu")} .lt-top-menu-trigger`;
+
     await fitSong();
     const chorus = await markerNamed(/coro/i);
     await invoke("seek_transport", { positionSeconds: chorus.startSeconds });
@@ -611,14 +615,14 @@ describe("release video (desktop scenes)", function () {
       await done();
     }
 
-    // 07 — right-click the song › «Letra en proyección…».
+    // 07 — right-click the song › «Proyección…».
     {
       const { rec, done } = scene("07-letra-cancion");
       await fitSong();
       const band = await songBand();
       await rec.rightClick({ x: Math.max(band.x, 0) + 260, y: band.y + band.h / 2 });
       await rec.hold(0.8);
-      await rec.click(await tagByText(".lt-context-menu button", L("Letra en proyección…"), "rv-lyrics-panel"), 1500);
+      await rec.click(await tagByText(".lt-context-menu button", L("Proyección…"), "rv-lyrics-panel"), 1500);
       if (await rectOf(".lt-lyrics-modal")) {
         await rec.zoomTo(".lt-lyrics-modal", { margin: 30, maxZoom: 1.4 });
         await rec.hold(2);
@@ -690,6 +694,94 @@ describe("release video (desktop scenes)", function () {
         viewportW = vp.w;
         viewportH = vp.h;
       }
+    }
+
+    // 08b — Planning Center: the account in File › Nube…, then the song's
+    // menu › «Letra desde Planning Center…», search, song, arrangement.
+    {
+      const { rec, done } = scene("08b-planning");
+      await AppPage.resetShell();
+      await rec.click(fileMenu, 700);
+      await rec.click(await tagByText(".lt-top-menu-dropdown button", L("Nube…"), "rv-cloud"), 1500);
+      const account = '[data-testid="pco-account"]';
+      if (await rectOf(account)) {
+        // The organisation and the user's name are blurred.
+        await runInPage(() =>
+          document.querySelectorAll<HTMLElement>('[data-testid="pco-account"] .lt-cloud-account-state').forEach((el) => {
+            el.style.filter = "blur(5px)";
+          }),
+        );
+        await rec.zoomTo(account, { margin: 120, maxZoom: 1.6 });
+        await rec.hold(2.2);
+        await rec.zoomOut(400);
+      } else {
+        console.log("[release-video] 08b: no Planning Center row in the cloud panel");
+      }
+      // Escape does not close the cloud panel: its × does.
+      const closeCloud = 'section[aria-labelledby="lt-cloud-modal-title"] .lt-settings-modal-close';
+      if (await rectOf(closeCloud)) await rec.click(closeCloud, 800);
+      await AppPage.resetShell();
+      await fitSong();
+      const band = await songBand();
+      await rec.rightClick({ x: Math.max(band.x, 0) + 260, y: band.y + band.h / 2 });
+      await rec.hold(0.8);
+      await rec.click(await tagByText(".lt-context-menu button", L("Letra desde Planning Center…"), "rv-pco"), 1500);
+      const dialog = ".lt-chart-import";
+      if (!(await rectOf(dialog))) throw new Error("08b: the Planning Center dialog did not open");
+      await rec.zoomTo(dialog, { margin: 30, maxZoom: 1.4 });
+      const input = await $(".lt-chart-import-search input");
+      if (await input.isExisting()) {
+        await rec.click(".lt-chart-import-search input", 300);
+        // setValue on the element itself: React sees the typing (rec.type and
+        // clearValue left the controlled field empty).
+        await input.setValue("Digno");
+        await rec.hold(0.6);
+        await rec.click(".lt-chart-import-search button", 400);
+      }
+      for (let i = 0; i < 30 && !(await rectOf(".lt-chart-import-list button")); i++) await rec.hold(0.5);
+      const song = await tagByText(".lt-chart-import-list > li > button", "Digno", "rv-pco-song").catch(() => "");
+      if (song) {
+        await rec.click(song, 900);
+        const arrangement = ".lt-chart-import-arrangements button:not([disabled])";
+        for (let i = 0; i < 30 && !(await rectOf(arrangement)); i++) await rec.hold(0.5);
+        if (await rectOf(arrangement)) {
+          await rec.moveTo(arrangement, 600);
+          await rec.hold(0.8);
+          await rec.click(arrangement, 1200);
+        } else {
+          console.log("[release-video] 08b: no arrangement with text");
+        }
+      } else {
+        console.log("[release-video] 08b: no «Digno» in the results");
+      }
+      await done();
+    }
+
+    // 08c — «Ajustar a la secuencia»: what would change, Apply, then save.
+    {
+      const { rec, done } = scene("08c-planning-ajustar");
+      const adjust = ".lt-chart-import-backdrop";
+      for (let i = 0; i < 20 && !(await rectOf(adjust)); i++) await rec.hold(0.5);
+      if (await rectOf(adjust)) {
+        await rec.zoomTo(".lt-chart-import-backdrop .lt-settings-modal", { margin: 30, maxZoom: 1.4 });
+        await rec.hold(3);
+        await runInPage(() =>
+          document.querySelector(".lt-chart-import-backdrop .lt-settings-modal-body")?.scrollBy({ top: 360, behavior: "smooth" }),
+        );
+        for (let i = 0; i < 20; i++) await rec.frame(1 / 15);
+        await rec.hold(2);
+        await rec.click(".lt-chart-import-backdrop .lt-inline-actions .is-primary", 1200);
+      } else {
+        console.log("[release-video] 08c: no adjust dialog");
+      }
+      if (await rectOf(".lt-chart-editor")) {
+        await rec.zoomTo(".lt-chart-editor", { margin: 30, maxZoom: 1.4 });
+        await rec.hold(3);
+        await rec.click(".lt-chart-editor-actions .is-primary", 1200);
+      }
+      await rec.zoomOut(500);
+      await AppPage.resetShell();
+      await done();
     }
 
     // 09 — prepared pitch: the setting, +2, Aplicar, the preparation.
@@ -873,6 +965,56 @@ describe("release video (desktop scenes)", function () {
       if (record) {
         await rec.encode();
         letterbox("13-movil");
+      }
+    }
+
+    // 13b — the phone turns upright for the lyrics editor. The desktop app
+    // cannot rotate, so the page is given a portrait phone viewport while the
+    // editor is open, as the phone does (usePortraitWhileOpen).
+    {
+      await runInPage(() => (window as unknown as { __ltE2E: { setViewMode: (m: string) => void } }).__ltE2E.setViewMode("live"));
+      await browser.pause(1500);
+      const edit = `button[aria-label="${L("Editar letra y sincronía")}"]`;
+      if (await rectOf(edit)) {
+        await $(edit).click();
+        await browser.pause(800);
+      } else {
+        console.log("[release-video] 13b: no lyrics edit button in Live");
+      }
+      const PORTRAIT = { w: 412, h: 915 };
+      await cdp("Emulation.setDeviceMetricsOverride", {
+        width: PORTRAIT.w, height: PORTRAIT.h, deviceScaleFactor: PHONE.dpr, mobile: true,
+        screenOrientation: { type: "portraitPrimary", angle: 0 },
+      });
+      await browser.pause(1500);
+      const outH = 1080;
+      const outW = Math.round((outH * PORTRAIT.w) / PORTRAIT.h / 2) * 2;
+      const rec = new Recorder(cdp, "13b-movil-vertical", { x: 0, y: 0, w: PORTRAIT.w, h: PORTRAIT.h }, scenesDir,
+        { x: PORTRAIT.w * 0.6, y: PORTRAIT.h * 0.5 },
+        { width: outW, height: outH, dpr: PHONE.dpr, viewport: { w: PORTRAIT.w, h: PORTRAIT.h } });
+      const record = only.length === 0 || only.includes("13b-movil-vertical");
+      console.log("[release-video] scene 13b-movil-vertical");
+      await rec.hold(1.2);
+      const area = ".lt-chart-editor-text textarea";
+      if (await rectOf(area)) {
+        await rec.moveTo(area, 700);
+        await rec.hold(1);
+        await runInPage((sel: string) => document.querySelector(sel)?.scrollIntoView({ block: "start", behavior: "smooth" }), area);
+        for (let i = 0; i < 20; i++) await rec.frame(1 / 15);
+      }
+      await rec.holdUntil((durations["13b-movil-vertical"] ?? 5) + 0.7);
+      if (record) {
+        await rec.encode();
+        // Upright clip in the middle of a 16:9 frame.
+        const mp4 = path.join(scenesDir, "13b-movil-vertical.mp4");
+        const out = path.join(scenesDir, "13b-movil-vertical.169.mp4");
+        execFileSync("ffmpeg", [
+          "-y", "-loglevel", "error", "-i", mp4,
+          "-vf", "scale=-2:1080:flags=lanczos,pad=1920:1080:(ow-iw)/2:0:black,setsar=1",
+          "-c:v", "libx264", "-preset", "slow", "-crf", "18", "-pix_fmt", "yuv420p", "-movflags", "+faststart", out,
+        ]);
+        rmSync(mp4);
+        renameSync(out, mp4);
       }
     }
   });
