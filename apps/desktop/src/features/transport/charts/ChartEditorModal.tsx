@@ -1,4 +1,4 @@
-import { useLayoutEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
+import { useLayoutEffect, useMemo, useRef, useState, type ChangeEvent, type CSSProperties } from "react";
 import { useTranslation } from "react-i18next";
 
 import type {
@@ -10,6 +10,7 @@ import type {
 
 import { useDismissOnBack } from "../mobile/backNavigation";
 import { usePortraitWhileOpen } from "../mobile/usePortraitWhileOpen";
+import { useVisibleViewportHeight } from "./useVisibleViewportHeight";
 import { parseChordPro } from "@libretracks/shared/charts/chordChart";
 import { autoLinkChart, chartLinkFor, remapChartLinks } from "@libretracks/shared/charts/chartSync";
 import {
@@ -70,6 +71,8 @@ export function ChartEditorModal({
   const [error, setError] = useState<string | null>(null);
   // Teléfono: escribir en vertical (plan portrait-text-modals).
   const close = usePortraitWhileOpen(onClose);
+  // Teléfono en vertical: el marco mide lo que queda sobre el teclado.
+  const visibleHeight = useVisibleViewportHeight();
   useDismissOnBack(close);
 
   const taken = useMemo(() => takeChartTimes(text), [text]);
@@ -176,7 +179,11 @@ export function ChartEditorModal({
   };
 
   return (
-    <div className="lt-modal-backdrop" onClick={saving ? undefined : close}>
+    <div
+      className="lt-modal-backdrop lt-chart-editor-backdrop"
+      style={visibleHeight ? ({ "--lt-chart-editor-visible-height": `${visibleHeight}px` } as CSSProperties) : undefined}
+      onClick={saving ? undefined : close}
+    >
       <section
         className="lt-settings-modal lt-chart-editor"
         role="dialog"

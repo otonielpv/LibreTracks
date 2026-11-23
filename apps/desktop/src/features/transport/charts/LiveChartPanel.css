@@ -593,6 +593,12 @@
     visibility: hidden;
   }
 
+  /* A pantalla completa la cabecera de Live queda tapada: el nombre de la
+     canción vuelve a ser lo único que dice cuál se está viendo. */
+  .lt-live-chart.is-expanded .lt-live-chart-heading {
+    visibility: visible;
+  }
+
   .lt-live-chart-scroller {
     padding: 0.35rem 0.5rem 0.35rem;
   }
@@ -608,21 +614,190 @@
   }
 }
 
+/* El editor se abre desde la letra a pantalla completa (z-index 80): por
+   encima de ella, no detrás. */
+.lt-modal-backdrop.lt-chart-editor-backdrop {
+  z-index: 90;
+}
+
+/* Barra de la letra a pantalla completa con el teléfono en vertical
+   (ChartFullscreenDock): play, stop, canción anterior/siguiente y la lista.
+   En vertical y en horizontal: la pantalla completa tapa la barra de
+   transporte. */
+.lt-live-chart.is-expanded > .lt-chart-dock {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  max-height: 55%;
+  border-top: 1px solid rgb(255 255 255 / 0.08);
+  background: var(--lt-live-surface, #151817);
+  padding-right: var(--lt-safe-area-right, 0px);
+  padding-bottom: var(--lt-safe-area-bottom, 0px);
+  padding-left: var(--lt-safe-area-left, 0px);
+}
+
+/* Con la barra debajo, ella aparta del borde inferior; la letra no. */
+.lt-live-chart.is-expanded:has(> .lt-chart-dock) > .lt-live-chart-scroller {
+  padding-bottom: 0.6rem;
+}
+
+.lt-chart-dock-bar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+  gap: 0.25rem;
+  padding: 0.35rem 0.5rem;
+}
+
+.lt-chart-dock-bar .lt-icon-button {
+  width: 2.75rem;
+  height: 2.75rem;
+  touch-action: manipulation;
+}
+
+.lt-chart-dock-bar .lt-icon-button .material-symbols-outlined {
+  font-size: 1.6rem;
+}
+
+.lt-chart-dock-bar .lt-chart-dock-play .material-symbols-outlined {
+  font-size: 2rem;
+}
+
+/* Teléfono en horizontal: poco alto; la barra más baja y la lista no se come
+   toda la letra. Después de las reglas base, que si no la pisan. */
+@media (orientation: landscape) and (max-height: 500px) {
+  .lt-live-chart.is-expanded > .lt-chart-dock {
+    max-height: 60%;
+  }
+  .lt-chart-dock-bar {
+    justify-content: center;
+    gap: 1.5rem;
+    padding: 0.2rem 0.5rem;
+  }
+  .lt-chart-dock-bar .lt-icon-button {
+    height: 2.4rem;
+  }
+}
+
+.lt-chart-dock-songs {
+  flex: 1 1 auto;
+  min-height: 0;
+  margin: 0;
+  padding: 0.25rem 0;
+  list-style: none;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  border-bottom: 1px solid rgb(255 255 255 / 0.06);
+}
+
+.lt-chart-dock-songs li {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0 0.5rem;
+}
+
+.lt-chart-dock-songs li.is-shown {
+  background: rgb(87 241 219 / 0.08);
+}
+
+.lt-chart-dock-song {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 2.75rem;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0 0.35rem;
+  border: 0;
+  color: #e5e2e1;
+  background: transparent;
+  font: 600 0.9rem/1.2 Inter, sans-serif;
+  text-align: left;
+  touch-action: manipulation;
+}
+
+.lt-chart-dock-songs li.is-shown .lt-chart-dock-song {
+  color: var(--lt-chart-accent);
+}
+
+.lt-chart-dock-song-index {
+  flex: 0 0 1.5rem;
+  color: #7f928c;
+  font: 700 0.75rem/1 "JetBrains Mono", ui-monospace, monospace;
+  text-align: right;
+}
+
+.lt-chart-dock-song-name {
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lt-chart-dock-song-play {
+  flex: 0 0 auto;
+  width: 2.75rem;
+  height: 2.75rem;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 2px;
+  color: #d8e3df;
+  background: transparent;
+  touch-action: manipulation;
+}
+
+.lt-chart-dock-song-play:active {
+  background: rgb(87 241 219 / 0.12);
+}
+
+.lt-chart-dock-song-play .material-symbols-outlined {
+  font-size: 1.6rem;
+}
+
+.lt-chart-dock-song-live {
+  flex: 0 0 auto;
+  color: var(--lt-chart-accent);
+  font-size: 1.15rem;
+}
+
 /* Teléfono en vertical (plan portrait-text-modals): el editor se abre en
    vertical para escribir cómodo. Una columna (texto arriba, enlaces de marcas
    debajo), el cuadro de texto a todo el ancho y los botones partiéndose en
    líneas si no caben. Las zonas seguras las reserva `.lt-mobile
    .lt-modal-backdrop`; aquí solo se aprovecha el alto que queda. */
 @media (orientation: portrait) and (max-width: 500px) {
+  /* A todo el fondo, medido por él y no por 100dvh: con el zoom de la
+     interfaz o el teclado abierto, 100dvh no era el alto visible, el marco
+     se salía por abajo y el cuerpo no llegaba a desplazarse hasta el final.
+     Como la letra en proyección (lyrics.css), el fondo llega a los bordes y
+     el relleno del marco aparta el contenido del notch. */
+  .lt-modal-backdrop.lt-chart-editor-backdrop,
+  .lt-mobile .lt-modal-backdrop.lt-chart-editor-backdrop {
+    padding: 0;
+    /* Lo que queda sobre el teclado (useVisibleViewportHeight): el WebView
+       de Android no encoge la ventana al abrirlo. */
+    bottom: auto;
+    height: var(--lt-chart-editor-visible-height, 100%);
+  }
   .lt-settings-modal.lt-chart-editor {
     width: 100%;
-    max-height: calc(100dvh - var(--lt-safe-area-top) - var(--lt-safe-area-bottom) - 1rem);
+    height: 100%;
+    max-height: none;
     gap: 0.6rem;
-    padding: 0.75rem;
+    border: 0;
+    padding: max(0.6rem, var(--lt-safe-area-top, 0px)) max(0.75rem, var(--lt-safe-area-right, 0px))
+      max(0.5rem, var(--lt-safe-area-bottom, 0px)) max(0.75rem, var(--lt-safe-area-left, 0px));
   }
 
   .lt-chart-editor-body {
     grid-template-columns: minmax(0, 1fr);
+    touch-action: pan-y;
   }
 
   .lt-chart-editor-text textarea {

@@ -42,3 +42,13 @@ describe("letra y acordes a pantalla completa", () => {
     expect(rule(setlistCss, ".lt-setlist-lyrics.is-expanded")).not.toContain("safe-area");
   });
 });
+
+describe("barra de reproducción de la letra a pantalla completa", () => {
+  it("se ve en vertical y en horizontal: la regla base no está dentro de un @media", () => {
+    // Al principio de línea = nivel superior; dentro de un @media va sangrada.
+    const match = /\n\.lt-live-chart\.is-expanded > \.lt-chart-dock \{([^}]+)\}/.exec(chartCss);
+    expect(match, "falta la regla de nivel superior de la barra").toBeTruthy();
+    expect(match?.[1]).toContain("display: flex");
+    expect(chartCss).not.toMatch(/\.lt-chart-dock \{\s*display: none/);
+  });
+});

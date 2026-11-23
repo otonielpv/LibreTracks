@@ -1,6 +1,7 @@
 import { memo, useCallback, useEffect, useMemo, useRef, type CSSProperties, type MouseEvent as ReactMouseEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { useNetworkPermissions } from "../../network/useNetworkPermissions";
+import type { SongRegionSummary } from "@libretracks/shared/models";
 
 import type { TimelineMenus } from "../menus/timelineMenus";
 import { MarkerPositionEditor } from "../timeline/MarkerPositionEditor";
@@ -36,6 +37,7 @@ import { SongLanes } from "./lanes/SongLanes";
 import { createSectionEditHandlers, type SectionEditDeps } from "./sectionEditHandlers";
 import { useTimelineUIStore } from "../uiStore";
 import { resolveSetlistSongId } from "./songMapModel";
+import { activateSetlistSong } from "./setlistActivation";
 import { resolveSongSeekSeconds } from "./sectionScrubModel";
 import { songDropHandlers } from "./songDrop";
 import { useSetlistStore } from "./setlistStore";
@@ -131,7 +133,16 @@ function SetlistViewComponent({
   const layout = useSetlistLayout(rootRef, layoutClass);
   const shortRhythmOpen = useSetlistRhythm(layout);
   const editMode = useSetlistStore((state) => state.editMode);
-  const { canEdit } = useNetworkPermissions();
+  const { canEdit, canControl } = useNetworkPermissions();
+  // Letra a pantalla completa: tocar una canción hace lo mismo
+  // que tocar su fila (seleccionar y, parado, preparar), y su play la toca.
+  const lyricsSongs = useMemo(
+    () => ({
+      onSelectSong: (regionId: string) => activateSetlistSong(regionId, { canControl, onSelectRegion, onCueSong }),
+      onPlaySong: (region: SongRegionSummary) => onPlaySong(region.id, region.name),
+    }),
+    [canControl, onSelectRegion, onCueSong, onPlaySong],
+  );
   useEffect(() => {
     if (!canEdit) useSetlistStore.getState().setEditMode(null);
   }, [canEdit, editMode]);
@@ -159,6 +170,11 @@ function SetlistViewComponent({
   const lyricsOpen = !waveEditing && FEATURE_FLAGS.lyrics && lyricsOpenSetting && layout !== "short";
   const lyricsPane = !waveEditing && FEATURE_FLAGS.lyrics && layout === "short" && shortPane === "lyrics";
   const lyricsSide = useSetlistStore((state) => (lyricsPane ? state.lyricsSide : "none"));
+  // Lyrics full screen: they stay on screen when turning the phone upright
+  // changes the layout to one where they were not open.
+  const lyricsExpanded = useSetlistStore((state) => state.lyricsExpanded);
+  const lyricsInLayout = lyricsPane || (lyricsOpen && (layout === "wide" || layout === "medium"));
+  const lyricsAlone = !waveEditing && FEATURE_FLAGS.lyrics && lyricsExpanded && !lyricsInLayout;
   // The song the map, overview and mixer are about (00 §5 "Selección").
   const lastShownRegionIdRef = useRef<string | null>(null);
   const shownRegionId = resolveSetlistSongId(
@@ -593,7 +609,7 @@ function SetlistViewComponent({
   const closeLyrics = () => (layout === "short" ? useSetlistStore.getState().closeShortLyrics() : setLyricsOpen(false));
   const lyrics = (
     <Zone name="lyrics">
-      <SetlistLyrics performance={performance} region={shownRegion} onClose={closeLyrics} />
+      <SetlistLyrics performance={performance} region={shownRegion} onClose={closeLyrics} songs={lyricsSongs} />
     </Zone>
   );
 
@@ -659,6 +675,7 @@ function SetlistViewComponent({
             overview
           ) : null}
           {!waveEditing && (layout !== "short" || shortPane === "mixer") ? <div className="lt-setlist-bottom">{mixer}</div> : null}
+          {lyricsAlone ? lyrics : null}
           {/* Full-height side panel next to the band and the console. */}
           {drawer}
       </>

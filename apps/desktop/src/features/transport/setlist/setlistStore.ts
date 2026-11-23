@@ -44,6 +44,9 @@ export type SetlistState = {
   lyricsOpen: boolean;
   /** Phone, lyrics pane: the waveform or the mixer beside the lyrics. */
   lyricsSide: SetlistLyricsSide;
+  /** The lyrics full screen. Here, not in the panel: turning the phone
+   * upright changes the layout and mounts the lyrics again. */
+  lyricsExpanded: boolean;
   /** The band's zoom (1 = the whole song; more follows the playhead). */
   overviewZoom: number;
   /** Phone, waveform pane: the Mix/Lyrics/Edit buttons over the waveform
@@ -70,6 +73,7 @@ export const INITIAL_SETLIST_STATE: SetlistState = {
   mixerExpanded: false,
   lyricsOpen: false,
   lyricsSide: "none",
+  lyricsExpanded: false,
   overviewZoom: 1,
   waveDockHidden: false,
   lanesZoom: 1,
@@ -87,6 +91,7 @@ type SetlistActions = {
   setMixerExpanded: (expanded: boolean) => void;
   setLyricsOpen: (open: boolean) => void;
   setLyricsSide: (side: SetlistLyricsSide) => void;
+  setLyricsExpanded: (expanded: boolean) => void;
   /** Phone: the lyrics open beside what was showing (waveform or console). */
   openShortLyrics: () => void;
   /** Phone: closing the lyrics goes back to what was beside them. */
@@ -133,6 +138,7 @@ export const useSetlistStore = create<SetlistState & SetlistActions>()(
     setMixerExpanded: (mixerExpanded) => set({ mixerExpanded }),
     setLyricsOpen: (lyricsOpen) => set({ lyricsOpen }),
     setLyricsSide: (lyricsSide) => set({ lyricsSide }),
+    setLyricsExpanded: (lyricsExpanded) => set({ lyricsExpanded }),
     openShortLyrics: () =>
       set((state) => ({ shortPane: "lyrics", lyricsSide: state.shortPane === "mixer" ? "mixer" : "song" })),
     closeShortLyrics: () => set((state) => ({ shortPane: state.lyricsSide === "song" ? "song" : "mixer" })),

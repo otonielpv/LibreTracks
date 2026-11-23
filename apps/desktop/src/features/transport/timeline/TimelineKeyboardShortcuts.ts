@@ -21,6 +21,7 @@ import {
 } from "../helpers";
 import type { ShortcutActionId } from "../keyboard/actions";
 import { eventToBinding } from "../keyboard/keybinding";
+import { useShortcutRunnerStore } from "../keyboard/shortcutRunnerStore";
 import { VIDEO_SHORTCUT_HANDLERS } from "../video/videoLive";
 import { RHYTHM_SHORTCUT_HANDLERS } from "../rhythm/rhythmShortcuts";
 import {
@@ -185,6 +186,15 @@ export function useTimelineKeyboardShortcuts({
   const runShortcutAction = useCallback((action: ShortcutActionId) => {
     handlersRef.current?.[action]?.(SYNTHETIC_ACTIVATION());
   }, []);
+  // The same runner for components it is not passed to (lyrics full screen).
+  useEffect(() => {
+    useShortcutRunnerStore.setState({ run: runShortcutAction });
+    return () => {
+      if (useShortcutRunnerStore.getState().run === runShortcutAction) {
+        useShortcutRunnerStore.setState({ run: null });
+      }
+    };
+  }, [runShortcutAction]);
 
   const overrides = useKeybindingStore((state) => state.overrides);
 

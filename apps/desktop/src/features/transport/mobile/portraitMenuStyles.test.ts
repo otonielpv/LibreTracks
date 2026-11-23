@@ -58,11 +58,18 @@ describe("Editor de letra y acordes en vertical", () => {
     expect(rule(block, ".lt-chart-editor-actions")).toContain("flex-wrap: wrap");
   });
 
-  it("cabe en el alto que dejan las zonas seguras", () => {
+  it("ocupa el fondo entero (no 100dvh) y aparta el contenido de las zonas seguras", () => {
     const frame = rule(block, ".lt-settings-modal.lt-chart-editor");
     expect(frame).toContain("width: 100%");
-    expect(frame).toContain("var(--lt-safe-area-top)");
-    expect(frame).toContain("var(--lt-safe-area-bottom)");
+    expect(frame).toContain("height: 100%");
+    expect(frame).toContain("max-height: none");
+    expect(frame).not.toContain("100dvh");
+    expect(frame).toContain("var(--lt-safe-area-top");
+    expect(frame).toContain("var(--lt-safe-area-bottom");
+    const backdrop = rule(block, ".lt-modal-backdrop.lt-chart-editor-backdrop");
+    expect(backdrop).toContain("padding: 0");
+    // Android no encoge la ventana con el teclado: el fondo mide lo visible.
+    expect(backdrop).toContain("height: var(--lt-chart-editor-visible-height, 100%)");
   });
 });
 

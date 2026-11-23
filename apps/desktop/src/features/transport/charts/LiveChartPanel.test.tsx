@@ -13,6 +13,7 @@ vi.mock("react-i18next", () => ({
 import { ChartEditorHost } from "./ChartEditorHost";
 import { useChartEditorStore } from "./chartEditorStore";
 import { LiveChartPanel } from "./LiveChartPanel";
+import { PLAY_HISTORY_LIMIT } from "@libretracks/shared/charts/chartSync";
 
 const TEXT = [
   "{title: Gracia}",
@@ -146,6 +147,87 @@ describe("LiveChartPanel", () => {
     }
   });
 
+  it("goes back to the line playing a few seconds after the reader scrolls away, with no line change", () => {
+    vi.useFakeTimers();
+    let now = 1000;
+    const nowSpy = vi.spyOn(performance, "now").mockImplementation(() => now);
+    const scrollTo = vi.fn();
+    HTMLElement.prototype.scrollTo = scrollTo as never;
+    const rect = (top: number) => ({ top, bottom: top + 20, left: 0, right: 0, width: 0, height: 20, x: 0, y: top, toJSON: () => ({}) });
+    const original = Element.prototype.getBoundingClientRect;
+    Element.prototype.getBoundingClientRect = function (this: Element) {
+      if (this.getAttribute("data-testid") === "live-chart-scroller") return rect(100) as DOMRect;
+      if (this.getAttribute("data-line-key") === "0-1") return rect(500) as DOMRect;
+      return rect(0) as DOMRect;
+    };
+    const clientHeight = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "clientHeight");
+    Object.defineProperty(HTMLElement.prototype, "clientHeight", { configurable: true, get: () => 300 });
+    try {
+      const { getByTestId } = renderPanel(region(linked), { current: 12 });
+      scrollTo.mockClear();
+      fireEvent.touchStart(getByTestId("live-chart-scroller"));
+      fireEvent.touchMove(getByTestId("live-chart-scroller"));
+      // Still reading: the lyrics stay where the reader left them.
+      now += 3000;
+      act(() => {
+        vi.advanceTimersByTime(3000);
+      });
+      expect(scrollTo).not.toHaveBeenCalled();
+      // Let go long enough: back to the second verse line.
+      now += 1200;
+      act(() => {
+        vi.advanceTimersByTime(1200);
+      });
+      expect(scrollTo).toHaveBeenLastCalledWith(expect.objectContaining({ top: 346 }));
+    } finally {
+      Element.prototype.getBoundingClientRect = original;
+      if (clientHeight) Object.defineProperty(HTMLElement.prototype, "clientHeight", clientHeight);
+      nowSpy.mockRestore();
+      vi.useRealTimers();
+    }
+  });
+
+  it("full screen with songs: play, stop, the next song and the song list", () => {
+    const target = region(linked);
+    const other = { ...region(null), id: "other", name: "Otra", startSeconds: 40, endSeconds: 80 };
+    const song = { ...songView(target), regions: [other, target] } as SongView;
+    const onSelectSong = vi.fn();
+    const onPlaySong = vi.fn();
+    const props = {
+      song,
+      region: target,
+      positionSecondsRef: { current: 12 },
+      pendingMarkerId: null,
+      onToggleExpanded: vi.fn(),
+      onClose: vi.fn(),
+      onChartChange: vi.fn(async () => {}),
+      songs: { onSelectSong, onPlaySong },
+    };
+    const { rerender } = render(<LiveChartPanel {...props} expanded={false} />);
+    // Not full screen: the lyrics alone, as before.
+    expect(screen.queryByRole("toolbar", { name: "liveChart.dock.controls" })).toBeNull();
+
+    rerender(<LiveChartPanel {...props} expanded />);
+    expect(screen.getByRole("toolbar", { name: "liveChart.dock.controls" })).toBeTruthy();
+    expect(screen.getByLabelText("liveChart.dock.play")).toBeTruthy();
+    expect(screen.getByLabelText("liveChart.dock.stop")).toBeTruthy();
+    // First song on the timeline: nothing before it.
+    expect((screen.getByLabelText("liveChart.dock.previousSong") as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(screen.getByLabelText("liveChart.dock.nextSong"));
+    expect(onSelectSong).toHaveBeenLastCalledWith("other");
+
+    fireEvent.click(screen.getByLabelText("liveChart.dock.songs"));
+    const list = screen.getByRole("list", { name: "liveChart.dock.songs" });
+    expect([...list.querySelectorAll(".lt-chart-dock-song-name")].map((node) => node.textContent)).toEqual(["Gracia", "Otra"]);
+    // The song the playhead is in is marked.
+    expect(list.querySelector("li.is-playing .lt-chart-dock-song-name")?.textContent).toBe("Gracia");
+    fireEvent.click(screen.getAllByLabelText("liveChart.dock.playSong")[1]);
+    expect(onPlaySong).toHaveBeenLastCalledWith(other);
+    expect(onSelectSong).toHaveBeenLastCalledWith("other");
+    // Picking a song closes the list.
+    expect(screen.queryByRole("list", { name: "liveChart.dock.songs" })).toBeNull();
+  });
+
   it("follows the playhead into the next section", () => {
     vi.useFakeTimers();
     try {
@@ -168,8 +250,10 @@ describe("LiveChartPanel", () => {
       label: node.querySelector(".lt-chart-section-label")?.textContent,
       queued: node.classList.contains("is-queued"),
     }));
-    // Playback started in the chorus: that is all that has played so far.
+    // Playback started in the chorus; the verse before it still shows above,
+    // so scrolling up reaches the start of the song.
     expect(labels).toEqual([
+      { label: "EstrofaVerso 1", queued: false },
       { label: "EstribilloCoro 1", queued: false },
       { label: "liveChart.jumpEstrofaVerso 1", queued: true },
       { label: "EstribilloCoro 1", queued: true },
@@ -203,6 +287,7 @@ describe("LiveChartPanel", () => {
           current: node.classList.contains("is-current"),
         }));
       expect(sections()).toEqual([
+        { label: "EstrofaVerso 1", current: false },
         { label: "EstribilloCoro 1", current: true },
         { label: "→EstrofaVerso 1", current: false },
         { label: "EstribilloCoro 1", current: false },
@@ -215,6 +300,7 @@ describe("LiveChartPanel", () => {
         vi.advanceTimersByTime(150);
       });
       expect(sections()).toEqual([
+        { label: "EstrofaVerso 1", current: false },
         { label: "EstribilloCoro 1", current: false },
         { label: "EstrofaVerso 1", current: true },
         { label: "EstribilloCoro 1", current: false },
@@ -252,7 +338,7 @@ describe("LiveChartPanel", () => {
         });
       };
       // Verse and chorus back and forth until the history is full.
-      for (let step = 0; step < 6; step += 1) tick(step % 2 === 0 ? 25 : 1);
+      for (let step = 0; step < PLAY_HISTORY_LIMIT; step += 1) tick(step % 2 === 0 ? 25 : 1);
       const scroller = getByTestId("live-chart-scroller");
       scroller.scrollTop = 500;
       const before = scroller.querySelectorAll(".lt-chart-section").length;

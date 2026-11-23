@@ -20,6 +20,7 @@ import {
 } from "@libretracks/shared/models";
 
 import { useChartEditorStore } from "./chartEditorStore";
+import { ChartFullscreenDock, type ChartSongsControls } from "./ChartFullscreenDock";
 import { usePerformanceHistory } from "./usePerformanceHistory";
 import { parseRhythmLine } from "./rhythmLine";
 import { parseChordPro, spellChart, type ChartLine } from "@libretracks/shared/charts/chordChart";
@@ -97,6 +98,9 @@ type LiveChartPanelProps = {
   /** Open with the chart editor showing (Setlist's Edit → Lyrics). Live
    * leaves it off. */
   startEditing?: boolean;
+  /** Full screen: the songs to pick from and play, and play/stop
+   * (`ChartFullscreenDock`). Without it the full screen is the lyrics alone. */
+  songs?: ChartSongsControls;
 };
 
 function ChartLineView({
@@ -187,6 +191,7 @@ export const LiveChartPanel = memo(function LiveChartPanel({
   extraSemitones = 0,
   accidentals = "auto",
   startEditing = false,
+  songs,
 }: LiveChartPanelProps) {
   const permissions = useNetworkPermissions();
   const canEdit = allowEdit && permissions.canEdit;
@@ -377,9 +382,23 @@ export const LiveChartPanel = memo(function LiveChartPanel({
     anchorRef.current = key && element ? { key, top: topOf(element) } : null;
   }, [scrollerElement, blocks, currentBlock]);
 
+  // After a hand scroll, once the reader lets go for MANUAL_SCROLL_HOLD_MS
+  // the lyrics go back to the line playing, also when no line changes then.
+  const [returnTick, setReturnTick] = useState(0);
+  const returnPendingRef = useRef(false);
+  const returnTimerRef = useRef<number | null>(null);
+  useEffect(
+    () => () => {
+      if (returnTimerRef.current !== null) window.clearTimeout(returnTimerRef.current);
+    },
+    [],
+  );
+
   // Follow the current line, unless the user is reading elsewhere.
   useEffect(() => {
     const scroller = scrollerRef.current;
+    const returning = returnPendingRef.current;
+    returnPendingRef.current = false;
     if (!scroller || currentBlock < 0) return;
     if (performance.now() - manualScrollAtRef.current < MANUAL_SCROLL_HOLD_MS) return;
     const key = currentLine === null ? `${currentBlock}-head` : `${currentBlock}-${currentLine}`;
@@ -393,17 +412,23 @@ export const LiveChartPanel = memo(function LiveChartPanel({
     // Reading only goes down: never back up to a line that is already on
     // screen. Up only to bring back a line above the panel (the reader had
     // scrolled away by hand).
-    if (top < scroller.scrollTop && offset >= 0) return;
+    if (!returning && top < scroller.scrollTop && offset >= 0) return;
     const reduceMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
     if (typeof scroller.scrollTo === "function") {
       scroller.scrollTo({ top, behavior: reduceMotion ? "auto" : "smooth" });
     } else {
       scroller.scrollTop = top;
     }
-  }, [currentBlock, currentLine, fontScale, showChords]);
+  }, [currentBlock, currentLine, fontScale, showChords, returnTick]);
 
   const markManualScroll = () => {
     manualScrollAtRef.current = performance.now();
+    if (returnTimerRef.current !== null) window.clearTimeout(returnTimerRef.current);
+    returnTimerRef.current = window.setTimeout(() => {
+      returnTimerRef.current = null;
+      returnPendingRef.current = true;
+      setReturnTick((tick) => tick + 1);
+    }, MANUAL_SCROLL_HOLD_MS + 50);
   };
 
   const changeFont = (step: 1 | -1) => {
@@ -650,6 +675,7 @@ export const LiveChartPanel = memo(function LiveChartPanel({
           className="lt-live-chart-scroller"
           onWheel={markManualScroll}
           onTouchStart={markManualScroll}
+          onTouchMove={markManualScroll}
           onPointerDown={markManualScroll}
           data-testid="live-chart-scroller"
         >
@@ -699,6 +725,16 @@ export const LiveChartPanel = memo(function LiveChartPanel({
           <div ref={tailRef} className="lt-live-chart-tail" aria-hidden="true" />
         </div>
       )}
+
+      {expanded && songs ? (
+        <ChartFullscreenDock
+          song={song}
+          region={region}
+          positionSecondsRef={positionSecondsRef}
+          onSelectSong={songs.onSelectSong}
+          onPlaySong={songs.onPlaySong}
+        />
+      ) : null}
 
       <input
         ref={fileInputRef}

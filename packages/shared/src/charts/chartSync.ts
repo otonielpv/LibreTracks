@@ -269,8 +269,9 @@ export type PerformanceBlock = {
 export type PlayHistory = ReadonlyArray<{ seq: number; markerId: string }>;
 
 /** Played blocks kept above the current one: enough to see where you came
- * from, not a list that grows all night. */
-export const PLAY_HISTORY_LIMIT = 6;
+ * from, not a list that grows all night. What came before the oldest one on
+ * the timeline still shows above it (see `buildPerformanceBlocks`). */
+export const PLAY_HISTORY_LIMIT = 16;
 
 /**
  * The history after the playhead reaches `markerId`: the same if it is still
@@ -331,7 +332,14 @@ export function buildPerformanceBlocks(
   if (!last) {
     return { blocks: markers.map((marker, index) => block(marker, `s${index}`, false)), current: -1 };
   }
-  const blocks = played.map((entry) => block(markers[byId.get(entry.markerId)!], `s${entry.seq}`, false));
+  // The parts before the oldest one remembered, in timeline order: scrolling
+  // up near the end of a song reaches its first line, also when playback
+  // started half way through or the history dropped the oldest parts.
+  const lead = markers.slice(0, byId.get(played[0].markerId)!).map((marker, index) => block(marker, `p${index}`, false));
+  const blocks = [
+    ...lead,
+    ...played.map((entry) => block(markers[byId.get(entry.markerId)!], `s${entry.seq}`, false)),
+  ];
   const target = pendingMarkerId !== null ? byId.get(pendingMarkerId) : undefined;
   const queued = target !== undefined;
   const from = queued ? target : byId.get(last.markerId)! + (repeatCurrent ? 0 : 1);
@@ -340,7 +348,7 @@ export function buildPerformanceBlocks(
     if (!queued && repeatCurrent && index === 0) next.looped = true;
     blocks.push(next);
   });
-  return { blocks, current: played.length - 1 };
+  return { blocks, current: lead.length + played.length - 1 };
 }
 
 /** A line change time as the editor shows it: `m:ss.d` (song time). */

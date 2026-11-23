@@ -250,6 +250,11 @@ function LivePerformanceViewComponent({
     setChartExpanded(false);
   };
   const toggleChartExpanded = useCallback(() => setChartExpanded((current) => !current), []);
+  // Letra a pantalla completa: la lista de la cabecera y su play.
+  const chartSongs = useMemo(
+    () => ({ onSelectSong: setSelectedRegionId, onPlaySong: onSongAction }),
+    [onSongAction],
+  );
   // Teléfono: con la letra a pantalla completa se puede girar a vertical.
   useFreeRotationWhile(chartOpen && chartExpanded);
   const markerProgressFillRef = useRef<HTMLSpanElement | null>(null);
@@ -679,6 +684,7 @@ function LivePerformanceViewComponent({
           canEdit={canEditChart}
           extraSemitones={chartExtraSemitones}
           accidentals={chartAccidentals}
+          songs={chartSongs}
         />
       ) : null}
 

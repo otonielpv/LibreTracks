@@ -150,3 +150,26 @@ describe("Setlist lyrics on the phone, with a side pane", () => {
     expect(container.querySelector(".lt-setlist-view-rail")).not.toBeNull();
   });
 });
+
+describe("Setlist lyrics full screen", () => {
+  it("stay on screen when the layout changes under them (the phone turned upright), with the songs to pick", () => {
+    const onSelectRegion = vi.fn();
+    const onPlaySong = vi.fn();
+    // Lyrics not open in this layout: nothing to show…
+    render(<SetlistView {...props({ onSelectRegion, onPlaySong })} />);
+    expect(screen.queryByTestId("chart-panel")).toBeNull();
+    // …until they are full screen (kept in the store, not in the panel).
+    act(() => useSetlistStore.getState().setLyricsExpanded(true));
+    expect(screen.getByTestId("chart-panel")).toBeTruthy();
+    const last = panel.props.at(-1)!;
+    expect(last.expanded).toBe(true);
+    const songs = last.songs as { onSelectSong: (id: string) => void; onPlaySong: (region: unknown) => void };
+    act(() => songs.onSelectSong("a"));
+    expect(onSelectRegion).toHaveBeenCalledWith("a");
+    act(() => songs.onPlaySong(regions[0]));
+    expect(onPlaySong).toHaveBeenCalledWith("a", "Alfa");
+    // Closing the lyrics leaves full screen too.
+    act(() => (panel.props.at(-1)!.onClose as () => void)());
+    expect(useSetlistStore.getState().lyricsExpanded).toBe(false);
+  });
+});

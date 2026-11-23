@@ -241,13 +241,26 @@ describe("lyrics in playing order", () => {
 
   it("keeps only the last parts played above the current one", () => {
     let history: PlayHistory = [];
-    for (let round = 0; round < 5; round += 1) {
+    for (let round = 0; round < PLAY_HISTORY_LIMIT; round += 1) {
       history = advancePlayHistory(history, "verse");
       history = advancePlayHistory(history, "chorus");
     }
     expect(history).toHaveLength(PLAY_HISTORY_LIMIT + 1);
     expect(advancePlayHistory(history, "chorus")).toBe(history);
     expect(advancePlayHistory(history, null)).toBe(history);
+  });
+
+  it("shows the parts before the oldest one remembered, so the whole song can be scrolled", () => {
+    // Playback started at the chorus: the intro and verse still show above it.
+    const started = buildPerformanceBlocks(doc, links, markers, play("chorus"), null);
+    expect(labels(started)).toEqual(["Intro", "Estrofa", "Coro", "Intro", "Final"]);
+    expect(started.current).toBe(2);
+    expect(started.blocks.slice(0, 2).every((b) => !b.queued)).toBe(true);
+    // Further on, the lead stays above what was played.
+    const late = buildPerformanceBlocks(doc, links, markers, play("chorus", "intro~2"), null);
+    expect(labels(late)).toEqual(["Intro", "Estrofa", "Coro", "Intro", "Final"]);
+    expect(late.current).toBe(3);
+    expect(new Set(late.blocks.map((b) => b.key)).size).toBe(late.blocks.length);
   });
 
   it("ignores a jump to another song", () => {

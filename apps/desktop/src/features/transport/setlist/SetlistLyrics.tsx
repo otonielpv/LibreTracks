@@ -1,11 +1,13 @@
-import { memo, useState, type ReactNode } from "react";
+import { memo, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import type { SongRegionSummary } from "@libretracks/shared/models";
 
 import { LiveChartPanel } from "../charts/LiveChartPanel";
+import type { ChartSongsControls } from "../charts/ChartFullscreenDock";
 import { useNetworkPermissions } from "../../network/useNetworkPermissions";
 import type { PerformanceBindings } from "../songs/songViewBindings";
 import { useSetlistStore } from "./setlistStore";
+import { useFreeRotationWhile } from "../mobile/usePortraitWhileOpen";
 
 type SetlistLyricsProps = {
   performance: Pick<PerformanceBindings, "song" | "positionSecondsRef" | "pendingMarkerId" | "pendingJumpAtSeconds" | "activeVamp" | "onChartChange">;
@@ -14,6 +16,8 @@ type SetlistLyricsProps = {
   onClose: () => void;
   /** Edit → Lyrics: open with the editor showing. */
   startEditing?: boolean;
+  /** Full screen: pick and play songs from it. */
+  songs?: ChartSongsControls;
 };
 
 /**
@@ -21,9 +25,13 @@ type SetlistLyricsProps = {
  * record line times, follow the sections) on the song the view shows, with
  * Live's `onChartChange` — one definition. Nothing of the panel is rewritten.
  */
-function SetlistLyricsComponent({ performance, region, onClose, startEditing = false }: SetlistLyricsProps) {
+function SetlistLyricsComponent({ performance, region, onClose, startEditing = false, songs }: SetlistLyricsProps) {
   const { canEdit } = useNetworkPermissions();
-  const [expanded, setExpanded] = useState(false);
+  const expanded = useSetlistStore((state) => state.lyricsExpanded);
+  const setExpanded = useSetlistStore((state) => state.setLyricsExpanded);
+  // Teléfono: a pantalla completa se puede girar a vertical, como en Live.
+  // Aquí y no en el panel, que se vuelve a montar al cambiar de canción.
+  useFreeRotationWhile(expanded);
   return (
     <div className={`lt-setlist-lyrics${expanded ? " is-expanded" : ""}`}>
       <LiveChartPanel
@@ -35,11 +43,15 @@ function SetlistLyricsComponent({ performance, region, onClose, startEditing = f
         pendingJumpAtSeconds={performance.pendingJumpAtSeconds ?? null}
         activeVamp={performance.activeVamp}
         expanded={expanded}
-        onToggleExpanded={() => setExpanded((value) => !value)}
-        onClose={onClose}
+        onToggleExpanded={() => setExpanded(!expanded)}
+        onClose={() => {
+          setExpanded(false);
+          onClose();
+        }}
         onChartChange={performance.onChartChange}
         canEdit={canEdit}
         startEditing={startEditing}
+        songs={songs}
       />
     </div>
   );
