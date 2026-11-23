@@ -2,8 +2,9 @@
 //!
 //! What this crate does, and only this: sign the user in to their own
 //! Planning Center account (OAuth 2 with PKCE, no client secret, through
-//! `libretracks-cloud`) and read songs, arrangements and plans. It never
-//! writes to Planning Center, and it returns the raw attributes: turning a
+//! `libretracks-cloud`), read songs, arrangements and plans, and, only when
+//! the user presses "Save to Planning Center", create an arrangement or
+//! replace one's chart and sequence. It returns the raw attributes: turning a
 //! `chord_chart` into ChordPro and matching it to the song's markers happens
 //! in `@libretracks/shared/charts`, so every source shares it.
 //!

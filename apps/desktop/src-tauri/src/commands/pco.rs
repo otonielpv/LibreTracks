@@ -12,8 +12,8 @@ use tauri::AppHandle;
 use libretracks_cloud::oauth::OAuthProvider;
 use libretracks_cloud::token::TokenManager;
 use libretracks_pco::{
-    is_configured, Page, PcoAccount, PcoArrangement, PcoClient, PcoError, PcoPlan, PcoPlanItem,
-    PcoServiceType, PcoSong, PlanningCenterOAuth,
+    is_configured, ArrangementWrite, Page, PcoAccount, PcoArrangement, PcoClient, PcoError, PcoPlan,
+    PcoPlanItem, PcoServiceType, PcoSong, PlanningCenterOAuth,
 };
 
 use super::cloud::{token_store_for_key, SIGN_IN_TIMEOUT};
@@ -210,4 +210,27 @@ pub fn pco_match_titles(items: Vec<TitleIn>, songs: Vec<TitleIn>) -> Vec<libretr
             .collect()
     };
     match_titles(&candidates(items), &candidates(songs))
+}
+
+/// "Save to Planning Center", new arrangement (the default: nobody loses
+/// anything).
+#[tauri::command]
+pub async fn pco_create_arrangement(
+    app: AppHandle,
+    song_id: String,
+    write: ArrangementWrite,
+) -> Result<PcoArrangement, PcoError> {
+    client(&app)?.create_arrangement(&song_id, &write).await
+}
+
+/// "Save to Planning Center", replacing the original arrangement: only on the
+/// user's explicit, confirmed choice.
+#[tauri::command]
+pub async fn pco_update_arrangement(
+    app: AppHandle,
+    song_id: String,
+    arrangement_id: String,
+    write: ArrangementWrite,
+) -> Result<PcoArrangement, PcoError> {
+    client(&app)?.update_arrangement(&song_id, &arrangement_id, &write).await
 }

@@ -30,6 +30,8 @@ export type ChartSourceApi = Pick<
   | "getPcoUpcomingPlans"
   | "getPcoPlanItems"
   | "matchPcoTitles"
+  | "createPcoArrangement"
+  | "updatePcoArrangement"
 >;
 
 /** One song of a plan paired with a song of the session. */
@@ -196,7 +198,22 @@ export function createChartSourceHandlers({ api, store }: ChartSourceHandlerDeps
     return { applied, remaining };
   }
 
+  /**
+   * "Save to Planning Center": a new arrangement by default (nobody loses
+   * anything), or the original replaced on the user's explicit choice. Only
+   * ever on that button; never on its own.
+   */
+  function saveToPlanningCenter(
+    target: { kind: "new"; songId: string; name: string } | { kind: "replace"; songId: string; arrangementId: string },
+    write: Omit<desktopApi.PcoArrangementWrite, "name">,
+  ) {
+    return target.kind === "new"
+      ? api.createPcoArrangement(target.songId, { ...write, name: target.name })
+      : api.updatePcoArrangement(target.songId, target.arrangementId, write);
+  }
+
   return {
+    saveToPlanningCenter,
     loadServiceTypes,
     loadPlans,
     loadPlanItems,

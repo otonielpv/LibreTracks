@@ -93,16 +93,33 @@ impl PcoClient {
     /// before its expiry is refreshed once; a 429 waits `Retry-After` (at most
     /// ten seconds) once.
     async fn get<T: DeserializeOwned>(&self, path: &str) -> Result<T, PcoError> {
+        self.request(reqwest::Method::GET, path, None).await
+    }
+
+    /// One request, with the two retries that are worth it (see `get`). A
+    /// write refused with 403 is a missing permission to edit songs, not a
+    /// missing access to Services.
+    async fn request<T: DeserializeOwned>(
+        &self,
+        method: reqwest::Method,
+        path: &str,
+        body: Option<&serde_json::Value>,
+    ) -> Result<T, PcoError> {
         let url = self.url(path)?;
+        let writing = method != reqwest::Method::GET;
         let mut token = self.tokens.access_token().await?;
         let mut refreshed = false;
         let mut waited = false;
         loop {
-            let response = self
+            let mut request = self
                 .http
-                .get(url.clone())
+                .request(method.clone(), url.clone())
                 .bearer_auth(&token)
-                .header("Accept", "application/json")
+                .header("Accept", "application/json");
+            if let Some(body) = body {
+                request = request.json(body);
+            }
+            let response = request
                 .send()
                 .await
                 .map_err(|error| PcoError::Network {
@@ -142,6 +159,7 @@ impl PcoClient {
                 _ => {
                     let detail = short_detail(&response.text().await.unwrap_or_default());
                     return Err(match status {
+                        403 if writing => PcoError::NoEditPermission,
                         403 => PcoError::NoServicesAccess,
                         404 => PcoError::NotFound,
                         _ => PcoError::Provider { status, detail },
@@ -309,6 +327,39 @@ impl PcoClient {
             .collect();
         items.sort_by_key(|item| item.sequence);
         Ok(items)
+    }
+}
+
+impl PcoClient {
+    /// A new arrangement in the song, with the chart, its key and the
+    /// sequence (Planning Center requires the key with a chart).
+    pub async fn create_arrangement(&self, song_id: &str, write: &ArrangementWrite) -> Result<PcoArrangement, PcoError> {
+        let document: Document<Resource<ArrangementAttributes>> = self
+            .request(
+                reqwest::Method::POST,
+                &format!("songs/{}/arrangements", segment(song_id)),
+                Some(&write.body()),
+            )
+            .await?;
+        Ok(with_song(PcoArrangement::from(document.data), song_id))
+    }
+
+    /// Replaces an arrangement's chart, key and sequence. Only on the user's
+    /// explicit choice: other people use that arrangement.
+    pub async fn update_arrangement(
+        &self,
+        song_id: &str,
+        arrangement_id: &str,
+        write: &ArrangementWrite,
+    ) -> Result<PcoArrangement, PcoError> {
+        let document: Document<Resource<ArrangementAttributes>> = self
+            .request(
+                reqwest::Method::PATCH,
+                &format!("songs/{}/arrangements/{}", segment(song_id), segment(arrangement_id)),
+                Some(&write.body()),
+            )
+            .await?;
+        Ok(with_song(PcoArrangement::from(document.data), song_id))
     }
 }
 

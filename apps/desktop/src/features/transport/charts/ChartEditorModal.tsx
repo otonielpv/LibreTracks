@@ -26,6 +26,7 @@ import {
 import { CHART_FILE_ACCEPT, chordProFromFile } from "./importChart";
 import { useChartImportStore, type AdjustInput } from "../../chartSources/chartImportStore";
 import { ChartAdjustDialog } from "../../chartSources/ChartAdjustDialog";
+import { SaveToPlanningCenterDialog } from "../../chartSources/SaveToPlanningCenterDialog";
 import { useChartSourcesAvailable } from "../../chartSources/useChartSourcesAvailable";
 
 type ChartEditorModalProps = {
@@ -91,6 +92,7 @@ export function ChartEditorModal({
    * waiting for "Adjust to the sequence". */
   const [pending, setPending] = useState<AdjustInput | null>(initialImport ?? null);
   const [adjustOpen, setAdjustOpen] = useState(Boolean(initialImport));
+  const [pcoSaveOpen, setPcoSaveOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // Teléfono: escribir en vertical (plan portrait-text-modals).
@@ -319,6 +321,17 @@ export function ChartEditorModal({
                     {t("chartSources.import.open")}
                   </button>
                 ) : null}
+                {sourcesAvailable && source?.provider === "planningCenter" ? (
+                  <button
+                    type="button"
+                    className="lt-chart-editor-button"
+                    disabled={!taken.text.trim()}
+                    onClick={() => setPcoSaveOpen(true)}
+                  >
+                    <span className="material-symbols-outlined" aria-hidden="true">cloud_upload</span>
+                    {t("chartSources.save.open")}
+                  </button>
+                ) : null}
                 {sourcesAvailable && chart?.source?.provider === "planningCenter" ? (
                   <button
                     type="button"
@@ -458,6 +471,17 @@ export function ChartEditorModal({
           </button>
         </div>
 
+        {pcoSaveOpen && source ? (
+          <SaveToPlanningCenterDialog
+            region={region}
+            markers={markers}
+            text={taken.text}
+            links={validLinks}
+            source={source}
+            onSaved={setSource}
+            onClose={() => setPcoSaveOpen(false)}
+          />
+        ) : null}
         {adjustOpen ? (
           <ChartAdjustDialog
             region={region}

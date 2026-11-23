@@ -21,6 +21,7 @@
     "./charts/importedChart": "./src/charts/importedChart.ts",
     "./charts/chartImportReview": "./src/charts/chartImportReview.ts",
     "./charts/chartRefresh": "./src/charts/chartRefresh.ts",
+    "./charts/planningCenterExport": "./src/charts/planningCenterExport.ts",
     "./featureFlags": "./src/featureFlags.ts",
     "./networkApi": "./src/networkApi.ts",
     "./networkRoles": "./src/networkRoles.ts",

@@ -92,6 +92,34 @@ pub struct PcoPlanItem {
     pub custom_arrangement_sequence_full: Vec<PcoSequenceEntry>,
 }
 
+/// What LibreTracks writes to an arrangement: the chart as Planning Center
+/// shows it, its key and the song's sequence. `name` only for a new one.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ArrangementWrite {
+    #[serde(default)]
+    pub name: Option<String>,
+    pub chord_chart: String,
+    pub chord_chart_key: String,
+    #[serde(default)]
+    pub sequence: Vec<String>,
+}
+
+impl ArrangementWrite {
+    /// The JSON:API body.
+    pub fn body(&self) -> serde_json::Value {
+        let mut attributes = serde_json::json!({
+            "chord_chart": self.chord_chart,
+            "chord_chart_key": self.chord_chart_key,
+            "sequence": self.sequence,
+        });
+        if let Some(name) = self.name.as_deref().filter(|name| !name.trim().is_empty()) {
+            attributes["name"] = serde_json::Value::String(name.trim().to_string());
+        }
+        serde_json::json!({ "data": { "type": "Arrangement", "attributes": attributes } })
+    }
+}
+
 // --- JSON:API, as read ---------------------------------------------------
 
 #[derive(Debug, Deserialize)]

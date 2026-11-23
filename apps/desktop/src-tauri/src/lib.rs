@@ -423,6 +423,8 @@ pub fn run() {
             commands::pco::pco_upcoming_plans,
             commands::pco::pco_plan_items,
             commands::pco::pco_match_titles,
+            commands::pco::pco_create_arrangement,
+            commands::pco::pco_update_arrangement,
             commands::rhythm::get_rhythm_library,
             commands::rhythm::get_rhythm_state,
             commands::rhythm::save_loop_pattern,

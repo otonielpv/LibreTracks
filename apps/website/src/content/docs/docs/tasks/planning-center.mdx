@@ -25,8 +25,8 @@ Open the **Cloud** panel (the Drive, OneDrive and Dropbox accounts).
 sign in in the browser and come back to the app. You will see your name and
 your organization.
 
-- The account is yours: LibreTracks only **reads** songs, arrangements and
-  plans. It never writes to Planning Center.
+- The account is yours: LibreTracks **reads** songs, arrangements and plans,
+  and only writes when you press **Save to Planning Center**.
 - The access is kept in the system credential store, not in the session or
   any file.
 - If your user has no access to **Services** in the organization, the app says
@@ -35,30 +35,33 @@ your organization.
 
 ## 2. Import the lyrics of a song
 
-1. Open the song's lyrics editor (song menu, **Lyrics and chords**).
+1. Open the song's lyrics editor (song menu, **Lyrics and chords**), or in
+   the song menu **Lyrics from Planning Center…**.
 2. Press **From Planning Center…**. The search already has the song's name.
 3. Pick the song, then the arrangement. An arrangement with only a PDF shows
    as **PDF only** and cannot be picked: there is no text to bring.
-4. Check (see below) and press **Import**. If the song already had lyrics, the
-   button says **Replace**.
+4. The sheet arrives in the editor **as it is in Planning Center**, untouched.
+   **Adjust to the sequence** opens so you see what it would change; apply it,
+   or cancel and keep the sheet as it is.
 
-### The review
+### Adjust to the sequence
 
-Before saving you see **the song marker by marker**, in playing order, with the
-sheet section each one will show and its first line.
+It works the same for Planning Center, a PDF, text or ChordPro: it is in the
+lyrics editor and changes nothing until you press **Apply**.
 
-- The repeats of an [arrangement](/docs/arrangements/) show with their
-  original marker and follow it.
-- Doubtful markers say **Check** or **Unsure**; hover to see why that section
-  was chosen.
+- **Changes in the sheet**: what will be removed or moved, one by one (the
+  `// … //` repeat slashes, an empty "CHORUS" repeating one already written,
+  an identical copy, chords written on the header, page marks).
+- **The song marker by marker**, in playing order, with the sheet section each
+  one will show, its first line and how many times it plays inside the marker
+  (**×2**: a long chorus sung twice). Doubtful markers say **Check** or
+  **Unsure**.
 - When you change a marker's section it stays as you left it and the rest is
-  fitted again around it.
-- The **sections not used** are listed at the bottom, and a warning on top
-  tells you if a sung marker was left without a section.
-- If Planning Center has the song in another key, the **transpose** box
-  (checked) moves the chords to your song's key.
-- If the song has no section markers yet, **Import without linking**, or
-  create them first with [Analyse song](/docs/song-analysis/).
+  fitted again around it. The **×N** can be changed too.
+- If the sheet is in another key, the **transpose** box moves the chords to
+  your song's key.
+- Without section markers, **Apply without linking**, or create them first
+  with [Analyse song](/docs/song-analysis/).
 
 ## 3. How sections are matched
 
@@ -94,8 +97,9 @@ The same matching is used when importing a PDF or text.
 
 On an imported song, the lyrics editor offers **Update from Planning Center**.
 If the arrangement has not changed, it says so. If it has, you see which
-sections were **added**, **removed** or **changed**, and the same review, with
-the markers that already had a section keeping it.
+sections were **added**, **removed** or **changed**; **Bring to the editor**
+puts the new sheet as it comes and opens **Adjust to the sequence** with each
+marker keeping its section.
 
 If you edited the lyrics in LibreTracks after importing them, a warning tells
 you those changes will be lost. It never updates on its own.
@@ -117,6 +121,20 @@ panel, **Import a plan…**.
 
 Each song is saved whole or not at all: stopping half way leaves no half
 lyrics.
+
+## 6. Save to Planning Center
+
+Once the sheet is fixed and adjusted to your song, **Save to Planning Center**
+(in the lyrics editor) sends it back with your song's sequence, so nobody has
+to fix it there by hand.
+
+- By default it creates a **new arrangement** in the song (with the name you
+  choose): the original stays as it is for everyone.
+- **Replace the arrangement** is a separate choice: it shows what changes,
+  warns if the arrangement changed in Planning Center since you imported it,
+  and asks to confirm, because everyone using it will see it.
+- You need permission to edit songs in your organization.
+- It never saves on its own: only with the button.
 
 ## Common problems
 

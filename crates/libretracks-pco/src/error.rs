@@ -22,6 +22,9 @@ pub enum PcoError {
     NoServicesAccess,
     #[error("not found in Planning Center")]
     NotFound,
+    /// A write refused: the user may not edit songs in that organization.
+    #[error("the user may not edit songs in Planning Center")]
+    NoEditPermission,
     /// Two 429 in a row.
     #[error("Planning Center asked to wait {retry_after_secs} s")]
     RateLimited {

@@ -3581,7 +3581,7 @@ export type PcoAccount = { name: string; organization: string };
 
 /** A failed Planning Center call, as `libretracks-pco` serializes `PcoError`. */
 export type PcoErrorInfo =
-  | { code: "notConfigured" | "signedOut" | "noServicesAccess" | "notFound" }
+  | { code: "notConfigured" | "signedOut" | "noServicesAccess" | "notFound" | "noEditPermission" }
   | { code: "rateLimited"; retryAfterSecs: number }
   | { code: "network" | "unexpected"; message: string }
   | { code: "provider"; status: number; detail: string };
@@ -3648,6 +3648,29 @@ export async function getPcoUpcomingPlans(serviceTypeId: string): Promise<PcoPla
 
 export async function getPcoPlanItems(serviceTypeId: string, planId: string): Promise<PcoPlanItem[]> {
   return invokeCommand<PcoPlanItem[]>("pco_plan_items", { serviceTypeId, planId });
+}
+
+/** What "Save to Planning Center" writes to an arrangement. */
+export type PcoArrangementWrite = {
+  /** Only for a new arrangement. */
+  name?: string;
+  chordChart: string;
+  chordChartKey: string;
+  sequence: string[];
+};
+
+/** A new arrangement in the song (the default of "Save to Planning Center"). */
+export async function createPcoArrangement(songId: string, write: PcoArrangementWrite): Promise<PcoArrangement> {
+  return invokeCommand<PcoArrangement>("pco_create_arrangement", { songId, write });
+}
+
+/** Replaces an arrangement's chart, key and sequence: the user's explicit choice. */
+export async function updatePcoArrangement(
+  songId: string,
+  arrangementId: string,
+  write: PcoArrangementWrite,
+): Promise<PcoArrangement> {
+  return invokeCommand<PcoArrangement>("pco_update_arrangement", { songId, arrangementId, write });
 }
 
 /** A plan item matched to the session's songs by title (Rust `lyrics_match`). */

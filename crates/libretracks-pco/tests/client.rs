@@ -291,3 +291,70 @@ async fn no_services_access_and_not_found_are_told_apart() {
     assert_eq!(client.me().await.unwrap_err(), PcoError::NoServicesAccess);
     assert_eq!(client.arrangement("1", "2").await.unwrap_err(), PcoError::NotFound);
 }
+
+fn write() -> libretracks_pco::ArrangementWrite {
+    libretracks_pco::ArrangementWrite {
+        name: Some("LibreTracks".into()),
+        chord_chart: "VERSO 1\n[D]Uno\n\nCORO\n[G]Luz\n".into(),
+        chord_chart_key: "D".into(),
+        sequence: vec!["Verso 1".into(), "Coro".into(), "Coro".into()],
+    }
+}
+
+#[tokio::test]
+async fn a_new_arrangement_is_posted_with_chart_key_and_sequence() {
+    let seen = Arc::new(Mutex::new((String::new(), String::new(), String::new())));
+    let seen_by_server = Arc::clone(&seen);
+    let client = client_for(
+        move |request, _| {
+            *seen_by_server.lock().unwrap() = (
+                request.method.clone(),
+                request.target.clone(),
+                String::from_utf8(request.body.clone()).unwrap(),
+            );
+            Response::json(201, fixture("arrangement_test_song_two_acoustic.json"))
+        },
+        FakeTokens::new(true),
+    )
+    .await;
+    let created = client.create_arrangement("9000009", &write()).await.unwrap();
+    assert_eq!(created.song_id, "9000009");
+    let (method, target, body) = seen.lock().unwrap().clone();
+    assert_eq!(method, "POST");
+    assert_eq!(target, "/services/v2/songs/9000009/arrangements");
+    let body: serde_json::Value = serde_json::from_str(&body).unwrap();
+    assert_eq!(body["data"]["type"], "Arrangement");
+    assert_eq!(body["data"]["attributes"]["name"], "LibreTracks");
+    assert_eq!(body["data"]["attributes"]["chord_chart_key"], "D");
+    assert_eq!(body["data"]["attributes"]["sequence"], serde_json::json!(["Verso 1", "Coro", "Coro"]));
+}
+
+#[tokio::test]
+async fn replacing_patches_the_arrangement_without_renaming_it() {
+    let seen = Arc::new(Mutex::new((String::new(), String::new())));
+    let seen_by_server = Arc::clone(&seen);
+    let client = client_for(
+        move |request, _| {
+            *seen_by_server.lock().unwrap() = (request.method.clone(), String::from_utf8(request.body.clone()).unwrap());
+            Response::json(200, fixture("arrangement_test_song_two_acoustic.json"))
+        },
+        FakeTokens::new(true),
+    )
+    .await;
+    let mut replace = write();
+    replace.name = None;
+    client.update_arrangement("9000009", "9000010", &replace).await.unwrap();
+    let (method, body) = seen.lock().unwrap().clone();
+    assert_eq!(method, "PATCH");
+    let body: serde_json::Value = serde_json::from_str(&body).unwrap();
+    assert!(body["data"]["attributes"].get("name").is_none());
+}
+
+#[tokio::test]
+async fn a_write_without_permission_says_so() {
+    let client = client_for(|_, _| Response::json(403, r#"{"errors":[{"status":"403"}]}"#), FakeTokens::new(true)).await;
+    assert_eq!(
+        client.create_arrangement("1", &write()).await.unwrap_err(),
+        PcoError::NoEditPermission
+    );
+}

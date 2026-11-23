@@ -241,3 +241,20 @@
 .lt-modal-backdrop.lt-chart-import-backdrop {
   z-index: 95;
 }
+
+.lt-pco-save-input {
+  border-radius: 2px;
+  border: 1px solid rgb(87 241 219 / 0.18);
+  background: rgb(28 31 32 / 0.98);
+  color: #f3f0ef;
+  padding: 0.45rem 0.6rem;
+  font: 500 0.85rem/1.2 "Space Grotesk", sans-serif;
+  min-height: 40px;
+}
+
+.lt-chart-import-warning-box {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-left: 24px;
+}

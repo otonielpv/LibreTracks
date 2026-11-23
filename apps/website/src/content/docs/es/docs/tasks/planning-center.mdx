@@ -25,8 +25,8 @@ aparece **Planning Center**: pulsa **Conectar con Planning Center**, entra con
 tu usuario en el navegador y vuelve a la app. Verás tu nombre y tu
 organización.
 
-- La cuenta es tuya: LibreTracks solo **lee** canciones, arreglos y planes.
-  Nunca escribe en Planning Center.
+- La cuenta es tuya: LibreTracks **lee** canciones, arreglos y planes, y solo
+  escribe cuando pulsas **Guardar en Planning Center**.
 - El acceso se guarda en el almacén de credenciales del sistema, no en la
   sesión ni en ningún archivo.
 - Si tu usuario no tiene acceso a **Services** en la organización, la app te
@@ -36,31 +36,34 @@ organización.
 ## 2. Importar la letra de una canción
 
 1. Abre el editor de letra de la canción (menú de la canción, **Letra y
-   acordes**).
+   acordes**), o en el menú de la canción **Letra desde Planning Center…**.
 2. Pulsa **Desde Planning Center…**. El buscador ya trae el nombre de la
    canción.
 3. Elige la canción y luego el arreglo. Un arreglo que solo tiene un PDF
    aparece como **Solo PDF** y no se puede elegir: no hay texto que traer.
-4. Revisa (ver abajo) y pulsa **Importar**. Si la canción ya tenía letra, el
-   botón dice **Reemplazar**.
+4. La hoja llega al editor **tal como está en Planning Center**, sin tocar.
+   Se abre **Ajustar a la secuencia** para que veas qué cambiaría; puedes
+   aplicarlo o cancelar y quedarte con la hoja tal cual.
 
-### La revisión
+### Ajustar a la secuencia
 
-Antes de guardar ves **la canción marca a marca**, en el orden en que suena,
-con la sección de la hoja que se mostrará en cada una y su primera línea.
+Sirve igual para Planning Center, un PDF, un texto o un ChordPro: está en el
+editor de letra y no cambia nada hasta que pulsas **Aplicar**.
 
-- Las repeticiones de un [arreglo](/es/docs/arrangements/) aparecen con su
-  marca original y la siguen.
-- Las marcas dudosas llevan **Revisar** o **Dudoso**; pasa el ratón para ver
-  por qué se eligió esa sección.
+- **Cambios en la hoja**: lo que se va a quitar o reordenar, uno a uno (las
+  barras de repetición `// … //`, un "CORO" vacío que repite un coro ya
+  escrito, una copia idéntica, los acordes escritos en la cabecera, las
+  marcas de página).
+- **La canción marca a marca**, en el orden en que suena, con la sección de
+  la hoja que se mostrará en cada una, su primera línea y cuántas veces suena
+  dentro de la marca (**×2**: un coro largo que se canta dos veces). Las
+  marcas dudosas llevan **Comprueba** o **Dudosa**.
 - Si cambias la sección de una marca, se queda como la dejaste y el resto se
-  vuelve a ajustar alrededor.
-- Abajo salen las **secciones sin usar** y, arriba, un aviso si alguna marca
-  que se canta se quedó sin sección.
-- Si Planning Center tiene la canción en otro tono, la casilla
-  **transponer** (marcada) pasa los acordes al tono de tu canción.
-- Si la canción no tiene marcas de sección todavía, puedes **Importar sin
-  enlazar** o crearlas antes con [Analizar canción](/es/docs/song-analysis/).
+  vuelve a ajustar alrededor. El **×N** también se puede cambiar.
+- Si la hoja está en otro tono, la casilla **transponer** pasa los acordes al
+  tono de tu canción.
+- Sin marcas de sección, **Aplicar sin enlazar**, o créalas antes con
+  [Analizar canción](/es/docs/song-analysis/).
 
 ## 3. Cómo se emparejan las secciones
 
@@ -97,8 +100,9 @@ Este emparejado también se usa al importar un PDF o un texto.
 
 En una canción importada, el editor de letra ofrece **Actualizar desde
 Planning Center**. Si el arreglo no ha cambiado, te lo dice. Si cambió, ves
-qué secciones se **añadieron**, **quitaron** o **cambiaron**, y la misma
-revisión, con las marcas que ya tenían sección manteniéndola.
+qué secciones se **añadieron**, **quitaron** o **cambiaron**; **Traer al
+editor** pone la hoja nueva tal cual y abre **Ajustar a la secuencia** con
+cada marca manteniendo su sección.
 
 Si editaste la letra en LibreTracks después de importarla, verás un aviso: al
 actualizar se pierden esos cambios. Nunca se actualiza solo.
@@ -120,6 +124,20 @@ del panel de Nube, **Importar un plan…**.
 
 Cada canción se guarda entera o no se guarda: parar a mitad no deja letras a
 medias.
+
+## 6. Guardar en Planning Center
+
+Cuando la hoja ya está corregida y ajustada a tu canción, **Guardar en
+Planning Center** (en el editor de letra) la manda de vuelta con la secuencia
+de tu canción, para no tener que corregirla allí a mano.
+
+- Por defecto crea un **arreglo nuevo** en la canción (con el nombre que
+  elijas): el original se queda como está para todos.
+- **Reemplazar el arreglo** original es una opción aparte: enseña qué cambia,
+  avisa si el arreglo cambió en Planning Center desde que lo importaste y
+  pide confirmar, porque lo verán todos los que lo usen.
+- Hace falta permiso para editar canciones en tu organización.
+- Nunca se guarda solo: solo con el botón.
 
 ## Problemas frecuentes
 
