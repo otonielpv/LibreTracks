@@ -1,4 +1,4 @@
-/* Letra en proyección (plan lyrics-sync).
+/* Proyección: ProPresenter, FreeShow y Holyrics (plan lyrics-sync).
    Cada botón, desplegable y campo lleva su clase (.lt-lyrics-btn,
    .lt-lyrics-select, .lt-lyrics-input): la app no tiene estilos base para
    ellos (Tailwind sin preflight) y así su aspecto no depende de dónde estén. */
@@ -765,7 +765,7 @@ button.lt-lyrics-btn.lt-lyrics-record .material-symbols-outlined {
   color: #57f1db !important;
 }
 
-/* Teléfono en vertical (plan portrait-text-modals): Letra en proyección,
+/* Teléfono en vertical (plan portrait-text-modals): Proyección,
    el editor de diapositivas y Vincular canciones se abren en vertical para
    escribir cómodo. El panel ocupa toda la pantalla, en una columna, y sus
    rellenos apartan el contenido del notch (arriba en vertical) y de la barra

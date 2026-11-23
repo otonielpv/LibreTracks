@@ -3,7 +3,7 @@ import type { SongRegionSummary } from "@libretracks/shared/models";
 import { useLyricsStore } from "./lyricsStore";
 
 /**
- * The song menu's "Lyrics on screen…" entry, shared by every view (the DAW,
+ * The song menu's "Projection…" entry (ProPresenter, FreeShow, Holyrics), shared by every view (the DAW,
  * Setlist and Compact song menus and the mobile selection bar all build
  * from `songRegionContextMenu`). Only with the sync on.
  */

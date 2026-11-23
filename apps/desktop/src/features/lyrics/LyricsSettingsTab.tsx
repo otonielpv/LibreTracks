@@ -38,7 +38,7 @@ export function lyricsErrorText(
 }
 
 /**
- * Settings › Lyrics: switch the sync on, pick the program, follow its setup
+ * Settings › Projection: switch the sync on, pick the program, follow its setup
  * tutorial (or skip it), set where it is and try the connection.
  */
 export function LyricsSettingsTab({ api }: { api?: LyricsApi } = {}) {

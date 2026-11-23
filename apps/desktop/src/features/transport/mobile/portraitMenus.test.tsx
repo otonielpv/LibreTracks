@@ -133,7 +133,7 @@ describe("menús de texto en vertical en el teléfono", () => {
     await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
   });
 
-  it("Letra en proyección", async () => {
+  it("Proyección", async () => {
     const closeSongPanel = vi.fn();
     useLyricsStore.setState({ closeSongPanel });
     render(<LyricsSongPanel regionId="r1" api={makeApi()} />);
@@ -143,7 +143,7 @@ describe("menús de texto en vertical en el teléfono", () => {
     await waitFor(() => expect(closeSongPanel).toHaveBeenCalledTimes(1));
   });
 
-  it("Letra en proyección: entrar y salir del editor de diapositivas no gira", async () => {
+  it("Proyección: entrar y salir del editor de diapositivas no gira", async () => {
     render(<LyricsSongPanel regionId="r1" api={makeApi()} />);
     fireEvent.click(await screen.findByRole("button", { name: "Editar diapositivas de Coro" }));
     fireEvent.click(screen.getByRole("button", { name: "Volver" }));

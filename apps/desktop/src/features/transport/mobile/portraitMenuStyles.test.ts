@@ -73,7 +73,7 @@ describe("Editor de letra y acordes en vertical", () => {
   });
 });
 
-describe("Letra en proyección, diapositivas y Vincular canciones en vertical", () => {
+describe("Proyección, diapositivas y Vincular canciones en vertical", () => {
   const block = portraitBlock(lyricsCss);
 
   it("el panel a pantalla completa apartado del notch y de la barra de inicio", () => {

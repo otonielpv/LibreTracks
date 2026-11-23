@@ -13,7 +13,7 @@ import { isPhoneScreenNow } from "./phoneScreen";
  *   gira con el sensor; se puede leer en vertical, pero no se fuerza.
  *
  * Un gestor único decide qué pedir (vertical > libre > horizontal) con
- * contadores globales, así los menús anidados (Letra en proyección abre el
+ * contadores globales, así los menús anidados (Proyección abre el
  * editor de diapositivas) o un menú abierto desde la letra expandida vuelven
  * al modo correcto al cerrarse. Solo pide al backend cuando el modo cambia.
  *
