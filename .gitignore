@@ -126,7 +126,6 @@ skills-lock.json
 /.claude/
 /.github/prompts/
 /.mcp.json
-/.serena/
 /.graphifyignore
 /docs/AGENT_TOOLING.md
 
