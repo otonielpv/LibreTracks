@@ -440,6 +440,24 @@ export type ChartLink = {
 export type SongChart = {
   text: string;
   links: ChartLink[];
+  /** Where it was imported from, for "Update from Planning Center". Absent
+   * for charts written or imported from a file. Mirrors Rust `ChartSource`. */
+  source?: ChartSource;
+};
+
+/** The service a chart was imported from. It never syncs on its own. */
+export type ChartSource = {
+  /** "planningCenter"; kept as text so an unknown source survives a save. */
+  provider: "planningCenter" | (string & {});
+  songId: string;
+  arrangementId: string;
+  planItemId?: string;
+  /** Key in the source (`chord_chart_key`, or the service's). */
+  key?: string;
+  /** The arrangement's `updated_at` when it was imported. */
+  updatedAt?: string;
+  /** `chartTextHash` of the text as saved: another hash = edited here. */
+  importedHash: string;
 };
 
 /** One section of a song's captured original, as the arrangement editor

@@ -1,4 +1,4 @@
-import type { SourceLine } from "./chartImport";
+import type { SourceLine } from "@libretracks/shared/charts/chartImport";
 
 /**
  * Positioned PDF text → the lines the song-sheet analyser reads.

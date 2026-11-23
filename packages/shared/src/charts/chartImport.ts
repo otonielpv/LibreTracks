@@ -7,10 +7,10 @@ import {
   type ChartLine,
   type ChartSection,
   type ChartSegment,
-} from "@libretracks/shared/charts/chordChart";
-import type { MarkerKind } from "@libretracks/shared/models";
+} from "./chordChart";
+import type { MarkerKind } from "../models";
 
-import { isChord, isChordLineFiller } from "@libretracks/shared/charts/chordNotation";
+import { isChord, isChordLineFiller } from "./chordNotation";
 
 /**
  * Turns a song sheet into a chart, whatever it came from.

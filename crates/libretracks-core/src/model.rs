@@ -460,6 +460,34 @@ pub struct SongChart {
     /// repetición `"{id}~{n}"` usa el enlace de `id`).
     #[serde(default)]
     pub links: Vec<ChartLink>,
+    /// De dónde se importó (Planning Center), para "Actualizar desde la
+    /// fuente". Ausente en las hojas escritas o importadas de un archivo y en
+    /// las sesiones de antes de la importación inteligente.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source: Option<ChartSource>,
+}
+
+/// El origen de una hoja importada de un servicio. Nunca sincroniza solo:
+/// el usuario pide actualizar y revisa los cambios.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase", default)]
+pub struct ChartSource {
+    /// `"planningCenter"`. Una cadena y no un enum: una fuente que esta
+    /// versión no conoce se conserva al abrir y guardar.
+    pub provider: String,
+    pub song_id: String,
+    pub arrangement_id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub plan_item_id: Option<String>,
+    /// Tono en la fuente (`chord_chart_key` o el del culto).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub key: Option<String>,
+    /// `updated_at` del arreglo cuando se importó.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub updated_at: Option<String>,
+    /// Huella del texto tal como se guardó al importar (TS `chartTextHash`):
+    /// si el texto ya no da esta huella, se editó en LibreTracks.
+    pub imported_hash: String,
 }
 
 /// Una marca y la sección del texto que suena desde ella.

@@ -1,4 +1,4 @@
-import { analyzeSongSheet, chordProFromText, type MeasureText } from "./chartImport";
+import { analyzeSongSheet, chordProFromText, type MeasureText } from "@libretracks/shared/charts/chartImport";
 import { serializeChordPro } from "@libretracks/shared/charts/chordChart";
 import { extractPdfText } from "./pdfLoader";
 import { pdfTextToSourceLines } from "./pdfTextLines";

@@ -17,6 +17,8 @@
     "./charts/personalChords": "./src/charts/personalChords.ts",
     "./charts/sectionVocab": "./src/charts/sectionVocab.ts",
     "./charts/chartMatch": "./src/charts/chartMatch.ts",
+    "./charts/chartImport": "./src/charts/chartImport.ts",
+    "./charts/importedChart": "./src/charts/importedChart.ts",
     "./featureFlags": "./src/featureFlags.ts",
     "./networkApi": "./src/networkApi.ts",
     "./networkRoles": "./src/networkRoles.ts",

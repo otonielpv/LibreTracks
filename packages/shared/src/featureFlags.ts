@@ -24,4 +24,9 @@ export const FEATURE_FLAGS = {
    * tone for hardware switchers. Plan in docs/plans/completed/redundancy. Off until
    * it is validated with two real machines (step 14). */
   redundancy: true,
+  /** Lyrics and chords from Planning Center (connect the account, import a
+   * song or a plan, update from the source). Plan in
+   * docs/plans/smart-chart-import. Off until validated with a real account
+   * (step 11). The matcher and the sheet cleanup are not behind it. */
+  chartSources: false,
 } as const;

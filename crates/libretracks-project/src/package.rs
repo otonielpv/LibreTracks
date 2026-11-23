@@ -2446,6 +2446,15 @@ mod tests {
                 section: 0,
                 line_beats: vec![0.0, 8.0],
             }],
+            source: Some(libretracks_core::ChartSource {
+                provider: "planningCenter".into(),
+                song_id: "9000005".into(),
+                arrangement_id: "9000004".into(),
+                plan_item_id: Some("9000018".into()),
+                key: Some("D".into()),
+                updated_at: Some("2026-11-23T08:40:00Z".into()),
+                imported_hash: "fnv1a32:0badc0de:20".into(),
+            }),
         };
         source.regions[0].chart = Some(chart.clone());
         source.regions[0].cover_image = Some("data:image/jpeg;base64,Y292ZXI=".into());

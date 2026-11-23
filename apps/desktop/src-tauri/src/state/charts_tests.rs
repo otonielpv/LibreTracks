@@ -75,6 +75,7 @@ fn lyrics(links: Vec<ChartLink>) -> SongChart {
         text: "{section: Coro}
 [C]Gracia sublime es".into(),
         links,
+        source: None,
     }
 }
 
@@ -113,7 +114,7 @@ fn an_empty_text_clears_the_chart() {
         .set_song_region_chart(
             "r1",
             Some(SongChart { text: "  
-".into(), links: vec![] }),
+".into(), links: vec![], source: None }),
             &audio,
         )
         .expect("blank");
@@ -127,6 +128,7 @@ fn an_oversized_chart_is_refused_and_nothing_changes() {
     let huge = SongChart {
         text: "a".repeat(SongChart::MAX_TEXT_BYTES + 1),
         links: vec![],
+        source: None,
     };
     assert!(session.set_song_region_chart("r1", Some(huge), &audio).is_err());
     assert!(chart(&session).is_none());

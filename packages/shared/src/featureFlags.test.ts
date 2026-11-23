@@ -24,4 +24,8 @@ describe("feature flags", () => {
   it("redundancy stays hidden until validated with two machines", () => {
     expect(FEATURE_FLAGS.redundancy).toBe(true);
   });
+
+  it("chart sources stay hidden until validated with a real Planning Center account", () => {
+    expect(FEATURE_FLAGS.chartSources).toBe(false);
+  });
 });

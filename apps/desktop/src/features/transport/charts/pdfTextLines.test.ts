@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { analyzeSongSheet } from "./chartImport";
+import { analyzeSongSheet } from "@libretracks/shared/charts/chartImport";
 import { findColumnGutters, pdfTextToSourceLines, usesDotSpaces, type PdfPageText, type PdfTextItem } from "./pdfTextLines";
 
 /** One item per string, 6 pt per character, 12 pt text. */

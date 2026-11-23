@@ -696,6 +696,48 @@ mod tests {
         assert_eq!(tolerant, song);
     }
 
+    /// Plan smart-chart-import, paso 04 (C5): el origen de una hoja importada
+    /// se conserva en la sesión; una hoja sin origen (todas las de antes) se
+    /// vuelve a guardar sin el campo.
+    #[test]
+    fn a_chart_source_round_trips_and_a_chart_without_it_saves_without_the_field() {
+        use libretracks_core::{ChartSource, SongChart};
+        let mut song = base_song();
+        song.regions.push(region("r1", 0.0, song.duration_seconds.max(1.0)));
+        song.regions[0].chart = Some(SongChart {
+            text: "{section: Coro}\n[C]Letra".into(),
+            links: vec![],
+            source: None,
+        });
+        let saved = serialize_song_document(&song).expect("serialize");
+        let raw: Value = serde_json::from_str(&saved).expect("saved is json");
+        assert!(raw["regions"][0]["chart"].get("source").is_none());
+        assert_eq!(parse_song_document(&saved, SONG_FORMAT_VERSION).expect("load"), song);
+
+        song.regions[0].chart.as_mut().unwrap().source = Some(ChartSource {
+            provider: "planningCenter".into(),
+            song_id: "9000005".into(),
+            arrangement_id: "9000004".into(),
+            plan_item_id: None,
+            key: Some("D".into()),
+            updated_at: Some("2026-11-23T08:40:00Z".into()),
+            imported_hash: "fnv1a32:0badc0de:20".into(),
+        });
+        let saved = serialize_song_document(&song).expect("serialize");
+        let raw: Value = serde_json::from_str(&saved).expect("saved is json");
+        assert_eq!(raw["regions"][0]["chart"]["source"]["arrangementId"], "9000004");
+        assert!(raw["regions"][0]["chart"]["source"].get("planItemId").is_none());
+        assert_eq!(parse_song_document(&saved, SONG_FORMAT_VERSION).expect("load"), song);
+
+        // A source written by a later version with fields this one lacks.
+        let mut future = raw.clone();
+        future["regions"][0]["chart"]["source"]["somethingNew"] = Value::Bool(true);
+        assert_eq!(
+            parse_song_document(&future.to_string(), SONG_FORMAT_VERSION).expect("tolerant"),
+            song
+        );
+    }
+
     fn base_song() -> Song {
         Song {
             id: "song_test".into(),

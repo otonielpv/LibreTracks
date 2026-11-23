@@ -12,6 +12,7 @@ fn chart(links: Vec<ChartLink>) -> SongChart {
     SongChart {
         text: "{section: Coro}\n[C]Gracia".into(),
         links,
+        source: None,
     }
 }
 
