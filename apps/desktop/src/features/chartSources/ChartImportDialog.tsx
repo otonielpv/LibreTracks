@@ -8,6 +8,7 @@ import {
   type ImportReview,
 } from "@libretracks/shared/charts/chartImportReview";
 import { ChartImportError, planningCenterToImported } from "@libretracks/shared/charts/importedChart";
+import type { RefreshResult } from "@libretracks/shared/charts/chartRefresh";
 
 import type { PcoArrangement, PcoSong } from "../transport/desktopApi";
 import { chartSourceHandlers } from "./chartSourceHandlers";
@@ -41,9 +42,23 @@ export function ChartImportDialog({ session, onClose }: Props) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const refreshing = session.mode === "refresh";
+  const [refresh, setRefresh] = useState<RefreshResult | null>(null);
+
   useEffect(() => {
     void chartSourceHandlers.refreshStatus();
   }, []);
+
+  const connectedNow = status?.state === "connected";
+  useEffect(() => {
+    if (!refreshing || !connectedNow || !chart || refresh) return;
+    void run(async () => {
+      const result = await chartSourceHandlers.refreshFromSource(chart, markers, region.key, region.name);
+      setRefresh(result);
+      if (!result.upToDate) setReview(result.review);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [refreshing, connectedNow]);
 
   const run = async (work: () => Promise<void>) => {
     setBusy(true);
@@ -97,7 +112,10 @@ export function ChartImportDialog({ session, onClose }: Props) {
 
   const apply = (linked: boolean) => {
     if (!review) return;
-    const next = finalizeImport(review, { transpose: transpose && review.key.semitones !== null, linked });
+    const finalized = finalizeImport(review, { transpose: transpose && review.key.semitones !== null, linked });
+    // An update keeps the plan item the chart first came from.
+    const planItemId = refreshing ? chart?.source?.planItemId : undefined;
+    const next = planItemId && finalized.source ? { ...finalized, source: { ...finalized.source, planItemId } } : finalized;
     void run(async () => {
       await chartSourceHandlers.applyImport(session.onSave, next);
       onClose();
@@ -118,7 +136,13 @@ export function ChartImportDialog({ session, onClose }: Props) {
         <header className="lt-settings-modal-header">
           <div>
             <span className="lt-settings-modal-eyebrow">{t("chartSources.import.eyebrow")}</span>
-            <h2 id="lt-chart-import-title">{review ? t("chartSources.import.reviewTitle") : t("chartSources.import.title")}</h2>
+            <h2 id="lt-chart-import-title">
+              {refreshing
+                ? t("chartSources.refresh.title")
+                : review
+                  ? t("chartSources.import.reviewTitle")
+                  : t("chartSources.import.title")}
+            </h2>
             <p>{region.name}</p>
           </div>
         </header>
@@ -131,6 +155,35 @@ export function ChartImportDialog({ session, onClose }: Props) {
                 {connecting ? t("chartSources.account.connecting") : t("chartSources.account.connect")}
               </button>
             </div>
+          ) : refreshing ? (
+            refresh?.upToDate ? (
+              <p role="status">{t("chartSources.refresh.upToDate")}</p>
+            ) : refresh && review ? (
+              <>
+                {refresh.editedLocally ? (
+                  <p className="lt-chart-import-warning" role="alert">
+                    {t("chartSources.refresh.editedWarning")}
+                  </p>
+                ) : null}
+                <section className="lt-chart-import-changes" aria-label={t("chartSources.refresh.changes")}>
+                  <h3>{t("chartSources.refresh.changes")}</h3>
+                  {refresh.changes.length === 0 ? (
+                    <p>{t("chartSources.refresh.noChanges")}</p>
+                  ) : (
+                    <ul>
+                      {refresh.changes.map((change, index) => (
+                        <li key={index} data-testid="chart-refresh-change">
+                          {t(`chartSources.refresh.${change.change}`)}: {change.label}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </section>
+                <ReviewView review={review} transpose={transpose} onTranspose={setTranspose} onSection={setSection} />
+              </>
+            ) : (
+              <p>{t("chartSources.import.loading")}</p>
+            )
           ) : review ? (
             <ReviewView review={review} transpose={transpose} onTranspose={setTranspose} onSection={setSection} />
           ) : (
@@ -192,7 +245,7 @@ export function ChartImportDialog({ session, onClose }: Props) {
         </div>
 
         <div className="lt-inline-actions">
-          {review ? (
+          {review && !refreshing ? (
             <button type="button" className="lt-secondary-button" disabled={busy} onClick={() => setReview(null)}>
               {t("chartSources.import.back")}
             </button>
@@ -207,12 +260,18 @@ export function ChartImportDialog({ session, onClose }: Props) {
               </button>
             ) : (
               <button type="button" className="is-primary" disabled={busy} onClick={() => apply(true)}>
-                {chart ? t("chartSources.import.replace") : t("chartSources.import.apply")}
+                {refreshing
+                  ? t("chartSources.refresh.apply")
+                  : chart
+                    ? t("chartSources.import.replace")
+                    : t("chartSources.import.apply")}
               </button>
             )
           ) : null}
         </div>
-        {review && chart ? <p className="lt-chart-import-note">{t("chartSources.import.replaceWarning")}</p> : null}
+        {review && chart && !refreshing ? (
+          <p className="lt-chart-import-note">{t("chartSources.import.replaceWarning")}</p>
+        ) : null}
       </section>
     </div>
   );

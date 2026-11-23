@@ -14,6 +14,8 @@ export type ChartImportSession = {
   chart: SongChart | null;
   /** The song's existing chart action. */
   onSave: (chart: SongChart) => Promise<void>;
+  /** "refresh": update the imported `chart` from its source (08). */
+  mode?: "import" | "refresh";
 };
 
 type ChartImportState = {

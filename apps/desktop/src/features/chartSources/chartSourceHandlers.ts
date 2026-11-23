@@ -1,4 +1,6 @@
-import type { SongChart } from "@libretracks/shared/models";
+import { buildRefreshReview, type RefreshResult } from "@libretracks/shared/charts/chartRefresh";
+import { planningCenterToImported } from "@libretracks/shared/charts/importedChart";
+import type { SectionMarkerSummary, SongChart } from "@libretracks/shared/models";
 
 import * as desktopApi from "../transport/desktopApi";
 
@@ -84,7 +86,31 @@ export function createChartSourceHandlers({ api, store }: ChartSourceHandlerDeps
     return save(chart);
   }
 
-  return { refreshStatus, connect, disconnect, searchSongs, loadArrangements, loadArrangement, applyImport };
+  /** The imported chart against its arrangement now (D12). Never saves:
+   * the dialog shows the result and the user applies it. */
+  async function refreshFromSource(
+    chart: SongChart,
+    markers: readonly SectionMarkerSummary[],
+    songKey: string | null,
+    songTitle: string,
+  ): Promise<RefreshResult> {
+    const source = chart.source;
+    if (!source || source.provider !== "planningCenter") throw new Error("chart-not-imported");
+    const arrangement = await api.getPcoArrangement(source.songId, source.arrangementId);
+    const imported = planningCenterToImported({ ...arrangement, songTitle });
+    return buildRefreshReview(chart, imported, markers, songKey);
+  }
+
+  return {
+    refreshStatus,
+    connect,
+    disconnect,
+    searchSongs,
+    loadArrangements,
+    loadArrangement,
+    applyImport,
+    refreshFromSource,
+  };
 }
 
 export type ChartSourceHandlers = ReturnType<typeof createChartSourceHandlers>;

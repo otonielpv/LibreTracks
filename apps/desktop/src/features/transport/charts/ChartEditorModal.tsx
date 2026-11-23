@@ -22,8 +22,8 @@ import {
   type ChartTiming,
 } from "@libretracks/shared/charts/chartTimes";
 import { CHART_FILE_ACCEPT, chordProFromFile } from "./importChart";
-import { FEATURE_FLAGS } from "@libretracks/shared/featureFlags";
 import { useChartImportStore } from "../../chartSources/chartImportStore";
+import { useChartSourcesAvailable } from "../../chartSources/useChartSourcesAvailable";
 
 type ChartEditorModalProps = {
   region: SongRegionSummary;
@@ -54,6 +54,7 @@ export function ChartEditorModal({
   onClose,
 }: ChartEditorModalProps) {
   const { t } = useTranslation();
+  const sourcesAvailable = useChartSourcesAvailable();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const timing = useMemo<ChartTiming>(
     () => ({
@@ -225,7 +226,7 @@ export function ChartEditorModal({
                   <span className="material-symbols-outlined" aria-hidden="true">upload_file</span>
                   {t("liveChart.importFile")}
                 </button>
-                {FEATURE_FLAGS.chartSources ? (
+                {sourcesAvailable ? (
                   <button
                     type="button"
                     className="lt-chart-editor-button"
@@ -240,6 +241,24 @@ export function ChartEditorModal({
                   >
                     <span className="material-symbols-outlined" aria-hidden="true">library_music</span>
                     {t("chartSources.import.open")}
+                  </button>
+                ) : null}
+                {sourcesAvailable && chart?.source?.provider === "planningCenter" ? (
+                  <button
+                    type="button"
+                    className="lt-chart-editor-button"
+                    onClick={() =>
+                      useChartImportStore.getState().open({
+                        region,
+                        markers: [...markers],
+                        chart,
+                        onSave: (next) => onSave(next),
+                        mode: "refresh",
+                      })
+                    }
+                  >
+                    <span className="material-symbols-outlined" aria-hidden="true">sync</span>
+                    {t("chartSources.refresh.open")}
                   </button>
                 ) : null}
               </div>
