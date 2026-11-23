@@ -5,6 +5,11 @@ import type { SongChart, SongRegionSummary, SongView } from "@libretracks/shared
 import { recordProductEvent } from "../../telemetry/telemetry";
 
 vi.mock("../../telemetry/telemetry", () => ({ recordProductEvent: vi.fn() }));
+const sources = vi.hoisted(() => ({ available: false }));
+vi.mock("../../chartSources/useChartSourcesAvailable", () => ({
+  useChartSourcesAvailable: () => sources.available,
+  chartSourcesAvailableNow: () => sources.available,
+}));
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key }),
@@ -12,6 +17,7 @@ vi.mock("react-i18next", () => ({
 
 import { ChartEditorHost } from "./ChartEditorHost";
 import { useChartEditorStore } from "./chartEditorStore";
+import { useChartImportStore } from "../../chartSources/chartImportStore";
 import { LiveChartPanel } from "./LiveChartPanel";
 import { PLAY_HISTORY_LIMIT } from "@libretracks/shared/charts/chartSync";
 
@@ -494,6 +500,23 @@ describe("LiveChartPanel", () => {
     expect(screen.getByRole("button", { name: "liveChart.importFile" })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "liveChart.pasteText" }));
     expect(screen.getByRole("dialog")).toBeTruthy();
+  });
+
+  it("offers Planning Center when it is available, opening its picker for this song", () => {
+    sources.available = true;
+    try {
+      renderPanel(region(null), { current: 0 });
+      fireEvent.click(screen.getByRole("button", { name: "chartSources.import.open" }));
+      expect(useChartImportStore.getState().session?.region.id).toBe(region(null).id);
+    } finally {
+      sources.available = false;
+      useChartImportStore.getState().close();
+    }
+  });
+
+  it("does not offer Planning Center when it is not available", () => {
+    renderPanel(region(null), { current: 0 });
+    expect(screen.queryByRole("button", { name: "chartSources.import.open" })).toBeNull();
   });
 
   // On a phone the editor turns the app to portrait and the view behind

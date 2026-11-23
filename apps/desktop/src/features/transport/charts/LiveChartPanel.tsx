@@ -48,6 +48,8 @@ import { PersonalChordsBar } from "../../network/PersonalChordsBar";
 import { usePersonalChords } from "../../network/usePersonalChords";
 import { useNetworkPermissions } from "../../network/useNetworkPermissions";
 import { recordProductEvent } from "../../telemetry/telemetry";
+import { useChartImportStore } from "../../chartSources/chartImportStore";
+import { useChartSourcesAvailable } from "../../chartSources/useChartSourcesAvailable";
 import "./LiveChartPanel.css";
 
 const FONT_SCALE_KEY = "lt.liveChart.fontScale";
@@ -478,6 +480,19 @@ export const LiveChartPanel = memo(function LiveChartPanel({
     if (!region || !canEdit) return;
     useChartEditorStore.getState().open({ region, markers, chart, secondsPerBeatAt, onSave: save });
   };
+  // Planning Center: the picked sheet opens the editor with "Ajustar a la
+  // secuencia" (ChartImportHost), and saves through this panel.
+  const sourcesAvailable = useChartSourcesAvailable();
+  const openPlanningCenter = () => {
+    if (!region || !canEdit) return;
+    useChartImportStore.getState().open({
+      region,
+      markers: [...markers],
+      chart,
+      onPicked: (input) =>
+        useChartEditorStore.getState().open({ region, markers, chart, secondsPerBeatAt, onSave: save, initialImport: input }),
+    });
+  };
   // Editar › Letra: abrir con el editor a la vista.
   const openEditorRef = useRef(openEditor);
   openEditorRef.current = openEditor;
@@ -671,6 +686,12 @@ export const LiveChartPanel = memo(function LiveChartPanel({
               <span className="material-symbols-outlined" aria-hidden="true">upload_file</span>
               {t("liveChart.importFile")}
             </button>
+            {sourcesAvailable ? (
+              <button type="button" className="lt-live-chart-action" disabled={busy} onClick={openPlanningCenter}>
+                <span className="material-symbols-outlined" aria-hidden="true">library_music</span>
+                {t("chartSources.import.open")}
+              </button>
+            ) : null}
             <button type="button" className="lt-live-chart-action" disabled={busy} onClick={openEditor}>
               <span className="material-symbols-outlined" aria-hidden="true">edit_note</span>
               {t("liveChart.pasteText")}
