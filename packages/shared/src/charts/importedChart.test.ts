@@ -195,3 +195,64 @@ describe("the fingerprint of a saved chart", () => {
     expect(chartTextHash("Coro")).not.toBe(chartTextHash("Coro!"));
   });
 });
+
+describe("Planning Center repeat marks", () => {
+  // Invented words, with the shape of a real Planning Center chart.
+  const SHEET = [
+    "INTRO  E  C#m  A   B",
+    "",
+    "VERSO 1",
+    "[E]Camino al a[B]manecer",
+    "[E]Luz en el [C#m]valle",
+    "",
+    "CORO 1",
+    "Te [E]canto hoy",
+    "porque [C#m]tú me esperas",
+    "",
+    "COLUMN_BREAK",
+    "CORO 2",
+    "// Te [E]canto hoy",
+    "porque [C#m]tú me esperas //",
+    "",
+    "PUENTE",
+    "/// Ahora [E]vuelvo   Ahora [C#m]canto",
+    "Y tu ca[B]mino es mi [A]casa ///",
+    "",
+    "Ahora [C#m]vuelvo   Ahora [G#m]canto",
+    "Y tu ca[B]mino es mi [A]casa [B]",
+    "",
+    "CORO 3",
+    "// Te [E]canto hoy",
+    "porque [C#m]tú me esperas // [E]",
+  ].join("\n");
+
+  const doc = () => parseChordPro(normalizeImportedChart(chart(SHEET)).text);
+  const words = (line: ReturnType<typeof doc>["sections"][number]["lines"][number]) =>
+    line.kind === "lyrics" ? line.segments.map((segment) => segment.text).join("") : "";
+
+  it("a section between marks says how many times in its label, without the slashes", () => {
+    const sections = doc().sections;
+    expect(sections.map((section) => section.label)).toEqual(["Intro", "Verso 1", "Coro 1", "Coro 2 (x2)", "Puente", "Coro 3 (x2)"]);
+    expect(sections[3].lines.map(words)).toEqual(["Te canto hoy", "porque tú me esperas"]);
+  });
+
+  it("a block inside a section keeps its count at the end of its last line", () => {
+    const bridge = doc().sections[4];
+    expect(bridge.lines.map(words)).toEqual([
+      "Ahora vuelvo   Ahora canto",
+      "Y tu camino es mi casa (x3)",
+      "Ahora vuelvo   Ahora canto",
+      "Y tu camino es mi casa ",
+    ]);
+  });
+
+  it("a header with its chords on the same line keeps the chords as a line", () => {
+    const intro = doc().sections[0];
+    expect(intro.kind).toBe("intro");
+    expect(intro.lines[0].kind === "lyrics" && intro.lines[0].segments.map((segment) => segment.chord)).toEqual(["E", "C#m", "A", "B"]);
+  });
+
+  it("a header ending in slashes becomes its count", () => {
+    expect(parseChordPro(normalizeImportedChart(chart("INTRO //\n[Am] [C]\nVERSO\nUno")).text).sections[0].label).toBe("Intro (x2)");
+  });
+});

@@ -1,9 +1,11 @@
 import type { ChartSource } from "../models";
 
 import { chordProFromText, looksLikeChordPro } from "./chartImport";
+import { isChord, isChordLineFiller } from "./chordNotation";
 import {
   parseChordPro,
   parseSectionHeader,
+  sectionRepeat,
   serializeChordPro,
   type ChartLine,
   type ChartSection,
@@ -88,8 +90,85 @@ function sameSection(left: ChartSection, right: ChartSection): boolean {
  * source sent its own (which wins). Without any, there is no sequence: the
  * written order of a sheet is not a sequence.
  */
+/** "INTRO  E  C#m  A   B" (Planning Center's header with the chords on the
+ * same line) → the header, and the chords as a line of their own. */
+function splitHeaderWithChords(text: string): string {
+  return text
+    .split("\n")
+    .flatMap((line) => {
+      if (/[[{]/.test(line) || !line.trim()) return [line];
+      const tokens = line.trim().split(/\s+/);
+      for (let size = Math.min(3, tokens.length - 1); size >= 1; size -= 1) {
+        const header = tokens.slice(0, size).join(" ");
+        const rest = tokens.slice(size);
+        const chords = rest.every((token) => isChord(token) || isChordLineFiller(token)) && rest.some(isChord);
+        if (chords && parseSectionHeader(header)) {
+          return [header, rest.map((token) => (isChord(token) ? `[${token}]` : token)).join(" ")];
+        }
+      }
+      return [line];
+    })
+    .join("\n");
+}
+
+const OPEN_MARK = /^\s*(\/{2,})\s*/;
+const CLOSE_MARK = /\s*(\/{2,})\s*$/;
+
+/**
+ * Planning Center's repeat marks: "// line … line //" is played twice, "///"
+ * three times. A whole section between marks → "(x2)" in its label, which the
+ * matcher reads (two markers in a row stay on it); a block inside a section
+ * → "(x2)" at the end of its last line. The slashes go: they are not words.
+ */
+function foldRepeatMarks(section: ChartSection): ChartSection {
+  const bare = section.label.replace(/\s*(\/{2,})\s*$/, "");
+  const headerMarks = /(\/{2,})\s*$/.exec(section.label)?.[1].length ?? 0;
+  let label = parseSectionHeader(bare)?.label ?? bare;
+  if (headerMarks) label = `${label} (x${headerMarks})`;
+  const lines = section.lines.map((line) =>
+    line.kind === "lyrics" ? { ...line, segments: line.segments.map((segment) => ({ ...segment })) } : line,
+  );
+  const lyricIndexes = lines.flatMap((line, index) =>
+    line.kind === "lyrics" && line.segments.some((segment) => segment.text.trim()) ? [index] : [],
+  );
+  let open: { line: number; count: number } | null = null;
+  const blocks: Array<{ from: number; to: number; count: number }> = [];
+  for (const index of lyricIndexes) {
+    const line = lines[index];
+    if (line.kind !== "lyrics") continue;
+    const first = line.segments.find((segment) => segment.text.trim());
+    const opening = first ? OPEN_MARK.exec(first.text) : null;
+    if (first && opening) {
+      first.text = first.text.slice(opening[0].length);
+      open = { line: index, count: opening[1].length };
+    }
+    const last = [...line.segments].reverse().find((segment) => segment.text.trim());
+    const closing = last ? CLOSE_MARK.exec(last.text) : null;
+    if (last && closing) {
+      last.text = last.text.slice(0, closing.index) + (last.text.endsWith(" ") ? " " : "");
+      blocks.push({ from: open?.line ?? index, to: index, count: open?.count ?? closing[1].length });
+      open = null;
+    }
+  }
+  if (open) blocks.push({ from: open.line, to: open.line, count: open.count });
+  const whole =
+    blocks.length === 1 && blocks[0].from === lyricIndexes[0] && blocks[0].to === lyricIndexes[lyricIndexes.length - 1];
+  if (whole) {
+    if (sectionRepeat(label) === 1) label = `${label} (x${blocks[0].count})`.trim();
+  } else {
+    for (const block of blocks) {
+      const line = lines[block.to];
+      if (line.kind !== "lyrics") continue;
+      const last = [...line.segments].reverse().find((segment) => segment.text.trim()) ?? line.segments.at(-1);
+      if (last) last.text = `${last.text.replace(/\s+$/, "")} (x${block.count})`;
+    }
+  }
+  return { ...section, label, lines };
+}
+
 export function normalizeImportedChart(chart: ImportedChart): { text: string; sequence?: string[] } {
-  const doc = parseChordPro(stripLayoutMarks(chart.text));
+  const doc = parseChordPro(splitHeaderWithChords(stripLayoutMarks(chart.text)));
+  doc.sections = doc.sections.map(foldRepeatMarks);
   const kept: ChartSection[] = [];
   const implicit: string[] = [];
   let referenced = false;
@@ -116,8 +195,8 @@ export function normalizeImportedChart(chart: ImportedChart): { text: string; se
       instructions.push({ label: match[1].replace(/\s*\(?\s*(?:x\s?\d|\d\s?x)\s*\)?\s*$/i, ""), count: repeatCount(match[1]) });
       return false;
     });
-    // "VERSE 1" → "Verse 1", as the sheet analyser writes headers.
-    const cleaned: ChartSection = { ...section, label: parseSectionHeader(section.label)?.label ?? section.label, lines };
+    // The label was tidied by `foldRepeatMarks` ("VERSE 1" → "Verse 1").
+    const cleaned: ChartSection = { ...section, lines };
     const next = doc.sections[index + 1];
 
     if (cleaned.lines.length === 0 && cleaned.label) {

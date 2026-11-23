@@ -150,4 +150,21 @@ describe("matching a sheet to the song's markers", () => {
     console.info(`matchChartToMarkers 60×40: ${perRun.toFixed(2)} ms`);
     expect(perRun).toBeLessThan(5);
   });
+
+  it("two markers in a row stay on a section the sheet marks as repeated", () => {
+    const doc = sheet("Verso 1", "Coro 1", "Verso 2", "Coro 2 (x2)", "Puente", "Coro 3");
+    expect(sections(doc, ["Verso", "Coro", "Verso", "Coro", "Coro", "Puente", "Coro"])).toEqual([0, 1, 2, 3, 3, 4, 5]);
+    // Without the mark, the second chorus goes back to the closest one.
+    const plain = sheet("Verso 1", "Coro 1", "Verso 2", "Coro 2", "Puente", "Coro 3");
+    expect(sections(plain, ["Verso", "Coro", "Verso", "Coro", "Coro", "Puente", "Coro"])).not.toEqual([0, 1, 2, 3, 3, 4, 5]);
+  });
+
+  it("a section written once and played many times is not a doubt", () => {
+    const result = matchChartToMarkers(sheet("Verso", "Coro", "Puente"), markers("Verso", "Coro", "Puente", "Puente", "Puente"));
+    expect(result.items.slice(2).map((item) => [item.section, item.confidence])).toEqual([
+      [2, "high"],
+      [2, "high"],
+      [2, "high"],
+    ]);
+  });
 });

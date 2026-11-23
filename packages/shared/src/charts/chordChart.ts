@@ -59,6 +59,14 @@ export function parseSectionHeader(raw: string): SectionHeader | null {
   return { label: tidyLabel(text), kind: chartKind(meaning.kind), number: meaning.number };
 }
 
+/** How many times a section is played in a row, from its label: "Coro (x2)",
+ * "Puente x6", "Chorus 2x" → 2, 6, 2. Without a mark, 1. */
+export function sectionRepeat(label: string): number {
+  const match = /(?:^|[\s(])x\s?(\d{1,2})\)?\s*$|(?:^|[\s(])(\d{1,2})\s?x\)?\s*$/i.exec(label);
+  const count = Number(match?.[1] ?? match?.[2] ?? 1);
+  return count >= 1 ? count : 1;
+}
+
 /** "VERSO 1" → "Verso 1"; mixed case is left as the author wrote it. */
 function tidyLabel(text: string): string {
   const clean = text.replace(/\s+/g, " ").trim();

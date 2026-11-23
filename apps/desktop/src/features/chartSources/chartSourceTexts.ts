@@ -47,6 +47,7 @@ const en = {
     replace: "Replace",
     cancel: "Cancel",
     confidence: { medium: "Check", low: "Unsure" },
+    legend: "Check and Unsure: LibreTracks is not sure of that section. Look at the words on the right and change it here if they are not what plays.",
     reason: {
       number: "By the number",
       sequence: "By the Planning Center sequence",
@@ -157,7 +158,8 @@ const es: Texts<typeof en> = {
     apply: "Importar",
     replace: "Reemplazar",
     cancel: "Cancelar",
-    confidence: { medium: "Revisar", low: "Dudoso" },
+    confidence: { medium: "Comprueba", low: "Dudosa" },
+    legend: "Comprueba y Dudosa: LibreTracks no está seguro de esa sección. Mira la letra de la derecha y cámbiala aquí si no es la que suena.",
     reason: {
       number: "Por el número",
       sequence: "Por la secuencia de Planning Center",

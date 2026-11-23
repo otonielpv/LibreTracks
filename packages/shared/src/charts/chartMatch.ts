@@ -1,6 +1,6 @@
 import type { ChartLink, SectionMarkerSummary } from "../models";
 
-import { parseSectionHeader, type ChartDoc } from "./chordChart";
+import { parseSectionHeader, sectionRepeat, type ChartDoc } from "./chordChart";
 import { canonicalLabel, chartKind, isLyricless, sectionFamily, vocabTokens } from "./sectionVocab";
 
 /**
@@ -206,6 +206,7 @@ export function matchChartToMarkers(
   const pinned = sequence ? alignWithSequence(meanings, sequence, doc) : new Map<number, number>();
 
   const families = doc.sections.map((section) => sectionFamily(section.kind));
+  const repeats = doc.sections.map((section) => sectionRepeat(section.label));
   // countBefore[family][i] = sections of that family in [0, i).
   const countBefore = new Map<string, number[]>();
   for (const family of new Set(families)) {
@@ -223,6 +224,10 @@ export function matchChartToMarkers(
     const family = families[section];
     if (!family) return position < section ? 0 : BACK_COST;
     if (section > position) return SKIP_COST * between(family, position + 1, section);
+    // A section the sheet marks as played several times in a row ("Coro 2
+    // (x2)", Planning Center's "// … //"): the next marker staying on it is
+    // just reading on.
+    if (section === position && repeats[section] > 1) return 0;
     const ahead = between(family, position + 1, families.length) > 0 ? BACK_WITH_AHEAD_COST : 0;
     return BACK_COST + ahead + BACK_SKIP_COST * between(family, section + 1, position + 1);
   };
@@ -305,6 +310,7 @@ export function matchChartToMarkers(
         pinned: pinned.has(index),
         transition: section === null ? 0 : transition(position, section),
         target: section === null ? null : doc.sections[section].number,
+        alternatives: section === null || !families[section] ? 0 : between(families[section]!, 0, families.length),
       });
       if (section !== null) position = section;
       return item;
@@ -324,7 +330,7 @@ function describe(
   marker: SectionMarkerSummary,
   section: number | null,
   meaning: Meaning,
-  context: { locked: boolean; pinned: boolean; transition: number; target: number | null },
+  context: { locked: boolean; pinned: boolean; transition: number; target: number | null; alternatives: number },
 ): MatchItem {
   const markerId = marker.id;
   if (context.locked) return { markerId, section, confidence: "high", reason: "locked" };
@@ -338,7 +344,11 @@ function describe(
       ? { markerId, section, confidence: "high", reason: "number" }
       : { markerId, section, confidence: "medium", reason: "family" };
   }
-  return { markerId, section, confidence: context.transition === 0 ? "high" : "medium", reason: "family" };
+  // Going back or skipping only leaves a doubt when the sheet has another
+  // section of the family to choose: a bridge written once that the song
+  // plays six times is sure.
+  const sure = context.transition === 0 || context.alternatives <= 1;
+  return { markerId, section, confidence: sure ? "high" : "medium", reason: "family" };
 }
 
 /** Nothing could be matched by meaning: by the source's sequence when it has

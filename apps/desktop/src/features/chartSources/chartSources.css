@@ -149,3 +149,80 @@
 .lt-chart-import-rows li.lt-plan-import-pair {
   grid-template-columns: minmax(120px, 1fr) minmax(140px, 1.2fr) auto;
 }
+
+/* Controls in the app's style (same as the chart editor). */
+.lt-chart-import-search input,
+.lt-plan-import-field select {
+  border-radius: 2px;
+  border: 1px solid rgb(87 241 219 / 0.18);
+  background: rgb(28 31 32 / 0.98);
+  color: #f3f0ef;
+  padding: 0.45rem 0.6rem;
+  font: 500 0.85rem/1.2 "Space Grotesk", sans-serif;
+}
+
+.lt-chart-import-search input:focus,
+.lt-plan-import-field select:focus {
+  outline: none;
+  border-color: rgb(87 241 219 / 0.5);
+}
+
+.lt-chart-import-search button,
+.lt-chart-import-connect button {
+  border-radius: 2px;
+  border: 1px solid rgb(87 241 219 / 0.24);
+  background: rgb(87 241 219 / 0.1);
+  color: #57f1db;
+  padding: 0.5rem 0.9rem;
+  font: 700 0.78rem/1 "Space Grotesk", sans-serif;
+  cursor: pointer;
+}
+
+.lt-chart-import-search button:disabled,
+.lt-chart-import-connect button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.lt-chart-import-list > li > button,
+.lt-chart-import-arrangements button {
+  margin: 0;
+  padding: 0.5rem 0.75rem;
+  border: 0;
+  border-bottom: 1px solid rgb(255 255 255 / 0.06);
+  border-radius: 0;
+  background: none;
+  color: #f3f0ef;
+  font: 500 0.88rem/1.25 "Space Grotesk", sans-serif;
+  cursor: pointer;
+}
+
+.lt-chart-import-list > li > button:hover,
+.lt-chart-import-arrangements button:not(:disabled):hover {
+  background: rgb(87 241 219 / 0.08);
+}
+
+.lt-chart-import-list > li > button.is-active {
+  color: #57f1db;
+}
+
+.lt-chart-import-list > li > button span {
+  color: rgb(229 226 225 / 0.6);
+  font-size: 0.8rem;
+}
+
+.lt-chart-import-arrangements button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.lt-plan-import-field {
+  color: rgb(229 226 225 / 0.7);
+  font: 600 0.75rem/1.2 "Space Grotesk", sans-serif;
+}
+
+.lt-chart-import-legend {
+  margin: 0;
+  color: rgb(229 226 225 / 0.6);
+  font: 500 0.76rem/1.4 "Space Grotesk", sans-serif;
+}

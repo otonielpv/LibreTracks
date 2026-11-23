@@ -314,6 +314,9 @@ export function ReviewView({
         <>
           <p className="lt-chart-import-help">{t("chartSources.import.reviewHelp")}</p>
           {review.hasMissing ? <p className="lt-chart-import-warning" role="status">{t("chartSources.import.missing")}</p> : null}
+          {review.rows.some((row) => row.confidence !== "high") ? (
+            <p className="lt-chart-import-legend">{t("chartSources.import.legend")}</p>
+          ) : null}
           <ul className="lt-chart-import-rows" aria-label={t("chartSources.import.reviewTitle")}>
             {review.rows.map((row) => (
               <li key={row.markerId} className={row.repeatOf ? "is-repeat" : undefined} data-testid="chart-import-row">
