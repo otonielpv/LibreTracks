@@ -127,7 +127,7 @@ describe("a sheet saved with slashes, imported again", () => {
       planningCenterToImported({
         id: "a",
         songId: "s",
-        chordChart: ["INTRO", "// [Bm] [D] [G] [A] //", "", "VAMP", "[Bm] [D] [G] [A]", "", "CORO", "Digno de [G]alabar"].join("\n"),
+        chordChart: ["INTRO // Bm D G A //", "", "VAMP", "[Bm] [D] [G] [A]", "", "CORO", "Digno de [G]alabar"].join("\n"),
       }),
     );
     const doc = parseChordPro(imported.text);

@@ -58,7 +58,7 @@ describe("repeats: in the sequence or with slashes in the sheet", () => {
     expect(result.sequence).toBeUndefined();
     // Coro plays 2 + 2 + 4 = 8 times; the intro 2.
     expect(result.chordChart).toBe(
-      ["INTRO", "// [D] [A] //", "", "VERSO 1", "[D]Uno", "dos", "", "CORO", "//////// [G]Luz", "sol ////////", ""].join("\n"),
+      ["INTRO // D A //", "", "VERSO 1", "[D]Uno", "dos", "", "CORO", "//////// [G]Luz", "sol ////////", ""].join("\n"),
     );
   });
 });
@@ -76,10 +76,10 @@ describe("markers of another kind on a section's chords", () => {
     { markerId: "x2", section: 0 },
   ];
 
-  it("with slashes, a Vamp and an Interludio on the intro are their own sections, not more intros", () => {
+  it("with slashes, a Vamp and an Interludio on the intro are their own sections, where they sound", () => {
     const { chordChart } = planningCenterExport(text, links, markers, "marks");
     expect(chordChart).toBe(
-      ["INTRO", "[Bm] [D] [G] [A]", "", "VAMP", "[Bm] [D] [G] [A]", "", "INTERLUDIO", "// [Bm] [D] [G] [A] //", "", "CORO", "Digno de [G]alabar", ""].join("\n"),
+      ["INTRO", "[Bm] [D] [G] [A]", "", "CORO", "Digno de [G]alabar", "", "VAMP", "[Bm] [D] [G] [A]", "", "INTERLUDIO // Bm D G A //", ""].join("\n"),
     );
   });
 

@@ -49,8 +49,9 @@ function joinRepeatedLines(lines: readonly string[]): Array<{ lines: string[]; c
 }
 
 /** A section written again under another name: the intro's chords that the
- * song plays as a "Vamp" or an "Interludio" marker. */
-export type SectionCopy = { label: string; times: number };
+ * song plays as a "Vamp" or an "Interludio" marker. `source` is the section
+ * whose lines it repeats; the map key, the section it is written after. */
+export type SectionCopy = { label: string; times: number; source: number };
 
 export function toPlanningCenterChart(
   text: string,
@@ -61,7 +62,9 @@ export function toPlanningCenterChart(
   const doc = parseChordPro(text);
   const blocks = doc.sections.flatMap((section, sectionIndex) => [
     writeSection(section, section.label, marks.get(sectionIndex) ?? 1, joinLines),
-    ...(copies.get(sectionIndex) ?? []).map((copy) => writeSection(section, copy.label, copy.times, joinLines)),
+    ...(copies.get(sectionIndex) ?? []).map((copy) =>
+      writeSection(doc.sections[copy.source], copy.label, copy.times, joinLines),
+    ),
   ]);
   return `${blocks.filter((block) => block.trim()).join("\n\n")}\n`;
 }
@@ -78,6 +81,14 @@ function writeSection(section: ChartSection, label: string | null | undefined, t
       );
   const first = marked[0];
   const last = marked[marked.length - 1];
+  // One line of chords and nothing else: the marks and the chords go on the
+  // header, as plain text ("INTRO // Bm D G A //"); in brackets between
+  // slashes Planning Center draws them over the slashes.
+  const content = section.lines.filter((line) => line.kind !== "lyrics" || serializeLyricLine(line.segments).trim());
+  if (slashes && label && !lyricIndexes.length && content.length === 1 && content[0].kind === "lyrics") {
+    const chords = serializeLyricLine(content[0].segments).replace(/\[([^\]]+)\]/g, " $1 ").replace(/\s+/g, " ").trim();
+    return `${label.toUpperCase()} ${slashes} ${chords} ${slashes}`;
+  }
   const lines: string[] = [];
   if (label) lines.push(label.toUpperCase());
   const body: string[] = [];
@@ -150,14 +161,26 @@ export function planningCenterExport(
     const own = !markerKind || !sectionKind || markerKind === sectionKind;
     return [{ section: link.section, label: own ? label : stripNumber(marker.name), copy: !own, passes: passesOf(link) }];
   });
+  // Each copy goes where it first sounds: after the section of the part
+  // played before it ("Interludio" after the first chorus, not after the
+  // intro whose chords it uses).
   const copies = new Map<number, SectionCopy[]>();
+  const all: SectionCopy[] = [];
+  let anchor: number | null = null;
   for (const entry of played) {
-    if (!entry.copy) continue;
-    const list = copies.get(entry.section) ?? [];
-    const found = list.find((copy) => kindOf(copy.label) === kindOf(entry.label));
-    if (found) found.times = Math.min(16, found.times + entry.passes);
-    else list.push({ label: entry.label, times: entry.passes });
-    copies.set(entry.section, list);
+    if (!entry.copy) {
+      anchor = entry.section;
+      continue;
+    }
+    const found = all.find((copy) => kindOf(copy.label) === kindOf(entry.label));
+    if (found) {
+      found.times = Math.min(16, found.times + entry.passes);
+      continue;
+    }
+    const copy = { label: entry.label, times: entry.passes, source: entry.section };
+    all.push(copy);
+    const after = anchor ?? entry.section;
+    copies.set(after, [...(copies.get(after) ?? []), copy]);
   }
   if (style === "marks") {
     const totals = new Map<number, number>();
@@ -166,9 +189,7 @@ export function planningCenterExport(
     }
     return { chordChart: toPlanningCenterChart(text, totals, true, copies) };
   }
-  const named = new Map(
-    [...copies.values()].flat().map((copy) => [kindOf(copy.label), copy.label] as const),
-  );
+  const named = new Map(all.map((copy) => [kindOf(copy.label), copy.label] as const));
   const sequence = played.flatMap((entry) =>
     Array.from({ length: entry.passes }, () => (entry.copy ? named.get(kindOf(entry.label)) ?? entry.label : entry.label)),
   );
