@@ -281,8 +281,15 @@ export function buildPerformanceBlocks(
   const raw = buildMarkerBlocks(doc, links, markers, history, pendingMarkerId, repeatCurrent);
   const blocks: PerformanceBlock[] = [];
   let current = -1;
+  const sung = (section: number | null) =>
+    section !== null &&
+    doc.sections[section]?.lines.some(
+      (line) => line.kind === "lyrics" && line.segments.some((segment) => /\p{L}/u.test(segment.text)),
+    );
   raw.blocks.forEach((entry, index) => {
-    const passes = Math.max(1, Math.floor(passesFor(entry.markerId)));
+    // A part without words (an intro of chords) shows once however many
+    // times its chords go round.
+    const passes = sung(entry.section) ? Math.max(1, Math.floor(passesFor(entry.markerId))) : 1;
     if (index === raw.current) current = blocks.length + Math.min(passes - 1, Math.max(0, currentPass));
     if (passes === 1) {
       blocks.push(entry);

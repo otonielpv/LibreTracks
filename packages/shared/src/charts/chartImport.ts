@@ -225,9 +225,14 @@ function mergeChords(
   // chord goes inside them, and they do not count as the line's length.
   const marks = /\s*\/{2,}\s*$/.exec(text);
   const wordsLength = marks ? marks.index : text.length;
-  const lyricEnd = marks && wordsLength > 0 ? xs[wordsLength - 1] + 1 : (previousEnd ?? 0);
+  // Where the words end: trailing spaces (tabs after "Jesús,") and repeat
+  // marks are not words.
+  const lastWord = text.slice(0, wordsLength).search(/\s*$/);
+  const lyricEnd = lastWord > 0 ? xs[lastWord - 1] + 1 : (previousEnd ?? 0);
   const furthest = Math.max(...chords.map((chord) => chord.x));
-  const scale = lyricEnd > 0 && furthest > lyricEnd * 1.3 ? lyricEnd / (furthest + 1) : 1;
+  // Several chords running past the words (a single last chord after them is
+  // a real "after the line" chord and stays there).
+  const scale = lyricEnd > 0 && chords.length >= 2 && furthest > lyricEnd * 1.15 ? lyricEnd / (furthest + 1) : 1;
   const placed = scale === 1 ? chords : chords.map((chord) => ({ ...chord, x: chord.x * scale }));
   // Leading spaces only existed to align the first chord; they are kept while
   // placing chords and trimmed afterwards.

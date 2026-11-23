@@ -116,10 +116,10 @@ export function estimatePasses(
   for (const [section, entries] of bySection) {
     const sheet = repeats?.[section] ?? 1;
     const lines = lyricLines[section] ?? 0;
-    // A part without words (an intro of chords) is read once: its repeat
-    // marks say how many times the chords go round, not what to show.
-    if (lines === 0) continue;
-    const measured = sheet > 1 && entries.every((entry) => bars.has(entry.markerId));
+    // A part without words (an intro of chords) keeps the sheet's count,
+    // shared by its markers, so it goes back to Planning Center as written
+    // ("INTRO ////"); Live shows it once all the same (see chartSync).
+    const measured = lines > 0 && sheet > 1 && entries.every((entry) => bars.has(entry.markerId));
     if (measured) {
       // A sung line lasts about 3.5 s, rounded to whole bars: one bar at a
       // slow tempo (Digno, 67 BPM), two at a fast one (138 BPM). One pass is
@@ -138,7 +138,7 @@ export function estimatePasses(
     if (!(pass > 0)) continue;
     for (const entry of entries) {
       const ratio = entry.length / pass;
-      const times = sheet > 1 ? Math.round(ratio) : ratio >= 1.8 ? Math.round(ratio) : 1;
+      const times = sheet > 1 ? Math.round(ratio) : lines > 0 && ratio >= 1.8 ? Math.round(ratio) : 1;
       if (times >= 2) passes[entry.markerId] = Math.min(8, times);
     }
   }

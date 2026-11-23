@@ -222,7 +222,7 @@ describe("Digno (67.5 BPM)", () => {
 
   it("each marker gets its section and the times it is sung", () => {
     expect(labelsAndPasses(built)).toEqual([
-      ["Intro", "Intro", 1],
+      ["Intro", "Intro", 2],
       ["Verso", "Verso 1", 1],
       ["Vamp", null, 1],
       ["Coro", "Coro 1", 2],
@@ -259,7 +259,7 @@ describe("Te doy gloria (138 BPM)", () => {
 
   it("each marker gets its section and the times it is sung", () => {
     expect(labelsAndPasses(built)).toEqual([
-      ["Intro", "Intro", 1],
+      ["Intro", "Intro", 4],
       ["Verso", "Verso 1", 1],
       ["Pre Coro", "Precoro 1", 1],
       ["Coro", "Coro 1", 2],
