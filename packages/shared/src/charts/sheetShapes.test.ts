@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { SectionMarkerSummary } from "../models";
 
 import { buildImportReview } from "./chartImportReview";
-import { looksLikeChordPro, splitSectionHeaderLines } from "./chartImport";
+import { analyzeSongSheet, looksLikeChordPro, splitSectionHeaderLines, splitSectionHeaderSourceLines, type SourceLine } from "./chartImport";
 import { matchChartToMarkers } from "./chartMatch";
 import { parseChordPro } from "./chordChart";
 import { normalizeImportedChart, planningCenterToImported } from "./importedChart";
@@ -136,5 +136,23 @@ describe("a sheet saved with slashes, imported again", () => {
     expect(imported.text).toContain("{section: Final}\n[A] [G]");
     expect(imported.text).not.toContain("/");
     expect(imported.repeats?.[0]).toBe(2);
+  });
+});
+
+describe("headers with something after the name in a PDF", () => {
+  it("split into the header and its note or chords, other lines untouched", () => {
+    const line = (text: string, x = 40): SourceLine => ({ fragments: [{ text, x, width: text.length * 6 }], size: 11, breakBefore: false });
+    const lyric = line("Una luz en la noche", 52);
+    const out = splitSectionHeaderSourceLines([line("PUENTE (bajamos todos)"), lyric, line("INTRO: Bm D G A")]);
+    expect(out.map((source) => source.fragments.map((fragment) => fragment.text).join(""))).toEqual([
+      "PUENTE",
+      "(bajamos todos)",
+      "Una luz en la noche",
+      "INTRO",
+      "Bm D G A",
+    ]);
+    expect(out[2]).toBe(lyric);
+    const doc = analyzeSongSheet(out);
+    expect(doc.sections.map((section) => section.label)).toEqual(["Puente", "Intro"]);
   });
 });

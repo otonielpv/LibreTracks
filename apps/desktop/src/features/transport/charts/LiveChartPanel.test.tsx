@@ -422,8 +422,8 @@ describe("LiveChartPanel", () => {
     expect(window.localStorage.getItem("lt.liveChart.showChords")).toBe("false");
   });
 
-  it("imports a text sheet and links it to the song's markers by meaning", async () => {
-    const { onChartChange } = renderPanel(region(null), { current: 0 });
+  it("an imported file opens in the editor to adjust it to the sequence, not linked blind", async () => {
+    const utils = renderPanel(region(null), { current: 0 });
     const sheet = "Verso 1\nC            F\nUna línea de letra\nCoro\nG\nOtra línea";
     const file = new File([sheet], "cancion.txt", { type: "text/plain" });
     Object.defineProperty(file, "text", { value: async () => sheet });
@@ -432,15 +432,10 @@ describe("LiveChartPanel", () => {
       fireEvent.change(screen.getByTestId("live-chart-file-input"), { target: { files: [file] } });
     });
 
-    expect(onChartChange).toHaveBeenCalledTimes(1);
-    const [regionId, chart] = onChartChange.mock.calls[0] as unknown as [string, SongChart];
-    expect(regionId).toBe("song");
-    expect(chart.text).toContain("{section: Verso 1}");
-    expect(chart.text).toContain("[C]Una línea de [F]letra");
-    expect(chart.links).toEqual([
-      { markerId: "verse", section: 0 },
-      { markerId: "chorus", section: 1 },
-    ]);
+    expect(utils.onChartChange).not.toHaveBeenCalled();
+    const session = useChartEditorStore.getState().session;
+    expect(session?.initialImport?.imported.text).toContain("[C]Una línea de [F]letra");
+    expect(screen.getByRole("dialog", { name: "chartSources.adjust.title" })).toBeTruthy();
   });
 
   it("while recording, the lines move only with the taps", () => {

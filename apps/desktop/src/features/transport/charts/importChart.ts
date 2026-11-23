@@ -1,4 +1,9 @@
-import { analyzeSongSheet, chordProFromText, type MeasureText } from "@libretracks/shared/charts/chartImport";
+import {
+  analyzeSongSheet,
+  chordProFromText,
+  splitSectionHeaderSourceLines,
+  type MeasureText,
+} from "@libretracks/shared/charts/chartImport";
 import { serializeChordPro } from "@libretracks/shared/charts/chordChart";
 import { extractPdfText } from "./pdfLoader";
 import { pdfTextToSourceLines } from "./pdfTextLines";
@@ -40,7 +45,7 @@ export async function chordProFromFile(file: File): Promise<string> {
   const isPdf = /\.pdf$/i.test(file.name) || file.type === "application/pdf";
   if (isPdf) {
     const pages = await extractPdfText(new Uint8Array(await file.arrayBuffer()));
-    const doc = analyzeSongSheet(pdfTextToSourceLines(pages), canvasMeasure());
+    const doc = analyzeSongSheet(splitSectionHeaderSourceLines(pdfTextToSourceLines(pages)), canvasMeasure());
     if (doc.sections.every((section) => section.lines.length === 0)) {
       // A scanned sheet is a picture: there is no text to read.
       throw new Error("chart-pdf-no-text");

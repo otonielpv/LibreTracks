@@ -31,7 +31,6 @@ import {
 } from "@libretracks/shared/charts/personalChords";
 import {
   applyLineRecording,
-  autoLinkChart,
   buildPerformanceBlocks,
   chartLinkFor,
   chartLinkMarkerId,
@@ -524,9 +523,17 @@ export const LiveChartPanel = memo(function LiveChartPanel({
     setError(null);
     setBusy(true);
     try {
+      // Like Planning Center and the editor's own import: the sheet opens in
+      // the editor with "Ajustar a la secuencia", never linked blind.
       const text = await chordProFromFile(file);
-      const parsed = parseChordPro(text);
-      await onChartChange(region.id, { text, links: autoLinkChart(parsed, markers) });
+      useChartEditorStore.getState().open({
+        region,
+        markers,
+        chart,
+        secondsPerBeatAt,
+        onSave: save,
+        initialImport: { imported: { title: region.name, text } },
+      });
     } catch (cause) {
       setError(errorMessage(cause));
     } finally {

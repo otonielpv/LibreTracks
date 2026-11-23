@@ -531,6 +531,28 @@ export function splitSectionHeaderLines(text: string, chordPro = looksLikeChordP
 
 /** Plain text (a .txt, an e-mail, a web page pasted) → lines in characters.
  * Tabs count as 8 columns, as in the editors that aligned the chords. */
+/**
+ * `splitSectionHeaderLines` for lines read from a PDF: a header line that
+ * carries something after the name ("PUENTE (bajamos todos)", "INTRO: Bm D G
+ * A") becomes the header and, below it, its note or chords. Other lines are
+ * left as they are, positions and all (chords sit by those positions).
+ */
+export function splitSectionHeaderSourceLines(lines: readonly SourceLine[]): SourceLine[] {
+  return lines.flatMap((line) => {
+    const fragments = [...line.fragments].sort((left, right) => left.x - right.x);
+    const text = fragments.map((fragment) => fragment.text.trim()).filter(Boolean).join(" ");
+    const pieces = splitSectionHeaderLines(text, false).split("\n");
+    if (pieces.length < 2) return [line];
+    const x = fragments[0]?.x ?? 0;
+    const unit = fragments.length && text.length ? Math.max(0.01, (fragments[fragments.length - 1].x + fragments[fragments.length - 1].width - x) / text.length) : 1;
+    return pieces.map((piece, index) => ({
+      ...line,
+      fragments: [{ text: piece, x, width: piece.length * unit }],
+      breakBefore: index === 0 ? line.breakBefore : false,
+    }));
+  });
+}
+
 export function textToSourceLines(text: string): SourceLine[] {
   const out: SourceLine[] = [];
   let blank = false;
