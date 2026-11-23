@@ -250,11 +250,10 @@ export function advancePlayHistory(
 }
 
 /**
- * The lyrics as the performer lives them: what has played, in the order it
- * played, then what comes next. Reading only ever goes down — a chorus that
- * plays three times shows three times, the intro that comes back shows BELOW
- * the chorus, and after a jump the song goes on below the jump instead of
- * scrolling back to where the target sits on the timeline.
+ * The lyrics as the performer lives them: the song up to the part playing (in
+ * timeline order), that part, then what comes next. A scheduled jump shows
+ * its target right below the part playing, and once it lands the song above
+ * it is the timeline before the target (no log of what was played).
  *
  * What comes next is the markers after the current one on the timeline (an
  * applied arrangement included) or, with a jump to a marker of this song
@@ -326,14 +325,12 @@ function buildMarkerBlocks(
   if (!last) {
     return { blocks: markers.map((marker, index) => block(marker, `s${index}`, false)), current: -1 };
   }
-  // The parts before the oldest one remembered, in timeline order: scrolling
-  // up near the end of a song reaches its first line, also when playback
-  // started half way through or the history dropped the oldest parts.
-  const lead = markers.slice(0, byId.get(played[0].markerId)!).map((marker, index) => block(marker, `p${index}`, false));
-  const blocks = [
-    ...lead,
-    ...played.map((entry) => block(markers[byId.get(entry.markerId)!], `s${entry.seq}`, false)),
-  ];
+  // Above the part playing, what comes before it on the timeline: going back
+  // to the intro from a chorus shows the song up to the intro, not a log of
+  // what played (the performer reads up to see the song, not the history).
+  const at = byId.get(last.markerId)!;
+  const lead = markers.slice(0, at).map((marker, index) => block(marker, `p${index}`, false));
+  const blocks = [...lead, block(markers[at], `s${last.seq}`, false)];
   const target = pendingMarkerId !== null ? byId.get(pendingMarkerId) : undefined;
   const queued = target !== undefined;
   const from = queued ? target : byId.get(last.markerId)! + (repeatCurrent ? 0 : 1);
@@ -342,7 +339,7 @@ function buildMarkerBlocks(
     if (!queued && repeatCurrent && index === 0) next.looped = true;
     blocks.push(next);
   });
-  return { blocks, current: lead.length + played.length - 1 };
+  return { blocks, current: lead.length };
 }
 
 /** A line change time as the editor shows it: `m:ss.d` (song time). */

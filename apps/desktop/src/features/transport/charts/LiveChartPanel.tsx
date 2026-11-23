@@ -316,6 +316,7 @@ export const LiveChartPanel = memo(function LiveChartPanel({
     vampMarkerId,
     pendingJumpAtSeconds,
     positionSecondsRef,
+    playback.pass ?? 0,
   );
   // Looping the part playing: it comes next again.
   const vamping = vampMarkerId !== null && performed.history.at(-1)?.markerId === vampMarkerId;
@@ -368,13 +369,14 @@ export const LiveChartPanel = memo(function LiveChartPanel({
     return () => observer.disconnect();
   }, [scrollerElement]);
 
-  // Reading only goes down: when blocks come and go (the oldest played one
-  // trimmed off the top, the upcoming ones replaced after a jump or a vamp)
-  // the block that was playing stays where it was on screen, and the follow
-  // below moves on from there. Done by hand because WebKit (iOS) has no
-  // scroll anchoring; the scroller opts out of the browser's (CSS) so
-  // Chromium does not correct twice.
-  const anchorRef = useRef<{ key: string; top: number } | null>(null);
+  // When blocks come and go (the song above changes after a jump back, the
+  // upcoming ones replaced after a jump or a vamp) the block that becomes
+  // current stays where it was on screen (the jump's preview, below the part
+  // that was playing), or else the one that was playing, and the follow moves
+  // on from there. Done by hand because WebKit (iOS) has no scroll anchoring;
+  // the scroller opts out of the browser's (CSS) so Chromium does not correct
+  // twice.
+  const anchorRef = useRef<{ key: string | null; tops: Map<string, number> } | null>(null);
   useLayoutEffect(() => {
     const scroller = scrollerElement;
     if (!scroller) {
@@ -384,15 +386,23 @@ export const LiveChartPanel = memo(function LiveChartPanel({
     const topOf = (element: Element) =>
       element.getBoundingClientRect().top - scroller.getBoundingClientRect().top + scroller.scrollTop;
     const find = (key: string) => scroller.querySelector(`[data-block-key="${key}"]`);
-    const previous = anchorRef.current;
-    const previousElement = previous ? find(previous.key) : null;
-    if (previous && previousElement) {
-      const delta = topOf(previousElement) - previous.top;
-      if (Math.abs(delta) >= 1) scroller.scrollTop += delta;
-    }
     const key = blocks[currentBlock]?.key ?? null;
-    const element = key ? find(key) : null;
-    anchorRef.current = key && element ? { key, top: topOf(element) } : null;
+    const previous = anchorRef.current;
+    if (previous) {
+      for (const candidate of [key, previous.key]) {
+        const before = candidate ? previous.tops.get(candidate) : undefined;
+        const element = candidate ? find(candidate) : null;
+        if (before === undefined || !element) continue;
+        const delta = topOf(element) - before;
+        if (Math.abs(delta) >= 1) scroller.scrollTop += delta;
+        break;
+      }
+    }
+    const tops = new Map<string, number>();
+    scroller.querySelectorAll("[data-block-key]").forEach((element) => {
+      tops.set(element.getAttribute("data-block-key")!, topOf(element));
+    });
+    anchorRef.current = { key, tops };
   }, [scrollerElement, blocks, currentBlock]);
 
   // After a hand scroll, once the reader lets go for MANUAL_SCROLL_HOLD_MS

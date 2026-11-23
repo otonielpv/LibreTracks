@@ -27,7 +27,7 @@ type State = {
   history: PlayHistory;
   jump: JumpState | null;
   /** Where the playhead was last time, to see it go back inside a part. */
-  last: { markerId: string | null; line: number | null };
+  last: { markerId: string | null; line: number | null; pass: number };
 };
 
 /**
@@ -60,8 +60,11 @@ export function usePerformanceHistory(
   /** When the scheduled jump fires (view seconds). */
   jumpAtSeconds: number | null = null,
   positionSecondsRef: { readonly current: number } | null = null,
+  /** The pass playing inside the part (a chorus sung twice in its marker):
+   * the line starting over at the next pass is not going back. */
+  pass = 0,
 ): { history: PlayHistory; pendingMarkerId: string | null } {
-  const stateRef = useRef<State>({ regionId, history: [], jump: null, last: { markerId: null, line: null } });
+  const stateRef = useRef<State>({ regionId, history: [], jump: null, last: { markerId: null, line: null, pass: 0 } });
   // Re-renders once when a vanished jump's grace runs out.
   const [, setTick] = useState(0);
 
@@ -70,7 +73,7 @@ export function usePerformanceHistory(
     state.regionId = regionId;
     state.history = [];
     state.jump = null;
-    state.last = { markerId: null, line: null };
+    state.last = { markerId: null, line: null, pass: 0 };
   }
 
   if (pendingMarkerId !== null) {
@@ -124,14 +127,13 @@ export function usePerformanceHistory(
     const back =
       markerId !== null &&
       markerId === state.last.markerId &&
-      line !== null &&
-      state.last.line !== null &&
-      line < state.last.line;
+      (pass < state.last.pass ||
+        (pass === state.last.pass && line !== null && state.last.line !== null && line < state.last.line));
     state.history = advancePlayHistory(state.history, markerId, back);
   }
   const overshoot =
     !state.jump && vampMarkerId !== null && markerId !== vampMarkerId && state.history.at(-1)?.markerId === vampMarkerId;
-  if (!overshoot) state.last = { markerId, line };
+  if (!overshoot) state.last = { markerId, line, pass };
 
   const waiting = state.jump !== null && !state.jump.landed && state.jump.clearedAt !== null;
   useEffect(() => {

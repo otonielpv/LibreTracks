@@ -19,7 +19,6 @@ import { ChartEditorHost } from "./ChartEditorHost";
 import { useChartEditorStore } from "./chartEditorStore";
 import { useChartImportStore } from "../../chartSources/chartImportStore";
 import { LiveChartPanel } from "./LiveChartPanel";
-import { PLAY_HISTORY_LIMIT } from "@libretracks/shared/charts/chartSync";
 
 const TEXT = [
   "{title: Gracia}",
@@ -268,7 +267,7 @@ describe("LiveChartPanel", () => {
     expect(screen.queryByTitle("liveChart.upNext")).toBeNull();
   });
 
-  it("after a jump lands, the lyrics go on below it instead of scrolling back up", () => {
+  it("after a jump back lands, above the target shows only the song before it", () => {
     vi.useFakeTimers();
     try {
       const position = { current: 25 };
@@ -305,9 +304,9 @@ describe("LiveChartPanel", () => {
       act(() => {
         vi.advanceTimersByTime(150);
       });
+      // Above the verse, only what comes before it on the timeline (nothing):
+      // no log of the chorus that played.
       expect(sections()).toEqual([
-        { label: "EstrofaVerso 1", current: false },
-        { label: "EstribilloCoro 1", current: false },
         { label: "EstrofaVerso 1", current: true },
         { label: "EstribilloCoro 1", current: false },
       ]);
@@ -316,7 +315,7 @@ describe("LiveChartPanel", () => {
     }
   });
 
-  it("keeps the playing block in place when the oldest played block is trimmed off the top", () => {
+  it("keeps the jump's target in place on screen when it lands and the blocks above it go", () => {
     vi.useFakeTimers();
     const scrollTops = new WeakMap<Element, number>();
     const scrollTop = Object.getOwnPropertyDescriptor(Element.prototype, "scrollTop");
@@ -336,24 +335,37 @@ describe("LiveChartPanel", () => {
     };
     try {
       const position = { current: 1 };
-      const { getByTestId } = renderPanel(region(linked), position);
-      const tick = (seconds: number) => {
-        position.current = seconds;
-        act(() => {
-          vi.advanceTimersByTime(150);
-        });
-      };
-      // Verse and chorus back and forth until the history is full.
-      for (let step = 0; step < PLAY_HISTORY_LIMIT; step += 1) tick(step % 2 === 0 ? 25 : 1);
+      const view = (pending: string | null) => (
+        <LiveChartPanel
+          song={songView(region(linked))}
+          region={region(linked)}
+          positionSecondsRef={position}
+          pendingMarkerId={pending}
+          expanded={false}
+          onToggleExpanded={vi.fn()}
+          onClose={vi.fn()}
+          onChartChange={vi.fn(async () => {})}
+        />
+      );
+      const { getByTestId, rerender } = render(view(null));
+      // Chorus playing, a jump back to the verse previewed below it.
+      position.current = 25;
+      act(() => {
+        vi.advanceTimersByTime(150);
+      });
+      rerender(view("verse"));
       const scroller = getByTestId("live-chart-scroller");
-      scroller.scrollTop = 500;
-      const before = scroller.querySelectorAll(".lt-chart-section").length;
-      // One more part played: the oldest block leaves the top.
-      tick(25);
-      tick(1);
-      expect(scroller.querySelectorAll(".lt-chart-section").length).toBe(before);
-      // Nothing moved under the reader: the playing block was compensated.
-      expect(scroller.scrollTop).toBeLessThan(500);
+      scroller.scrollTop = 250;
+      rerender(view("verse"));
+      // The preview sits third (200 px, 50 px below the top of the view). It
+      // lands and becomes the first block (0 px): the scroll follows it, so it
+      // is still 50 px below the top and nothing jumps under the reader.
+      position.current = 1;
+      rerender(view(null));
+      act(() => {
+        vi.advanceTimersByTime(150);
+      });
+      expect(scroller.scrollTop).toBe(50);
     } finally {
       Element.prototype.getBoundingClientRect = original;
       if (scrollTop) Object.defineProperty(Element.prototype, "scrollTop", scrollTop);

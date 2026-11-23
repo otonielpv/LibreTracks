@@ -3,10 +3,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { JUMP_LANDING_GRACE_MS, usePerformanceHistory } from "./usePerformanceHistory";
 
-type Props = { marker: string | null; line: number | null; pending: string | null; region?: string; vamp?: string | null };
+type Props = { marker: string | null; line: number | null; pending: string | null; region?: string; vamp?: string | null; pass?: number };
 
 function setup(initial: Props) {
-  const hook = renderHook((props: Props) => usePerformanceHistory(props.region ?? "song", props.marker, props.line, props.pending, props.vamp ?? null), {
+  const hook = renderHook((props: Props) => usePerformanceHistory(props.region ?? "song", props.marker, props.line, props.pending, props.vamp ?? null, null, null, props.pass ?? 0), {
     initialProps: initial,
   });
   const played = () => hook.result.current.history.map((entry) => entry.markerId);
@@ -28,6 +28,16 @@ describe("usePerformanceHistory", () => {
     rerender({ marker: "chorus2", line: 0, pending: null });
     expect(played()).toEqual(["intro", "chorus2"]);
     expect(result.current.pendingMarkerId).toBeNull();
+  });
+
+  it("the second pass of a chorus sung twice in its marker is not going back", () => {
+    const { rerender, played } = setup({ marker: "chorus", line: 3, pending: null, pass: 0 });
+    rerender({ marker: "chorus", line: 0, pending: null, pass: 1 });
+    expect(played()).toEqual(["chorus"]);
+    // A seek back inside the same pass still is.
+    rerender({ marker: "chorus", line: 2, pending: null, pass: 1 });
+    rerender({ marker: "chorus", line: 0, pending: null, pass: 1 });
+    expect(played()).toEqual(["chorus", "chorus"]);
   });
 
   it("keeps previewing the target when the pending jump clears a tick before the playhead lands", () => {

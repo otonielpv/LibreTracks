@@ -221,10 +221,11 @@ describe("lyrics in playing order", () => {
   it("once the jump lands, the song goes on below it: the preview becomes the current block", () => {
     const before = buildPerformanceBlocks(doc, links, markers, play("intro", "verse", "chorus"), "verse");
     const after = buildPerformanceBlocks(doc, links, markers, play("intro", "verse", "chorus", "verse"), null);
-    expect(labels(after)).toEqual(["Intro", "Estrofa", "Coro", "Estrofa", "Coro", "Intro", "Final"]);
-    expect(after.current).toBe(3);
-    // Same keys, same order: the block on screen does not move.
-    expect(after.blocks.map((b) => b.key)).toEqual(before.blocks.map((b) => b.key));
+    // Above it, the song before the target on the timeline: no history.
+    expect(labels(after)).toEqual(["Intro", "Estrofa", "Coro", "Intro", "Final"]);
+    expect(after.current).toBe(1);
+    // The preview and the block it becomes are the same element.
+    expect(after.blocks[after.current].key).toBe(before.blocks[3].key);
   });
 
   it("while a vamp loops the part playing, it comes next again (not the next part), and becomes current in place", () => {
@@ -235,8 +236,9 @@ describe("lyrics in playing order", () => {
     expect(looping.blocks.map((b) => Boolean(b.looped))).toEqual([false, false, true, false, false, false]);
     const history = play("intro", "verse");
     const wrapped = buildPerformanceBlocks(doc, links, markers, advancePlayHistory(history, "verse", true), null, true);
-    expect(wrapped.current).toBe(2);
-    expect(wrapped.blocks[2].key).toBe(looping.blocks[2].key);
+    expect(wrapped.current).toBe(1);
+    expect(labels(wrapped)).toEqual(["Intro", "Estrofa", "Estrofa", "Coro", "Intro", "Final"]);
+    expect(wrapped.blocks[1].key).toBe(looping.blocks[2].key);
   });
 
   it("keeps only the last parts played above the current one", () => {
@@ -261,6 +263,12 @@ describe("lyrics in playing order", () => {
     expect(labels(late)).toEqual(["Intro", "Estrofa", "Coro", "Intro", "Final"]);
     expect(late.current).toBe(3);
     expect(new Set(late.blocks.map((b) => b.key)).size).toBe(late.blocks.length);
+  });
+
+  it("going back from the chorus to the intro shows only what is before the intro", () => {
+    const back = buildPerformanceBlocks(doc, links, markers, advancePlayHistory(play("intro", "verse", "chorus"), "intro", true), null);
+    expect(labels(back)).toEqual(["Intro", "Estrofa", "Coro", "Intro", "Final"]);
+    expect(back.current).toBe(0);
   });
 
   it("ignores a jump to another song", () => {
