@@ -53,7 +53,9 @@ TEST_CASE("BlockCache::read with a path-length source id does not allocate") {
     }
     const auto found = lt::rt::violations();
     CHECK(hit);
-    CHECK(left[0] == doctest::Approx(0.25f));
+    // Blocks are int16 with TPDF dither seeded from std::hash, which differs
+    // between standard libraries: ±1 LSB of 16 bits (macOS gave 8191/32768).
+    CHECK(left[0] == doctest::Approx(0.25f).epsilon(1.0 / 4096.0));
     CAPTURE(found.allocations);
     // Before the transparent lookup this was 64: one std::string copy per read.
     CHECK(found.allocations == 0);
