@@ -215,6 +215,10 @@ export type PerformanceBlock = {
   queued: boolean;
   /** The part a vamp is looping, shown again because it comes next again. */
   looped?: boolean;
+  /** A section sung several times inside its marker shows once per pass:
+   * this is pass `pass` (from 0) of `passes`. */
+  pass?: number;
+  passes?: number;
 };
 
 /** What has played, in the order it played: one entry per section marker
@@ -268,6 +272,36 @@ export function buildPerformanceBlocks(
   pendingMarkerId: string | null,
   /** A vamp loops the part playing: it comes next again, then the rest. */
   repeatCurrent = false,
+  /** Times each marker's section is sung inside it (its link's `repeat`):
+   * one block per pass, so the lyrics show what is really sung. */
+  passesFor: (markerId: string) => number = () => 1,
+  /** The pass playing in the current marker (`ChartPlayback.pass`). */
+  currentPass = 0,
+): { blocks: PerformanceBlock[]; current: number } {
+  const raw = buildMarkerBlocks(doc, links, markers, history, pendingMarkerId, repeatCurrent);
+  const blocks: PerformanceBlock[] = [];
+  let current = -1;
+  raw.blocks.forEach((entry, index) => {
+    const passes = Math.max(1, Math.floor(passesFor(entry.markerId)));
+    if (index === raw.current) current = blocks.length + Math.min(passes - 1, Math.max(0, currentPass));
+    if (passes === 1) {
+      blocks.push(entry);
+      return;
+    }
+    for (let pass = 0; pass < passes; pass += 1) {
+      blocks.push({ ...entry, key: `${entry.key}.${pass}`, pass, passes });
+    }
+  });
+  return { blocks, current };
+}
+
+function buildMarkerBlocks(
+  doc: ChartDoc,
+  links: readonly ChartLink[],
+  markers: readonly SectionMarkerSummary[],
+  history: PlayHistory,
+  pendingMarkerId: string | null,
+  repeatCurrent: boolean,
 ): { blocks: PerformanceBlock[]; current: number } {
   const block = (marker: SectionMarkerSummary, key: string, queued: boolean): PerformanceBlock => {
     const link = chartLinkFor(links, marker.id);

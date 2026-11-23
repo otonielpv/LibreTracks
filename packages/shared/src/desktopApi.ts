@@ -3656,7 +3656,8 @@ export type PcoArrangementWrite = {
   name?: string;
   chordChart: string;
   chordChartKey: string;
-  sequence: string[];
+  /** Absent: the arrangement's sequence is left as it is. */
+  sequence?: string[];
 };
 
 /** A new arrangement in the song (the default of "Save to Planning Center"). */

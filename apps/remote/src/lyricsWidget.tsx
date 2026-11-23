@@ -19,6 +19,8 @@ import { keyPrefersFlats, parseNoteRun } from "@libretracks/shared/charts/chordN
 import {
   advancePlayHistory,
   buildPerformanceBlocks,
+  chartLinkFor,
+  chartLinkPasses,
   type PlayHistory,
   NO_CHART_PLAYBACK,
   resolveChartPlayback,
@@ -236,9 +238,18 @@ export const LyricsWidget = memo(function LyricsWidget({
   const { blocks, current: currentBlock } = useMemo(
     () =>
       doc && region?.chart
-        ? buildPerformanceBlocks(doc, region.chart.links, markers, history, pendingMarkerId)
+        ? buildPerformanceBlocks(
+            doc,
+            region.chart.links,
+            markers,
+            history,
+            pendingMarkerId,
+            false,
+            (markerId) => chartLinkPasses(chartLinkFor(region.chart!.links, markerId)),
+            state.playback.pass ?? 0,
+          )
         : { blocks: [], current: -1 },
-    [doc, region?.chart, markers, history, pendingMarkerId],
+    [doc, region?.chart, markers, history, pendingMarkerId, state.playback.pass],
   );
 
   useEffect(() => {

@@ -297,7 +297,7 @@ fn write() -> libretracks_pco::ArrangementWrite {
         name: Some("LibreTracks".into()),
         chord_chart: "VERSO 1\n[D]Uno\n\nCORO\n[G]Luz\n".into(),
         chord_chart_key: "D".into(),
-        sequence: vec!["Verso 1".into(), "Coro".into(), "Coro".into()],
+        sequence: Some(vec!["Verso 1".into(), "Coro".into(), "Coro".into()]),
     }
 }
 
@@ -343,11 +343,13 @@ async fn replacing_patches_the_arrangement_without_renaming_it() {
     .await;
     let mut replace = write();
     replace.name = None;
+    replace.sequence = None;
     client.update_arrangement("9000009", "9000010", &replace).await.unwrap();
     let (method, body) = seen.lock().unwrap().clone();
     assert_eq!(method, "PATCH");
     let body: serde_json::Value = serde_json::from_str(&body).unwrap();
     assert!(body["data"]["attributes"].get("name").is_none());
+    assert!(body["data"]["attributes"].get("sequence").is_none(), "no sequence: left as it is");
 }
 
 #[tokio::test]

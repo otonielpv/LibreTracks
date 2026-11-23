@@ -33,7 +33,9 @@ import {
   applyLineRecording,
   autoLinkChart,
   buildPerformanceBlocks,
+  chartLinkFor,
   chartLinkMarkerId,
+  chartLinkPasses,
   chartMarkersForRegion,
   recordLineTap,
   type LineRecording,
@@ -326,9 +328,18 @@ export const LiveChartPanel = memo(function LiveChartPanel({
   const { blocks, current: currentBlock } = useMemo(
     () =>
       doc
-        ? buildPerformanceBlocks(doc, links, markers, performed.history, performed.pendingMarkerId, vamping)
+        ? buildPerformanceBlocks(
+            doc,
+            links,
+            markers,
+            performed.history,
+            performed.pendingMarkerId,
+            vamping,
+            (markerId) => chartLinkPasses(chartLinkFor(links, markerId)),
+            playback.pass ?? 0,
+          )
         : { blocks: [], current: -1 },
-    [doc, links, markers, performed.history, performed.pendingMarkerId, vamping],
+    [doc, links, markers, performed.history, performed.pendingMarkerId, vamping, playback.pass],
   );
 
   // A new song: whatever was being recorded belonged to the previous one.

@@ -142,14 +142,14 @@ describe("how many times a section plays inside its marker", () => {
   });
 });
 
-describe("passes from the marker's bars", () => {
-  // 120 BPM in 4/4: a bar is 2 s. A 4-line chorus between // … //.
-  const timing = { regionEndSeconds: 40, secondsPerBeatAt: () => 0.5, beatsPerBarAt: () => 4 };
+describe("passes from the marker's length", () => {
+  // A sung line lasts about 3.5 s: at 60 BPM in 4/4 (4 s a bar) one bar a line.
+  const timing = { regionEndSeconds: 100, secondsPerBeatAt: () => 1, beatsPerBarAt: () => 4 };
   const sheet = ["VERSO", "Uno", "CORO", "// Luz uno", "Luz dos", "Luz tres", "Luz cuatro //"].join("\n");
   const song = (chorusBars: number): SectionMarkerSummary[] => [
     { id: "v", name: "Verso", startSeconds: 0, kind: "verse" },
     { id: "c", name: "Coro", startSeconds: 8, kind: "chorus" },
-    { id: "end", name: "Final", startSeconds: 8 + chorusBars * 2, kind: "ending" },
+    { id: "end", name: "Final", startSeconds: 8 + chorusBars * 4, kind: "ending" },
   ];
 
   it("a 4-line chorus marked // … // plays twice in 8 bars and once in 4", () => {
@@ -157,8 +157,6 @@ describe("passes from the marker's bars", () => {
       buildImportReview(imported(sheet), song(bars), null, [], timing).rows.find((row) => row.markerId === "c")?.passes;
     expect(passesOf(8)).toBe(2);
     expect(passesOf(4)).toBe(1);
-    // Never more than the sheet says.
-    expect(passesOf(16)).toBe(2);
   });
 });
 

@@ -101,8 +101,10 @@ pub struct ArrangementWrite {
     pub name: Option<String>,
     pub chord_chart: String,
     pub chord_chart_key: String,
+    /// `None`: the arrangement's sequence is not touched (the repeats went
+    /// in the sheet as "// … //").
     #[serde(default)]
-    pub sequence: Vec<String>,
+    pub sequence: Option<Vec<String>>,
 }
 
 impl ArrangementWrite {
@@ -111,8 +113,10 @@ impl ArrangementWrite {
         let mut attributes = serde_json::json!({
             "chord_chart": self.chord_chart,
             "chord_chart_key": self.chord_chart_key,
-            "sequence": self.sequence,
         });
+        if let Some(sequence) = &self.sequence {
+            attributes["sequence"] = serde_json::json!(sequence);
+        }
         if let Some(name) = self.name.as_deref().filter(|name| !name.trim().is_empty()) {
             attributes["name"] = serde_json::Value::String(name.trim().to_string());
         }

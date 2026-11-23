@@ -103,37 +103,36 @@ function passesOf(link: ChartLink): number {
 }
 
 /**
- * The chart and the sequence to write to Planning Center. The sequence is the
- * section each marker shows, in timeline order (arrangement repeats
- * included); markers without a section (an instrumental the sheet leaves out)
- * are not in it. The times a section plays inside a marker go in the
- * sequence or, with `marks`, in the sheet: the sheet takes what all the
- * section's markers share (a Coro ×2 everywhere is "// … //") and the
- * sequence repeats the rest, so the total always adds up.
+ * The chart and, with "sequence", the sequence to write to Planning Center.
+ *
+ * "sequence": the section each marker shows, in timeline order (arrangement
+ * repeats included), once per pass; markers without a section are not in
+ * it. The sheet has no marks.
+ *
+ * "marks": the sheet says how many times each section is sung in all
+ * ("////" for a bridge sung 2 + 2 in two markers) and the sequence is not
+ * written: one or the other, never both.
  */
 export function planningCenterExport(
   text: string,
   links: readonly ChartLink[],
   markers: readonly SectionMarkerSummary[],
   style: RepeatStyle = "sequence",
-): { chordChart: string; sequence: string[] } {
+): { chordChart: string; sequence?: string[] } {
   const doc = parseChordPro(text);
   const played = markers.flatMap((marker) => {
     const link = chartLinkFor(links, marker.id);
     return link && doc.sections[link.section]?.label ? [{ section: link.section, passes: passesOf(link) }] : [];
   });
-  const marks = new Map<number, number>();
   if (style === "marks") {
-    for (const entry of played) {
-      marks.set(entry.section, Math.min(marks.get(entry.section) ?? entry.passes, entry.passes));
-    }
+    const totals = new Map<number, number>();
+    for (const entry of played) totals.set(entry.section, Math.min(16, (totals.get(entry.section) ?? 0) + entry.passes));
+    return { chordChart: toPlanningCenterChart(text, totals, true) };
   }
-  const sequence = played.flatMap((entry) => {
-    const inSheet = marks.get(entry.section) ?? 1;
-    const times = Math.max(1, Math.round(entry.passes / inSheet));
-    return Array.from({ length: times }, () => doc.sections[entry.section].label);
-  });
-  return { chordChart: toPlanningCenterChart(text, marks, style === "marks"), sequence };
+  const sequence = played.flatMap((entry) =>
+    Array.from({ length: entry.passes }, () => doc.sections[entry.section].label),
+  );
+  return { chordChart: toPlanningCenterChart(text), sequence };
 }
 
 /** The sequence alone, with the repeats in it. */
@@ -142,5 +141,5 @@ export function planningCenterSequence(
   links: readonly ChartLink[],
   markers: readonly SectionMarkerSummary[],
 ): string[] {
-  return planningCenterExport(text, links, markers, "sequence").sequence;
+  return planningCenterExport(text, links, markers, "sequence").sequence ?? [];
 }

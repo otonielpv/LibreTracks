@@ -132,12 +132,12 @@ describe("saving to Planning Center", () => {
     await act(async () => {
       fireEvent.click(screen.getByRole("radio", { name: "chartSources.save.repeatsInSheet" }));
     });
-    expect(screen.getByTestId("pco-save-sequence").textContent).toBe("Verso 1 · Coro");
+    expect(screen.getByTestId("pco-save-sequence").textContent).toBe("chartSources.save.sequenceUntouched");
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: "chartSources.save.save" }));
     });
     const write = api.createPcoArrangement.mock.calls[0][1];
-    expect(write.sequence).toEqual(["Verso 1", "Coro"]);
+    expect(write.sequence).toBeUndefined();
     expect(write.chordChart).toContain("// [G]Luz //");
   });
 });

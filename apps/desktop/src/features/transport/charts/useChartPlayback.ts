@@ -17,6 +17,7 @@ function samePlayback(left: ChartPlayback, right: ChartPlayback): boolean {
     left.markerId === right.markerId &&
     left.section === right.section &&
     left.line === right.line &&
+    left.pass === right.pass &&
     left.nextSection === right.nextSection
   );
 }

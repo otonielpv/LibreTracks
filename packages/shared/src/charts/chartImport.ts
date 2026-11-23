@@ -217,9 +217,21 @@ function mergeChords(
     }
     previousEnd = fragment.x + fragment.width;
   }
+  // A chord line much longer than its lyric (Planning Center's editor lays
+  // chords out in a proportional font, so in columns they land far past the
+  // words): spread the chords over the lyric the way Planning Center draws
+  // them. A last chord just after the words is left where it is.
+  // Planning Center's closing repeat marks ("… fiel ////") are not words: no
+  // chord goes inside them, and they do not count as the line's length.
+  const marks = /\s*\/{2,}\s*$/.exec(text);
+  const wordsLength = marks ? marks.index : text.length;
+  const lyricEnd = marks && wordsLength > 0 ? xs[wordsLength - 1] + 1 : (previousEnd ?? 0);
+  const furthest = Math.max(...chords.map((chord) => chord.x));
+  const scale = lyricEnd > 0 && furthest > lyricEnd * 1.3 ? lyricEnd / (furthest + 1) : 1;
+  const placed = scale === 1 ? chords : chords.map((chord) => ({ ...chord, x: chord.x * scale }));
   // Leading spaces only existed to align the first chord; they are kept while
   // placing chords and trimmed afterwards.
-  const positions = chords.map((chord) => {
+  const positions = placed.map((chord) => {
     // The character nearest the chord's left edge. Not "the first one at or
     // after it": positions come from font metrics, and a chord drawn exactly
     // over a character is often a hundredth of a point to its right.
@@ -234,6 +246,7 @@ function mergeChords(
     });
     const lineEnd = previousEnd ?? 0;
     if (chord.x > lineEnd) index = text.length;
+    if (index > wordsLength) index = wordsLength;
     // Over the gap between words: it belongs to the word that follows.
     while (index < text.length && text[index] === " ") index += 1;
     // Snap to the start of the word the chord sits over, if it is in its

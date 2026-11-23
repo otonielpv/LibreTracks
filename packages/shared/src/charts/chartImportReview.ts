@@ -93,6 +93,7 @@ export function estimatePasses(
   if (!timing) return passes;
   const beats = new Map<string, number>();
   const bars = new Map<string, number>();
+  const barSeconds = new Map<string, number>();
   markers.forEach((marker, index) => {
     if (marker.id.includes("~")) return;
     const end = markers[index + 1]?.startSeconds ?? timing.regionEndSeconds;
@@ -101,7 +102,10 @@ export function estimatePasses(
     const length = perBeat > 0 ? seconds / perBeat : seconds;
     beats.set(marker.id, length);
     const perBar = timing.secondsPerBeatAt ? timing.beatsPerBarAt?.(marker.startSeconds) : undefined;
-    if (perBar && perBar > 0) bars.set(marker.id, length / perBar);
+    if (perBar && perBar > 0) {
+      bars.set(marker.id, length / perBar);
+      barSeconds.set(marker.id, perBeat * perBar);
+    }
   });
   const bySection = new Map<number, Array<{ markerId: string; length: number }>>();
   for (const link of links) {
@@ -112,11 +116,19 @@ export function estimatePasses(
   for (const [section, entries] of bySection) {
     const sheet = repeats?.[section] ?? 1;
     const lines = lyricLines[section] ?? 0;
-    const measured = sheet > 1 && lines > 0 && entries.every((entry) => bars.has(entry.markerId));
+    // A part without words (an intro of chords) is read once: its repeat
+    // marks say how many times the chords go round, not what to show.
+    if (lines === 0) continue;
+    const measured = sheet > 1 && entries.every((entry) => bars.has(entry.markerId));
     if (measured) {
-      // One bar per line of words: the marker's bars say how many passes fit.
+      // A sung line lasts about 3.5 s, rounded to whole bars: one bar at a
+      // slow tempo (Digno, 67 BPM), two at a fast one (138 BPM). One pass is
+      // that times the section's lines; the marker's bars say how many fit.
+      // Not capped by the sheet's count: "////" on a bridge played in three
+      // long markers is 2 + 2 + 2.
       for (const entry of entries) {
-        const times = Math.min(sheet, Math.max(1, Math.round(bars.get(entry.markerId)! / lines)));
+        const lineBars = Math.max(1, Math.round(SECONDS_PER_LINE / barSeconds.get(entry.markerId)!));
+        const times = Math.min(8, Math.max(1, Math.round(bars.get(entry.markerId)! / (lines * lineBars))));
         if (times >= 2) passes[entry.markerId] = times;
       }
       continue;
@@ -132,6 +144,9 @@ export function estimatePasses(
   }
   return passes;
 }
+
+/** How long a sung line lasts, about: the unit of a pass. */
+const SECONDS_PER_LINE = 3.5;
 
 /** Lines with words of each section (chord-only lines do not count). */
 function lyricLineCounts(doc: ChartDoc): number[] {

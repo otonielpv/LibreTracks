@@ -53,12 +53,12 @@ describe("repeats: in the sequence or with slashes in the sheet", () => {
     expect(result.chordChart).not.toContain("//");
   });
 
-  it("with slashes: the sheet takes what all markers share, the sequence the rest", () => {
+  it("with slashes: the sheet says the total times and the sequence is not written", () => {
     const result = planningCenterExport(text, links, markers, "marks");
-    // Coro plays 2, 2 and 4: "// … //" in the sheet, the last marker twice.
-    expect(result.sequence).toEqual(["Intro", "Verso 1", "Coro", "Coro", "Coro", "Coro"]);
+    expect(result.sequence).toBeUndefined();
+    // Coro plays 2 + 2 + 4 = 8 times; the intro 2.
     expect(result.chordChart).toBe(
-      ["INTRO //", "[D] [A]", "", "VERSO 1", "[D]Uno", "dos", "", "CORO", "// [G]Luz", "sol //", ""].join("\n"),
+      ["INTRO //", "[D] [A]", "", "VERSO 1", "[D]Uno", "dos", "", "CORO", "//////// [G]Luz", "sol ////////", ""].join("\n"),
     );
   });
 });

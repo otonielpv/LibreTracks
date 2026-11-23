@@ -58,7 +58,7 @@ export function SaveToPlanningCenterDialog({ region, markers, text, links, sourc
     () => planningCenterExport(text, links, markers, repeatStyle),
     [text, links, markers, repeatStyle],
   );
-  const sequence = exported.sequence;
+  const sequence = exported.sequence ?? null;
   const changedThere = Boolean(current?.updatedAt && source.updatedAt && current.updatedAt !== source.updatedAt);
   const changes = useMemo(() => {
     if (!current) return [];
@@ -75,7 +75,11 @@ export function SaveToPlanningCenterDialog({ region, markers, text, links, sourc
     setBusy(true);
     setError(null);
     try {
-      const write = { chordChart: exported.chordChart, chordChartKey: key.trim(), sequence };
+      const write = {
+        chordChart: exported.chordChart,
+        chordChartKey: key.trim(),
+        ...(exported.sequence ? { sequence: exported.sequence } : {}),
+      };
       const result = await chartSourceHandlers.saveToPlanningCenter(
         kind === "new"
           ? { kind: "new", songId: source.songId, name: name.trim() }
@@ -196,7 +200,11 @@ export function SaveToPlanningCenterDialog({ region, markers, text, links, sourc
           ) : null}
           <section className="lt-chart-import-changes" aria-label={t("chartSources.save.sequence")}>
             <h3>{t("chartSources.save.sequence")}</h3>
-            {sequence.length === 0 ? (
+            {sequence === null ? (
+              <p className="lt-chart-import-legend" data-testid="pco-save-sequence">
+                {t("chartSources.save.sequenceUntouched")}
+              </p>
+            ) : sequence.length === 0 ? (
               <p className="lt-chart-import-legend">{t("chartSources.save.noSequence")}</p>
             ) : (
               <p data-testid="pco-save-sequence">{sequence.join(" · ")}</p>
