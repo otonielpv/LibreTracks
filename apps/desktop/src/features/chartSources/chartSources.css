@@ -226,3 +226,18 @@
   color: rgb(229 226 225 / 0.6);
   font: 500 0.76rem/1.4 "Space Grotesk", sans-serif;
 }
+
+.lt-chart-import-passes {
+  margin-right: 0.5rem;
+  min-height: 30px;
+  border-radius: 2px;
+  border: 1px solid rgb(87 241 219 / 0.18);
+  background: rgb(28 31 32 / 0.98);
+  color: #57f1db;
+  font: 700 0.75rem/1 "Space Grotesk", sans-serif;
+}
+
+/* Opened from the chart editor (z-index 90): on top of it. */
+.lt-modal-backdrop.lt-chart-import-backdrop {
+  z-index: 95;
+}

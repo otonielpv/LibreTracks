@@ -323,3 +323,23 @@ describe("remapChartLinks", () => {
     ]);
   });
 });
+
+describe("a section sung twice inside one marker", () => {
+  const sheet = parseChordPro("{section: Coro}\nuno\ndos");
+  const song = [marker("c", 0, "chorus")];
+  // 8 s marker, two passes: a line every 2 s, starting again at 4 s.
+  const at = (seconds: number, repeat?: number) =>
+    resolveChartPlayback(sheet, [{ markerId: "c", section: 0, ...(repeat ? { repeat } : {}) }], song, 8, seconds, () => 0.5);
+
+  it("runs the lines once per pass", () => {
+    expect(at(1, 2)).toMatchObject({ line: 0, pass: 0, passes: 2 });
+    expect(at(2.5, 2)).toMatchObject({ line: 1, pass: 0 });
+    expect(at(4.5, 2)).toMatchObject({ line: 0, pass: 1 });
+    expect(at(7, 2)).toMatchObject({ line: 1, pass: 1 });
+  });
+
+  it("is the usual spread without it", () => {
+    expect(at(4.5)).toMatchObject({ line: 1 });
+    expect(at(4.5).passes).toBeUndefined();
+  });
+});

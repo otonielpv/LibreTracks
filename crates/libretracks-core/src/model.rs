@@ -502,6 +502,11 @@ pub struct ChartLink {
     /// pulsos y no en segundos para que un cambio de tempo no las descuadre.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub line_beats: Vec<f64>,
+    /// Veces que la sección suena seguida dentro de esta marca (un Coro largo
+    /// que se canta dos veces). Ausente = una. Las líneas se reparten en esas
+    /// pasadas cuando no hay tiempos grabados.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub repeat: Option<u32>,
 }
 
 impl SongChart {
@@ -533,6 +538,7 @@ impl SongChart {
                 .collect();
             beats.sort_by(|left, right| left.total_cmp(right));
             link.line_beats = beats;
+            link.repeat = link.repeat.filter(|times| (2..=16).contains(times));
             normalized.retain(|existing| existing.marker_id != link.marker_id);
             normalized.push(link);
         }

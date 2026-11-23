@@ -5,6 +5,7 @@ fn link(marker_id: &str, section: u32, line_beats: Vec<f64>) -> ChartLink {
         marker_id: marker_id.into(),
         section,
         line_beats,
+        repeat: None,
     }
 }
 
@@ -63,5 +64,20 @@ fn a_chart_survives_a_save_and_load_and_omits_empty_beats() {
     assert!(json.contains("\"markerId\"") && json.contains("\"lineBeats\""));
     assert_eq!(json.matches("lineBeats").count(), 1, "{json}");
     let back: SongChart = serde_json::from_str(&json).expect("parses");
+    assert_eq!(back, chart);
+}
+
+#[test]
+fn a_link_keeps_how_many_times_its_section_plays_and_drops_nonsense() {
+    let mut chart = chart(vec![link("verse", 0, vec![]), link("chorus", 1, vec![])]);
+    chart.links[0].repeat = Some(2);
+    chart.links[1].repeat = Some(1);
+    chart.normalize(|_| true);
+    assert_eq!(chart.links[0].repeat, Some(2));
+    assert_eq!(chart.links[1].repeat, None, "once is the default, not stored");
+    let json = serde_json::to_value(&chart).unwrap();
+    assert_eq!(json["links"][0]["repeat"], 2);
+    assert!(json["links"][1].get("repeat").is_none());
+    let back: SongChart = serde_json::from_value(json).unwrap();
     assert_eq!(back, chart);
 }

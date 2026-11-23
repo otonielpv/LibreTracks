@@ -5,6 +5,7 @@ import {
   finalizeImport,
   isClearReview,
   type ImportReview,
+  type ReviewTiming,
 } from "@libretracks/shared/charts/chartImportReview";
 import type { SectionMarkerSummary, SongChart, SongRegionSummary } from "@libretracks/shared/models";
 
@@ -122,12 +123,13 @@ export function createChartSourceHandlers({ api, store }: ChartSourceHandlerDeps
     markers: readonly SectionMarkerSummary[],
     songKey: string | null,
     songTitle: string,
+    timing: ReviewTiming | null = null,
   ): Promise<RefreshResult> {
     const source = chart.source;
     if (!source || source.provider !== "planningCenter") throw new Error("chart-not-imported");
     const arrangement = await api.getPcoArrangement(source.songId, source.arrangementId);
     const imported = planningCenterToImported({ ...arrangement, songTitle });
-    return buildRefreshReview(chart, imported, markers, songKey);
+    return buildRefreshReview(chart, imported, markers, songKey, timing);
   }
 
   const loadServiceTypes = () => api.getPcoServiceTypes();
@@ -159,7 +161,9 @@ export function createChartSourceHandlers({ api, store }: ChartSourceHandlerDeps
         if (!song || !pair.item.songId || !pair.item.arrangementId) throw new Error("plan-item-incomplete");
         const arrangement = await api.getPcoArrangement(pair.item.songId, pair.item.arrangementId);
         const imported = planningCenterToImported({ ...arrangement, songTitle: pair.item.title ?? null }, pair.item);
-        const review = buildImportReview(imported, song.markers, song.region.key);
+        const review = buildImportReview(imported, song.markers, song.region.key, [], {
+          regionEndSeconds: song.region.endSeconds,
+        });
         entries.push({ ...pair, review, clear: isClearReview(review), error: null });
       } catch (error) {
         entries.push({ ...pair, review: null, clear: false, error });

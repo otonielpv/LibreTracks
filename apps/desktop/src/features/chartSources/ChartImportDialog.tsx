@@ -37,6 +37,10 @@ export function ChartImportDialog({ session, onClose }: Props) {
   const status = useChartSourceStore((state) => state.status);
   const connecting = useChartSourceStore((state) => state.connecting);
   const { region, markers, chart } = session;
+  const timing = useMemo(
+    () => ({ regionEndSeconds: region.endSeconds, secondsPerBeatAt: session.secondsPerBeatAt }),
+    [region.endSeconds, session.secondsPerBeatAt],
+  );
 
   const [query, setQuery] = useState(region.name);
   const [songs, setSongs] = useState<PcoSong[] | null>(null);
@@ -58,7 +62,7 @@ export function ChartImportDialog({ session, onClose }: Props) {
   useEffect(() => {
     if (!refreshing || !connectedNow || !chart || refresh) return;
     void run(async () => {
-      const result = await chartSourceHandlers.refreshFromSource(chart, markers, region.key, region.name);
+      const result = await chartSourceHandlers.refreshFromSource(chart, markers, region.key, region.name, timing);
       setRefresh(result);
       if (!result.upToDate) setReview(result.review);
     });
@@ -105,8 +109,13 @@ export function ChartImportDialog({ session, onClose }: Props) {
         songTitle: song?.title ?? null,
         songAuthor: song?.author ?? null,
       });
-      setReview(buildImportReview(imported, markers, region.key));
+      setReview(buildImportReview(imported, markers, region.key, [], timing));
     });
+
+  const setPasses = (markerId: string, passes: number) => {
+    if (!review) return;
+    setReview(relinkImportReview(review, markers, review.locked, { ...review.passOverrides, [markerId]: passes }));
+  };
 
   const setSection = (markerId: string, value: string) => {
     if (!review) return;
@@ -130,7 +139,7 @@ export function ChartImportDialog({ session, onClose }: Props) {
   const connected = status?.state === "connected";
 
   return (
-    <div className="lt-modal-backdrop" onClick={busy ? undefined : onClose}>
+    <div className="lt-modal-backdrop lt-chart-import-backdrop" onClick={busy ? undefined : onClose}>
       <section
         className="lt-settings-modal lt-chart-import"
         role="dialog"
@@ -184,13 +193,13 @@ export function ChartImportDialog({ session, onClose }: Props) {
                     </ul>
                   )}
                 </section>
-                <ReviewView review={review} transpose={transpose} onTranspose={setTranspose} onSection={setSection} />
+                <ReviewView review={review} transpose={transpose} onTranspose={setTranspose} onSection={setSection} onPasses={setPasses} />
               </>
             ) : (
               <p>{t("chartSources.import.loading")}</p>
             )
           ) : review ? (
-            <ReviewView review={review} transpose={transpose} onTranspose={setTranspose} onSection={setSection} />
+            <ReviewView review={review} transpose={transpose} onTranspose={setTranspose} onSection={setSection} onPasses={setPasses} />
           ) : (
             <>
               <form className="lt-chart-import-search" onSubmit={search}>
@@ -287,11 +296,13 @@ export function ReviewView({
   transpose,
   onTranspose,
   onSection,
+  onPasses,
 }: {
   review: ImportReview;
   transpose: boolean;
   onTranspose: (value: boolean) => void;
   onSection: (markerId: string, value: string) => void;
+  onPasses?: (markerId: string, passes: number) => void;
 }) {
   const { t } = useTranslation();
   const sectionName = (index: number) => review.doc.sections[index]?.label || `#${index + 1}`;
@@ -347,7 +358,26 @@ export function ReviewView({
                 ) : (
                   <span className="lt-chart-import-badge is-high" title={t(`chartSources.import.reason.${row.reason}`)} />
                 )}
-                <span className="lt-chart-import-line">{row.firstLine ?? ""}</span>
+                <span className="lt-chart-import-line">
+                  {row.section !== null && !row.repeatOf && onPasses ? (
+                    <select
+                      className="lt-chart-import-passes"
+                      value={row.passes}
+                      aria-label={`${t("chartSources.import.passes")}: ${row.name}`}
+                      title={t("chartSources.import.passesHelp")}
+                      onChange={(event) => onPasses(row.markerId, Number(event.target.value))}
+                    >
+                      {[1, 2, 3, 4].map((count) => (
+                        <option key={count} value={count}>
+                          ×{count}
+                        </option>
+                      ))}
+                    </select>
+                  ) : row.passes > 1 ? (
+                    <span className="lt-chart-import-meta">×{row.passes} </span>
+                  ) : null}
+                  {row.firstLine ?? ""}
+                </span>
               </li>
             ))}
           </ul>

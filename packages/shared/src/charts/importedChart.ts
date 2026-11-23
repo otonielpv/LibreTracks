@@ -116,15 +116,16 @@ const CLOSE_MARK = /\s*(\/{2,})\s*$/;
 
 /**
  * Planning Center's repeat marks: "// line … line //" is played twice, "///"
- * three times. A whole section between marks → "(x2)" in its label, which the
- * matcher reads (two markers in a row stay on it); a block inside a section
- * → "(x2)" at the end of its last line. The slashes go: they are not words.
+ * three times. The slashes go (they are not words) and nothing is written in
+ * their place: whether a part is sung twice depends on the song's markers
+ * (one long Coro marker, or two), not on the sheet. A whole section between
+ * marks, or a header ending in them ("INTRO //"), reports how many times, so
+ * the matcher may let two markers in a row stay on it.
  */
-function foldRepeatMarks(section: ChartSection): ChartSection {
+function foldRepeatMarks(section: ChartSection): { section: ChartSection; repeat: number } {
   const bare = section.label.replace(/\s*(\/{2,})\s*$/, "");
   const headerMarks = /(\/{2,})\s*$/.exec(section.label)?.[1].length ?? 0;
-  let label = parseSectionHeader(bare)?.label ?? bare;
-  if (headerMarks) label = `${label} (x${headerMarks})`;
+  const label = parseSectionHeader(bare)?.label ?? bare;
   const lines = section.lines.map((line) =>
     line.kind === "lyrics" ? { ...line, segments: line.segments.map((segment) => ({ ...segment })) } : line,
   );
@@ -145,7 +146,7 @@ function foldRepeatMarks(section: ChartSection): ChartSection {
     const last = [...line.segments].reverse().find((segment) => segment.text.trim());
     const closing = last ? CLOSE_MARK.exec(last.text) : null;
     if (last && closing) {
-      last.text = last.text.slice(0, closing.index) + (last.text.endsWith(" ") ? " " : "");
+      last.text = last.text.slice(0, closing.index);
       blocks.push({ from: open?.line ?? index, to: index, count: open?.count ?? closing[1].length });
       open = null;
     }
@@ -153,23 +154,23 @@ function foldRepeatMarks(section: ChartSection): ChartSection {
   if (open) blocks.push({ from: open.line, to: open.line, count: open.count });
   const whole =
     blocks.length === 1 && blocks[0].from === lyricIndexes[0] && blocks[0].to === lyricIndexes[lyricIndexes.length - 1];
-  if (whole) {
-    if (sectionRepeat(label) === 1) label = `${label} (x${blocks[0].count})`.trim();
-  } else {
-    for (const block of blocks) {
-      const line = lines[block.to];
-      if (line.kind !== "lyrics") continue;
-      const last = [...line.segments].reverse().find((segment) => segment.text.trim()) ?? line.segments.at(-1);
-      if (last) last.text = `${last.text.replace(/\s+$/, "")} (x${block.count})`;
-    }
-  }
-  return { ...section, label, lines };
+  const repeat = Math.max(headerMarks, whole ? blocks[0].count : 1, sectionRepeat(label));
+  return { section: { ...section, label, lines }, repeat };
 }
 
-export function normalizeImportedChart(chart: ImportedChart): { text: string; sequence?: string[] } {
+export function normalizeImportedChart(chart: ImportedChart): {
+  text: string;
+  sequence?: string[];
+  /** Times each section of `text` is played in a row, when the sheet says
+   * (Planning Center's "// … //"). Import-time only: not stored. */
+  repeats?: number[];
+} {
   const doc = parseChordPro(splitHeaderWithChords(stripLayoutMarks(chart.text)));
-  doc.sections = doc.sections.map(foldRepeatMarks);
+  const folded = doc.sections.map(foldRepeatMarks);
+  const repeatOf = new Map(folded.map(({ section, repeat }) => [section, repeat] as const));
+  doc.sections = folded.map(({ section }) => section);
   const kept: ChartSection[] = [];
+  const keptRepeats: number[] = [];
   const implicit: string[] = [];
   let referenced = false;
 
@@ -204,6 +205,7 @@ export function normalizeImportedChart(chart: ImportedChart): { text: string; se
         // `{soc}` followed by its own "CHORUS" header.
       } else if (!refer(cleaned.label, repeatCount(cleaned.label))) {
         kept.push(cleaned);
+        keptRepeats.push(repeatOf.get(section) ?? 1);
         implicit.push(cleaned.label);
       }
     } else {
@@ -215,6 +217,7 @@ export function normalizeImportedChart(chart: ImportedChart): { text: string; se
         referenced = true;
       } else if (cleaned.label || cleaned.lines.length > 0) {
         kept.push(cleaned);
+        keptRepeats.push(repeatOf.get(section) ?? 1);
         implicit.push(cleaned.label);
       }
     }
@@ -223,7 +226,8 @@ export function normalizeImportedChart(chart: ImportedChart): { text: string; se
 
   const text = serializeChordPro({ ...doc, sections: kept });
   const sequence = chart.sequence?.length ? chart.sequence : referenced ? implicit : undefined;
-  return sequence ? { text, sequence } : { text };
+  const repeats = keptRepeats.some((count) => count > 1) ? keptRepeats : undefined;
+  return { text, ...(sequence ? { sequence } : {}), ...(repeats ? { repeats } : {}) };
 }
 
 /** One item of a Planning Center sequence (`sequence_full`): the number comes

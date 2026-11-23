@@ -153,7 +153,7 @@ export function PlanImportDialog({ song, save, onClose }: Props) {
   const reviewedTotal = entries.filter((entry) => entry.review).length;
 
   return (
-    <div className="lt-modal-backdrop" onClick={busy ? undefined : onClose}>
+    <div className="lt-modal-backdrop lt-chart-import-backdrop" onClick={busy ? undefined : onClose}>
       <section
         className="lt-settings-modal lt-chart-import"
         role="dialog"
@@ -266,7 +266,21 @@ export function PlanImportDialog({ song, save, onClose }: Props) {
                   song: regionName(current.regionId),
                 })}
               </p>
-              <ReviewView review={current.review} transpose={transpose} onTranspose={setTranspose} onSection={setSection} />
+              <ReviewView
+                review={current.review}
+                transpose={transpose}
+                onTranspose={setTranspose}
+                onSection={setSection}
+                onPasses={(markerId, passes) => {
+                  if (!current?.review) return;
+                  const markers = songFor(current.regionId)?.markers ?? [];
+                  const review = relinkImportReview(current.review, markers, current.review.locked, {
+                    ...current.review.passOverrides,
+                    [markerId]: passes,
+                  });
+                  setQueue([{ ...current, review }, ...queue.slice(1)]);
+                }}
+              />
             </>
           ) : null}
 

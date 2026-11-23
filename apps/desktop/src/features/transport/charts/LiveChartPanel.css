@@ -523,7 +523,7 @@
    lyrics (no times badge) got a wider, shifted select than the rest. */
 .lt-chart-editor-links li {
   display: grid;
-  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.3fr) 8.5rem;
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.3fr) 11rem;
   align-items: center;
   gap: 0.45rem;
 }
@@ -820,4 +820,21 @@
     flex-wrap: wrap;
     justify-content: flex-end;
   }
+}
+
+/* Passes of a section inside its marker, next to its line times. */
+.lt-chart-editor-extra {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+.lt-chart-editor-passes {
+  border-radius: 2px;
+  border: 1px solid rgb(87 241 219 / 0.18);
+  background: rgb(28 31 32 / 0.98);
+  color: #57f1db;
+  padding: 0.3rem 0.35rem;
+  font: 700 0.72rem/1 "Space Grotesk", sans-serif;
 }

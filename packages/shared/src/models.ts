@@ -433,6 +433,9 @@ export type ChartLink = {
   /** When each line starts, in beats from the marker. Absent or empty = the
    * lines are spread evenly until the next marker. */
   lineBeats?: number[];
+  /** Times the section plays in a row inside this marker (a long chorus sung
+   * twice). Absent = once. Mirrors Rust `ChartLink.repeat`. */
+  repeat?: number;
 };
 
 /** A song's lyrics and chords (ChordPro text) and how they follow its markers.

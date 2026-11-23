@@ -1,6 +1,6 @@
 import type { SectionMarkerSummary, SongChart } from "../models";
 
-import { buildImportReview, type ImportReview } from "./chartImportReview";
+import { buildImportReview, type ImportReview, type ReviewTiming } from "./chartImportReview";
 import { parseChordPro, type ChartDoc, type ChartSection } from "./chordChart";
 import { chartTextHash, normalizeImportedChart, type ImportedChart } from "./importedChart";
 
@@ -66,6 +66,7 @@ export function buildRefreshReview(
   imported: ImportedChart,
   markers: readonly SectionMarkerSummary[],
   songKey: string | null,
+  timing: ReviewTiming | null = null,
 ): RefreshResult {
   const savedDate = current.source?.updatedAt;
   const sourceDate = imported.source?.updatedAt;
@@ -95,7 +96,22 @@ export function buildRefreshReview(
   }
   return {
     upToDate: false,
-    review: { ...buildImportReview(imported, markers, songKey, locked), keepLineBeats },
+    // The passes already set on markers that keep their section stay.
+    review: {
+      ...buildImportReview(
+        imported,
+        markers,
+        songKey,
+        locked,
+        timing,
+        Object.fromEntries(
+          current.links.flatMap((link) =>
+            link.repeat && locked.some((entry) => entry.markerId === link.markerId) ? [[link.markerId, link.repeat]] : [],
+          ),
+        ),
+      ),
+      keepLineBeats,
+    },
     changes: compareCharts(before, after),
     editedLocally: Boolean(current.source) && current.source!.importedHash !== chartTextHash(current.text),
   };

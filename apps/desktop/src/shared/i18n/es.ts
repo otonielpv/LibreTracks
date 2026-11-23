@@ -3467,6 +3467,8 @@ const es = {
     sectionFor: "Sección para {{marker}}",
     noLyrics: "— Sin letra —",
     untitledSection: "Sección {{number}}",
+    passesFor: "Veces que suena la sección en {{marker}}",
+    passesHelp: "Cuántas veces se canta la sección dentro de esta marca: las líneas se reparten en esas pasadas.",
     autoTimes: "Reparto automático",
     recordedTimes: "Tiempos personalizados",
     resetTimes: "Volver al reparto automático",

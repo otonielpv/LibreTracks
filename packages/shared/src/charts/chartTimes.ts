@@ -1,6 +1,6 @@
 import type { ChartLink, SectionMarkerSummary } from "../models";
 import { parseChordProWithPlaces, type ChartDoc } from "./chordChart";
-import { formatLineTime, lineStartSeconds, parseLineTime } from "./chartSync";
+import { chartLinkPasses, formatLineTime, lineStartSeconds, parseLineTime } from "./chartSync";
 
 /**
  * Line change times written into the lyrics text, for the editor:
@@ -105,7 +105,12 @@ export function chartLineTimeFor(
     const first = bySection.get(section)?.[0];
     const lines = doc.sections[section]?.lines.length ?? 0;
     if (!first || line >= lines) return null;
-    const starts = lineStartSeconds(lines, first.sectionSeconds, first.secondsPerBeat, first.link.lineBeats);
+    const starts = lineStartSeconds(
+      lines,
+      first.sectionSeconds / chartLinkPasses(first.link),
+      first.secondsPerBeat,
+      first.link.lineBeats,
+    );
     return first.offset + starts[line];
   };
 }

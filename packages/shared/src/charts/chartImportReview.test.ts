@@ -97,3 +97,47 @@ describe("the interval between two keys", () => {
     expect(keySemitonesBetween("Tono E", "E")).toBeNull();
   });
 });
+
+describe("how many times a section plays inside its marker", () => {
+  // Song markers in seconds at a steady tempo, like Digno: a chorus marker
+  // twice as long as one pass, and a 4x chorus split into two markers.
+  const song: SectionMarkerSummary[] = [
+    { id: "v1", name: "Verso", startSeconds: 0, kind: "verse" },
+    { id: "c1", name: "Coro", startSeconds: 14, kind: "chorus" },
+    { id: "v2", name: "Verso", startSeconds: 42, kind: "verse" },
+    { id: "c2", name: "Coro", startSeconds: 56, kind: "chorus" },
+    { id: "c3", name: "Coro", startSeconds: 84, kind: "chorus" },
+  ];
+  const timing = { regionEndSeconds: 112 };
+
+  it("splits the sheet's count over the markers by their length", () => {
+    const sheet = ["VERSO 1", "Uno", "CORO 1", "// Luz", "luz //", "VERSO 2", "Dos", "CORO 2", "//// Sol", "sol ////"].join("\n");
+    const review = buildImportReview(imported(sheet), song, null, [], timing);
+    expect(review.rows.map((row) => [row.markerId, row.section, row.passes])).toEqual([
+      ["v1", 0, 1],
+      ["c1", 1, 2],
+      ["v2", 2, 1],
+      ["c2", 3, 2],
+      ["c3", 3, 2],
+    ]);
+    const links = finalizeImport(review, { transpose: false, linked: true }).links;
+    expect(links.find((link) => link.markerId === "c2")?.repeat).toBe(2);
+    expect(links.find((link) => link.markerId === "v1")?.repeat).toBeUndefined();
+  });
+
+  it("without marks, a marker twice as long as the shortest of its section is two passes", () => {
+    const review = buildImportReview(imported(["VERSO", "Uno", "CORO", "Luz"].join("\n")), song, null, [], timing);
+    // c1 is 28 s, c2 and c3 28 s too: all one pass (no shorter chorus).
+    expect(review.rows.filter((row) => row.markerId.startsWith("c")).map((row) => row.passes)).toEqual([1, 1, 1]);
+    const short = song.map((marker) => (marker.id === "c3" ? { ...marker, startSeconds: 98 } : marker));
+    const uneven = buildImportReview(imported(["VERSO", "Uno", "CORO", "Luz"].join("\n")), short, null, [], timing);
+    expect(uneven.rows.find((row) => row.markerId === "c3")?.passes).toBe(1);
+    expect(uneven.rows.find((row) => row.markerId === "c1")?.passes).toBe(2);
+  });
+
+  it("keeps the passes the user set", () => {
+    const review = buildImportReview(imported(["VERSO", "Uno", "CORO", "Luz"].join("\n")), song, null, [], timing);
+    const fixed = relinkImportReview(review, song, review.locked, { c2: 3 });
+    expect(fixed.rows.find((row) => row.markerId === "c2")?.passes).toBe(3);
+  });
+});

@@ -85,7 +85,19 @@ export type ChartPlayback = {
   /** Seconds the active marker started at, and until the next one. */
   markerStartSeconds: number | null;
   sectionSeconds: number;
+  /** The section plays `passes` times in a row inside the marker (its link's
+   * `repeat`); `pass` is the one playing, from 0. Absent = once. */
+  pass?: number;
+  passes?: number;
 };
+
+/** How many times a link's section plays inside its marker (1 if unset).
+ * Recorded line times win: they were tapped along one real pass. */
+export function chartLinkPasses(link: ChartLink | null | undefined): number {
+  if (!link?.repeat || link.repeat < 2) return 1;
+  if ((link.lineBeats?.length ?? 0) > 1) return 1;
+  return Math.min(16, Math.floor(link.repeat));
+}
 
 export const NO_CHART_PLAYBACK: ChartPlayback = {
   markerId: null,
@@ -131,13 +143,18 @@ export function resolveChartPlayback(
   }
 
   const lineCount = doc.sections[link.section].lines.length;
+  // A section sung twice inside one long marker: the lines run once per pass.
+  const passes = chartLinkPasses(link);
+  const passSeconds = sectionSeconds / passes;
   const starts = lineStartSeconds(
     lineCount,
-    sectionSeconds,
+    passSeconds,
     secondsPerBeatAt(marker.startSeconds),
     link.lineBeats,
   );
-  const elapsed = positionSeconds - marker.startSeconds;
+  const elapsedInMarker = positionSeconds - marker.startSeconds;
+  const pass = passes > 1 ? Math.min(passes - 1, Math.max(0, Math.floor((elapsedInMarker + 0.001) / passSeconds))) : 0;
+  const elapsed = elapsedInMarker - pass * passSeconds;
   let line: number | null = null;
   for (let index = 0; index < starts.length; index += 1) {
     if (starts[index] <= elapsed + 0.001) line = index;
@@ -149,6 +166,7 @@ export function resolveChartPlayback(
     nextSection,
     markerStartSeconds: marker.startSeconds,
     sectionSeconds,
+    ...(passes > 1 ? { pass, passes } : {}),
   };
 }
 

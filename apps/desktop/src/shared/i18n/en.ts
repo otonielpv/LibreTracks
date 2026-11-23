@@ -3435,6 +3435,8 @@ const en = {
     sectionFor: "Section for {{marker}}",
     noLyrics: "— No lyrics —",
     untitledSection: "Section {{number}}",
+    passesFor: "Times the section plays in {{marker}}",
+    passesHelp: "How many times the section is sung inside this marker: the lines are spread over those passes.",
     autoTimes: "Spread evenly",
     recordedTimes: "Custom times",
     resetTimes: "Back to spreading evenly",

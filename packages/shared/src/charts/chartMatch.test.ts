@@ -154,6 +154,13 @@ describe("matching a sheet to the song's markers", () => {
   it("two markers in a row stay on a section the sheet marks as repeated", () => {
     const doc = sheet("Verso 1", "Coro 1", "Verso 2", "Coro 2 (x2)", "Puente", "Coro 3");
     expect(sections(doc, ["Verso", "Coro", "Verso", "Coro", "Coro", "Puente", "Coro"])).toEqual([0, 1, 2, 3, 3, 4, 5]);
+    // The same from the import's repeats, with nothing in the label.
+    const imported = sheet("Verso 1", "Coro 1", "Verso 2", "Coro 2", "Puente", "Coro 3");
+    expect(
+      matchChartToMarkers(imported, markers("Verso", "Coro", "Verso", "Coro", "Coro", "Puente", "Coro"), {
+        sectionRepeats: [1, 1, 1, 2, 1, 1],
+      }).items.map((item) => item.section),
+    ).toEqual([0, 1, 2, 3, 3, 4, 5]);
     // Without the mark, the second chorus goes back to the closest one.
     const plain = sheet("Verso 1", "Coro 1", "Verso 2", "Coro 2", "Puente", "Coro 3");
     expect(sections(plain, ["Verso", "Coro", "Verso", "Coro", "Coro", "Puente", "Coro"])).not.toEqual([0, 1, 2, 3, 3, 4, 5]);

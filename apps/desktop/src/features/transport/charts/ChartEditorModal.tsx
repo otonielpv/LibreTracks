@@ -113,8 +113,29 @@ export function ChartEditorModal({
       const section = Number(value);
       const previous = current.find((link) => link.markerId === markerId);
       // Recorded times were for the old section's lines.
-      return [...rest, { markerId, section, ...(previous?.section === section && previous.lineBeats ? { lineBeats: previous.lineBeats } : {}) }];
+      const same = previous?.section === section;
+      return [
+        ...rest,
+        {
+          markerId,
+          section,
+          ...(same && previous.lineBeats ? { lineBeats: previous.lineBeats } : {}),
+          ...(same && previous.repeat ? { repeat: previous.repeat } : {}),
+        },
+      ];
     });
+  };
+
+  /** Times the section plays inside the marker (a long chorus sung twice):
+   * its lines run once per pass. */
+  const setPasses = (markerId: string, passes: number) => {
+    setLinks((current) =>
+      current.map((link) => {
+        if (link.markerId !== markerId) return link;
+        const { repeat: _previous, ...rest } = link;
+        return passes > 1 ? { ...rest, repeat: passes } : rest;
+      }),
+    );
   };
 
   /** Back to the even spread: the section's links lose their times and the
@@ -123,7 +144,9 @@ export function ChartEditorModal({
     const link = links.find((candidate) => candidate.markerId === markerId);
     if (!link) return;
     const next = links.map((candidate) =>
-      candidate.section === link.section ? { markerId: candidate.markerId, section: candidate.section } : candidate,
+      candidate.section === link.section
+        ? { markerId: candidate.markerId, section: candidate.section, ...(candidate.repeat ? { repeat: candidate.repeat } : {}) }
+        : candidate,
     );
     const spread = chartLineTimeFor(doc, next, timing);
     setLinks(next);
@@ -235,6 +258,7 @@ export function ChartEditorModal({
                         region,
                         markers: [...markers],
                         chart,
+                        secondsPerBeatAt,
                         onSave: (next) => onSave(next),
                       })
                     }
@@ -252,6 +276,7 @@ export function ChartEditorModal({
                         region,
                         markers: [...markers],
                         chart,
+                        secondsPerBeatAt,
                         onSave: (next) => onSave(next),
                         mode: "refresh",
                       })
@@ -310,14 +335,31 @@ export function ChartEditorModal({
                         ))}
                       </select>
                       {link ? (
-                        recorded ? (
+                        <span className="lt-chart-editor-extra">
+                        {!recorded ? (
+                          <select
+                            className="lt-chart-editor-passes"
+                            value={link.repeat ?? 1}
+                            aria-label={t("liveChart.passesFor", { marker: marker.name })}
+                            title={t("liveChart.passesHelp")}
+                            onChange={(event) => setPasses(marker.id, Number(event.target.value))}
+                          >
+                            {[1, 2, 3, 4].map((count) => (
+                              <option key={count} value={count}>
+                                ×{count}
+                              </option>
+                            ))}
+                          </select>
+                        ) : null}
+                        {recorded ? (
                           <button type="button" className="lt-chart-editor-times" onClick={() => resetTimes(marker.id)} title={t("liveChart.resetTimes")}>
                             {t("liveChart.recordedTimes")}
                             <span className="material-symbols-outlined" aria-hidden="true">restart_alt</span>
                           </button>
                         ) : (
                           <span className="lt-chart-editor-times is-auto">{t("liveChart.autoTimes")}</span>
-                        )
+                        )}
+                        </span>
                       ) : (
                         // Keeps the third column on rows without lyrics.
                         <span aria-hidden="true" />

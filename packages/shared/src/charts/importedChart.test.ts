@@ -230,20 +230,21 @@ describe("Planning Center repeat marks", () => {
   const words = (line: ReturnType<typeof doc>["sections"][number]["lines"][number]) =>
     line.kind === "lyrics" ? line.segments.map((segment) => segment.text).join("") : "";
 
-  it("a section between marks says how many times in its label, without the slashes", () => {
+  it("the slashes go and nothing is written in their place", () => {
     const sections = doc().sections;
-    expect(sections.map((section) => section.label)).toEqual(["Intro", "Verso 1", "Coro 1", "Coro 2 (x2)", "Puente", "Coro 3 (x2)"]);
+    expect(sections.map((section) => section.label)).toEqual(["Intro", "Verso 1", "Coro 1", "Coro 2", "Puente", "Coro 3"]);
     expect(sections[3].lines.map(words)).toEqual(["Te canto hoy", "porque tú me esperas"]);
-  });
-
-  it("a block inside a section keeps its count at the end of its last line", () => {
-    const bridge = doc().sections[4];
-    expect(bridge.lines.map(words)).toEqual([
+    expect(sections[4].lines.map(words)).toEqual([
       "Ahora vuelvo   Ahora canto",
-      "Y tu camino es mi casa (x3)",
+      "Y tu camino es mi casa",
       "Ahora vuelvo   Ahora canto",
       "Y tu camino es mi casa ",
     ]);
+  });
+
+  it("reports how many times a whole section is played, for the matcher only", () => {
+    // A partial block (the bridge) is not the whole section.
+    expect(normalizeImportedChart(chart(SHEET)).repeats).toEqual([1, 1, 1, 2, 1, 2]);
   });
 
   it("a header with its chords on the same line keeps the chords as a line", () => {
@@ -252,7 +253,9 @@ describe("Planning Center repeat marks", () => {
     expect(intro.lines[0].kind === "lyrics" && intro.lines[0].segments.map((segment) => segment.chord)).toEqual(["E", "C#m", "A", "B"]);
   });
 
-  it("a header ending in slashes becomes its count", () => {
-    expect(parseChordPro(normalizeImportedChart(chart("INTRO //\n[Am] [C]\nVERSO\nUno")).text).sections[0].label).toBe("Intro (x2)");
+  it("a header ending in slashes keeps its name and reports its count", () => {
+    const result = normalizeImportedChart(chart("INTRO //\n[Am] [C]\nVERSO\nUno"));
+    expect(parseChordPro(result.text).sections[0].label).toBe("Intro");
+    expect(result.repeats).toEqual([2, 1]);
   });
 });

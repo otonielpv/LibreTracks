@@ -94,7 +94,7 @@ describe("importing a song from Planning Center", () => {
     const { onSave } = await openReview();
     const rows = screen.getAllByTestId("chart-import-row");
     await act(async () => {
-      fireEvent.change(within(rows[2]).getByRole("combobox"), { target: { value: "2" } });
+      fireEvent.change(within(rows[2]).getByRole("combobox", { name: /chartSources.import.section/ }), { target: { value: "2" } });
     });
     await apply();
     const saved = onSave.mock.calls[0][0];

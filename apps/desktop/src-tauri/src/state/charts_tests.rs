@@ -84,6 +84,7 @@ fn link(marker_id: &str, line_beats: Vec<f64>) -> ChartLink {
         marker_id: marker_id.into(),
         section: 0,
         line_beats,
+        repeat: None,
     }
 }
 

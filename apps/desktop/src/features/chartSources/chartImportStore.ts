@@ -15,6 +15,8 @@ export type ChartImportSession = {
   /** The song's existing chart action. Absent when opened from the song
    * menu: the host then saves with `set_song_region_chart`, as the editor. */
   onSave?: (chart: SongChart) => Promise<void>;
+  /** Seconds per beat at a song position, to measure markers in beats. */
+  secondsPerBeatAt?: (seconds: number) => number;
   /** "refresh": update the imported `chart` from its source (08). */
   mode?: "import" | "refresh";
 };

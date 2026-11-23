@@ -45,6 +45,10 @@ export type MatchOptions = {
   /** Later (README, out of v1): extra cost of showing `section` at a marker,
    * from comparing the sheet with the voice guide's words. */
   contentHint?: (markerId: string, section: number) => number;
+  /** Times each section is played in a row, as the import read it from the
+   * source's repeat marks (not stored in the sheet). Missing: from the label
+   * ("Puente (x6)"), else 1. */
+  sectionRepeats?: readonly number[];
 };
 
 // Costs. Lower is better; tuned on the cases in chartMatch.test.ts.
@@ -206,7 +210,9 @@ export function matchChartToMarkers(
   const pinned = sequence ? alignWithSequence(meanings, sequence, doc) : new Map<number, number>();
 
   const families = doc.sections.map((section) => sectionFamily(section.kind));
-  const repeats = doc.sections.map((section) => sectionRepeat(section.label));
+  const repeats = doc.sections.map(
+    (section, index) => options.sectionRepeats?.[index] ?? sectionRepeat(section.label),
+  );
   // countBefore[family][i] = sections of that family in [0, i).
   const countBefore = new Map<string, number[]>();
   for (const family of new Set(families)) {

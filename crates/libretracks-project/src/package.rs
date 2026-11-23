@@ -2445,6 +2445,7 @@ mod tests {
                 marker_id: "m1".into(),
                 section: 0,
                 line_beats: vec![0.0, 8.0],
+                repeat: Some(2),
             }],
             source: Some(libretracks_core::ChartSource {
                 provider: "planningCenter".into(),
