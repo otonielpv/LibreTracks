@@ -59,6 +59,8 @@ const NUMBER_BONUS = -3;
 const NUMBER_PENALTY = 4;
 /** Each section of the family jumped over going forward. */
 const SKIP_COST = 1.5;
+/** The next marker staying on the section just read. */
+const STAY_COST = 0.25;
 /** Going back to a section already read (choruses come back). */
 const BACK_COST = 1;
 /** Going back while the sheet still has sections of the family ahead: the
@@ -234,6 +236,10 @@ export function matchChartToMarkers(
     // (x2)", Planning Center's "// … //"): the next marker staying on it is
     // just reading on.
     if (section === position && repeats[section] > 1) return 0;
+    // Two markers of the same part in a row (Coro, Coro) are most often the
+    // same section sung again: cheaper than going back, still dearer than
+    // reading on to a section written next.
+    if (section === position) return STAY_COST;
     const ahead = between(family, position + 1, families.length) > 0 ? BACK_WITH_AHEAD_COST : 0;
     return BACK_COST + ahead + BACK_SKIP_COST * between(family, section + 1, position + 1);
   };
@@ -353,7 +359,7 @@ function describe(
   // Going back or skipping only leaves a doubt when the sheet has another
   // section of the family to choose: a bridge written once that the song
   // plays six times is sure.
-  const sure = context.transition === 0 || context.alternatives <= 1;
+  const sure = context.transition <= STAY_COST || context.alternatives <= 1;
   return { markerId, section, confidence: sure ? "high" : "medium", reason: "family" };
 }
 

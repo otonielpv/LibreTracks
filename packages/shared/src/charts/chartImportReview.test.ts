@@ -161,3 +161,15 @@ describe("passes from the marker's bars", () => {
     expect(passesOf(16)).toBe(2);
   });
 });
+
+describe("a sheet adjusted twice", () => {
+  it("says its key once transposed, so a second adjust does not move it again", () => {
+    const first = finalizeImport(buildImportReview(imported(SHEET), SONG, "A"), { transpose: true, linked: true });
+    expect(parseChordPro(first.text).key).toBe("A");
+    // Adjusting again starts from the key the text says, not the source's.
+    const again = buildImportReview({ title: "T", text: first.text, key: parseChordPro(first.text).key }, SONG, "A");
+    expect(again.key.semitones).toBe(0);
+    const twice = finalizeImport(again, { transpose: true, linked: true });
+    expect(twice.text).toBe(first.text);
+  });
+});

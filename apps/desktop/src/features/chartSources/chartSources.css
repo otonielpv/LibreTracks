@@ -62,7 +62,7 @@
 
 .lt-chart-import-rows li {
   display: grid;
-  grid-template-columns: minmax(90px, 1fr) minmax(120px, 1.2fr) 72px minmax(0, 2fr);
+  grid-template-columns: minmax(90px, 1fr) minmax(120px, 1.2fr) 92px minmax(0, 2fr);
   align-items: center;
   gap: 8px;
   min-height: 44px;
@@ -257,4 +257,21 @@
   flex-direction: column;
   gap: 8px;
   padding-left: 24px;
+}
+
+/* The confidence mark fits its column: never over the section menu. */
+.lt-chart-import-badge {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: 600 0.74rem/1.2 "Space Grotesk", sans-serif;
+  text-align: center;
+}
+
+.lt-chart-import-badge.is-medium,
+.lt-chart-import-badge.is-low {
+  padding: 0.15rem 0.35rem;
+  border: 1px solid currentColor;
+  border-radius: 2px;
 }

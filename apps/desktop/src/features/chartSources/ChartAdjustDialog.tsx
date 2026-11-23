@@ -35,7 +35,9 @@ export function ChartAdjustDialog({ region, markers, input, onApply, onClose }: 
   const { t } = useTranslation();
   const song = useSongStore((state) => state.song);
   const timing = useMemo(() => reviewTimingForSong(song, region), [song, region]);
-  const [review, setReview] = useState(() => {
+  /** The automatic adjust: sections and passes worked out from the sheet,
+   * the song's markers and their length (plus what an update keeps). */
+  const automatic = () => {
     const built = buildImportReview(
       input.imported,
       markers,
@@ -45,7 +47,8 @@ export function ChartAdjustDialog({ region, markers, input, onApply, onClose }: 
       input.passOverrides ?? {},
     );
     return input.keepLineBeats ? { ...built, keepLineBeats: input.keepLineBeats } : built;
-  });
+  };
+  const [review, setReview] = useState(automatic);
   const [transpose, setTranspose] = useState(true);
 
   const setSection = (markerId: string, value: string) => {
@@ -91,6 +94,14 @@ export function ChartAdjustDialog({ region, markers, input, onApply, onClose }: 
           />
         </div>
         <div className="lt-inline-actions">
+          <button
+            type="button"
+            className="lt-secondary-button"
+            title={t("chartSources.adjust.recalculateHelp")}
+            onClick={() => setReview(automatic())}
+          >
+            {t("chartSources.adjust.recalculate")}
+          </button>
           <button type="button" className="lt-secondary-button" onClick={onClose}>
             {t("chartSources.import.cancel")}
           </button>

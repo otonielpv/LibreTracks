@@ -275,9 +275,11 @@ export function buildImportReview(
  */
 export function finalizeImport(review: ImportReview, options: { transpose: boolean; linked: boolean }): SongChart {
   const semitones = options.transpose ? (review.key.semitones ?? 0) : 0;
-  const text = semitones
-    ? serializeChordPro(transposeChart(review.doc, semitones, keyPrefersFlats(review.key.song)))
-    : review.text;
+  // The text says which key it is in ({key: D}): adjusting it again later
+  // starts from that key, never from the source's, so it is not moved twice.
+  const keyNow = semitones ? review.key.song : review.key.source;
+  const doc = semitones ? transposeChart(review.doc, semitones, keyPrefersFlats(review.key.song)) : review.doc;
+  const text = keyNow && doc.key !== keyNow ? serializeChordPro({ ...doc, key: keyNow }) : semitones ? serializeChordPro(doc) : review.text;
   const source = review.imported.source;
   return {
     text,

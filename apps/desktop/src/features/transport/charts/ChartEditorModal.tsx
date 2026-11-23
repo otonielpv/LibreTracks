@@ -192,8 +192,14 @@ export function ChartEditorModal({
   /** What the adjust starts from: the text now in the editor (with any typing
    * done since it came in) and the hints of where it came from. */
   const adjustInput = (): AdjustInput => {
+    // A sheet already in the editor: its key is the one it says ({key: D}),
+    // not the source's (it may have been transposed already). Without one,
+    // no transposition is offered. The passes set on its markers stay.
     const base = pending ?? {
-      imported: { title: region.name, text: taken.text, key: source?.key ?? doc.key ?? null, source },
+      imported: { title: region.name, text: taken.text, key: doc.key ?? null, source },
+      passOverrides: Object.fromEntries(
+        validLinks.flatMap((link) => (link.repeat && link.repeat > 1 ? [[link.markerId, link.repeat]] : [])),
+      ),
     };
     return { ...base, imported: { ...base.imported, text: taken.text } };
   };

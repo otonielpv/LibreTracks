@@ -112,6 +112,8 @@ const en = {
     title: "Adjust to the sequence",
     apply: "Apply",
     applyUnlinked: "Apply without linking",
+    recalculate: "Recalculate",
+    recalculateHelp: "Works out every section and every ×N again, dropping what you changed by hand.",
     changes: "Changes in the sheet",
     noChanges: "The sheet stays as it is; only the markers are linked.",
     change: {
@@ -270,6 +272,8 @@ const es: Texts<typeof en> = {
     title: "Ajustar a la secuencia",
     apply: "Aplicar",
     applyUnlinked: "Aplicar sin enlazar",
+    recalculate: "Recalcular",
+    recalculateHelp: "Vuelve a calcular todas las secciones y los ×N, quitando lo que hayas cambiado a mano.",
     changes: "Cambios en la hoja",
     noChanges: "La hoja se queda como está; solo se enlazan las marcas.",
     change: {

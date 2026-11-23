@@ -565,9 +565,13 @@
   white-space: nowrap;
 }
 
+/* A note, not a button: the lines of this marker are spread on their own. */
 .lt-chart-editor-times.is-auto {
-  border-color: rgb(255 255 255 / 0.1);
-  color: rgb(229 226 225 / 0.55);
+  border-color: transparent;
+  padding-left: 0;
+  padding-right: 0;
+  color: rgb(229 226 225 / 0.45);
+  font-weight: 500;
 }
 
 .lt-chart-editor-times .material-symbols-outlined {
@@ -840,7 +844,7 @@
 .lt-chart-editor-links select.lt-chart-editor-passes {
   flex: none;
   width: auto;
-  min-width: 3.6rem;
+  min-width: 4.4rem;
   border-radius: 2px;
   border: 1px solid rgb(87 241 219 / 0.18);
   background: rgb(28 31 32 / 0.98);

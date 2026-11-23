@@ -37,7 +37,9 @@ export function SaveToPlanningCenterDialog({ region, markers, text, links, sourc
   const [current, setCurrent] = useState<PcoArrangement | null>(null);
   const [kind, setKind] = useState<"new" | "replace">("new");
   const [name, setName] = useState(() => t("chartSources.save.defaultName"));
-  const [key, setKey] = useState(() => region.key ?? source.key ?? parseChordPro(text).key ?? "");
+  // The key the lyrics are written in now ({key: D} once adjusted); the
+  // song's or the source's only for a sheet that does not say.
+  const [key, setKey] = useState(() => parseChordPro(text).key ?? region.key ?? source.key ?? "");
   const [confirmed, setConfirmed] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);

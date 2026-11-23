@@ -161,9 +161,9 @@ describe("matching a sheet to the song's markers", () => {
         sectionRepeats: [1, 1, 1, 2, 1, 1],
       }).items.map((item) => item.section),
     ).toEqual([0, 1, 2, 3, 3, 4, 5]);
-    // Without the mark, the second chorus goes back to the closest one.
+    // Without the mark too: two choruses in a row are the same chorus.
     const plain = sheet("Verso 1", "Coro 1", "Verso 2", "Coro 2", "Puente", "Coro 3");
-    expect(sections(plain, ["Verso", "Coro", "Verso", "Coro", "Coro", "Puente", "Coro"])).not.toEqual([0, 1, 2, 3, 3, 4, 5]);
+    expect(sections(plain, ["Verso", "Coro", "Verso", "Coro", "Coro", "Puente", "Coro"])).toEqual([0, 1, 2, 3, 3, 4, 5]);
   });
 
   it("a section written once and played many times is not a doubt", () => {
@@ -174,4 +174,15 @@ describe("matching a sheet to the song's markers", () => {
       [2, "high"],
     ]);
   });
+
+  it("Digno: two choruses in a row are the same chorus, and the second verse is verse 2", () => {
+    // The sheet once adjusted (no repeat marks left), and the song's markers.
+    const doc = sheet("Intro", "Verso 1", "Coro 1", "Verso 2", "Coro 2", "Instrumental", "Puente", "Coro 3", "Final");
+    const song = [
+      "Intro", "Verso", "Vamp", "Coro", "Interludio", "Verso", "Coro", "Coro", "Instrumental",
+      "Puente", "Puente", "Puente", "Instrumental", "Instrumental", "Coro", "Coro", "Final",
+    ];
+    expect(sections(doc, song)).toEqual([0, 1, null, 2, 5, 3, 4, 4, 5, 6, 6, 6, 5, 5, 7, 7, 8]);
+  });
 });
+
