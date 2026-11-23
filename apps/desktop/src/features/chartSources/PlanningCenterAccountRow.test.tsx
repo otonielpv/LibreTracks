@@ -18,7 +18,7 @@ vi.mock("react-i18next", () => ({
   }),
 }));
 
-import { createChartSourceHandlers } from "./chartSourceHandlers";
+import { createChartSourceHandlers, type ChartSourceApi } from "./chartSourceHandlers";
 import { INITIAL_CHART_SOURCE_STATE, useChartSourceStore } from "./chartSourceStore";
 import { PlanningCenterAccountRow } from "./PlanningCenterAccountRow";
 import { CHART_SOURCE_TEXTS } from "./chartSourceTexts";
@@ -103,7 +103,7 @@ describe("chart source handlers", () => {
     let finish: () => void = () => {};
     api.signInPco.mockImplementation(() => new Promise<void>((resolve) => (finish = resolve)));
     api.getPcoStatus.mockResolvedValue(status("connected"));
-    const handlers = createChartSourceHandlers({ api, store: useChartSourceStore });
+    const handlers = createChartSourceHandlers({ api: api as unknown as ChartSourceApi, store: useChartSourceStore });
     const first = handlers.connect();
     const second = handlers.connect();
     expect(useChartSourceStore.getState().connecting).toBe(true);
@@ -115,7 +115,7 @@ describe("chart source handlers", () => {
 
   it("keeps the typed error of a failed sign-in", async () => {
     api.signInPco.mockRejectedValue({ code: "network", message: "offline" });
-    const handlers = createChartSourceHandlers({ api, store: useChartSourceStore });
+    const handlers = createChartSourceHandlers({ api: api as unknown as ChartSourceApi, store: useChartSourceStore });
     await handlers.connect();
     expect(useChartSourceStore.getState().error).toEqual({ code: "network", message: "offline" });
   });

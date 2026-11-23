@@ -22,6 +22,8 @@ import {
   type ChartTiming,
 } from "@libretracks/shared/charts/chartTimes";
 import { CHART_FILE_ACCEPT, chordProFromFile } from "./importChart";
+import { FEATURE_FLAGS } from "@libretracks/shared/featureFlags";
+import { useChartImportStore } from "../../chartSources/chartImportStore";
 
 type ChartEditorModalProps = {
   region: SongRegionSummary;
@@ -223,6 +225,23 @@ export function ChartEditorModal({
                   <span className="material-symbols-outlined" aria-hidden="true">upload_file</span>
                   {t("liveChart.importFile")}
                 </button>
+                {FEATURE_FLAGS.chartSources ? (
+                  <button
+                    type="button"
+                    className="lt-chart-editor-button"
+                    onClick={() =>
+                      useChartImportStore.getState().open({
+                        region,
+                        markers: [...markers],
+                        chart,
+                        onSave: (next) => onSave(next),
+                      })
+                    }
+                  >
+                    <span className="material-symbols-outlined" aria-hidden="true">library_music</span>
+                    {t("chartSources.import.open")}
+                  </button>
+                ) : null}
               </div>
             </div>
             <textarea
@@ -310,6 +329,9 @@ export function ChartEditorModal({
               void save({
                 text: taken.text,
                 links: linksToSave(),
+                // Keeps "Update from Planning Center": an edited text no
+                // longer matches `importedHash`, and that is how it shows.
+                ...(chart?.source ? { source: chart.source } : {}),
               })
             }
           >

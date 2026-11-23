@@ -1,3 +1,5 @@
+import type { SongChart } from "@libretracks/shared/models";
+
 import * as desktopApi from "../transport/desktopApi";
 
 import { useChartSourceStore, type ChartSourceState } from "./chartSourceStore";
@@ -7,7 +9,10 @@ import { toPcoError } from "./pcoErrors";
  * Every chart-source action, defined once (plan smart-chart-import, D15). The
  * views only call these: Live, Setlist, Compact and mobile share them.
  */
-export type ChartSourceApi = Pick<typeof desktopApi, "getPcoStatus" | "signInPco" | "signOutPco">;
+export type ChartSourceApi = Pick<
+  typeof desktopApi,
+  "getPcoStatus" | "signInPco" | "signOutPco" | "searchPcoSongs" | "getPcoArrangements" | "getPcoArrangement"
+>;
 
 export type ChartSourceStoreApi = {
   getState: () => ChartSourceState;
@@ -58,7 +63,28 @@ export function createChartSourceHandlers({ api, store }: ChartSourceHandlerDeps
     await refreshStatus();
   }
 
-  return { refreshStatus, connect, disconnect };
+  /** Songs whose title contains `query` (a page of Planning Center results). */
+  function searchSongs(query: string, page = 0) {
+    return api.searchPcoSongs(query, page);
+  }
+
+  function loadArrangements(songId: string) {
+    return api.getPcoArrangements(songId);
+  }
+
+  /** The arrangement read fresh, chart included, right before the review. */
+  function loadArrangement(songId: string, arrangementId: string) {
+    return api.getPcoArrangement(songId, arrangementId);
+  }
+
+  /** Saves through the song's existing chart action (`onChartChange` →
+   * `songViewHandlers.setSongChart` → `set_song_region_chart`): one undo step,
+   * no parallel write. */
+  function applyImport(save: (chart: SongChart) => Promise<void>, chart: SongChart) {
+    return save(chart);
+  }
+
+  return { refreshStatus, connect, disconnect, searchSongs, loadArrangements, loadArrangement, applyImport };
 }
 
 export type ChartSourceHandlers = ReturnType<typeof createChartSourceHandlers>;

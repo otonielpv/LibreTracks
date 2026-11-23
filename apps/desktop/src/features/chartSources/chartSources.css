@@ -1,0 +1,114 @@
+/* Planning Center import (plan smart-chart-import). Same modal frame as the
+   chart editor; the body is the only scroller. */
+.lt-chart-import {
+  width: min(760px, calc(100vw - 32px));
+  max-height: calc(100dvh - 32px);
+  display: flex;
+  flex-direction: column;
+}
+
+.lt-chart-import-body {
+  overflow-y: auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.lt-chart-import-search {
+  display: flex;
+  gap: 8px;
+}
+
+.lt-chart-import-search input {
+  flex: 1;
+  min-height: 44px;
+}
+
+.lt-chart-import-search button {
+  min-height: 44px;
+}
+
+.lt-chart-import-list,
+.lt-chart-import-arrangements,
+.lt-chart-import-rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.lt-chart-import-list > li > button,
+.lt-chart-import-arrangements button {
+  width: 100%;
+  min-height: 44px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  text-align: left;
+}
+
+.lt-chart-import-list > li > button.is-active {
+  font-weight: 600;
+}
+
+.lt-chart-import-arrangements {
+  padding-left: 16px;
+}
+
+.lt-chart-import-meta {
+  opacity: 0.7;
+}
+
+.lt-chart-import-rows li {
+  display: grid;
+  grid-template-columns: minmax(90px, 1fr) minmax(120px, 1.2fr) 72px minmax(0, 2fr);
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  border-bottom: 1px solid var(--lt-border, rgba(255, 255, 255, 0.08));
+}
+
+.lt-chart-import-rows li.is-repeat {
+  opacity: 0.7;
+}
+
+.lt-chart-import-rows select {
+  min-height: 36px;
+}
+
+.lt-chart-import-marker small {
+  display: block;
+  opacity: 0.7;
+}
+
+.lt-chart-import-line {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  opacity: 0.8;
+}
+
+.lt-chart-import-badge.is-medium {
+  color: var(--lt-warning, #e0a43a);
+}
+
+.lt-chart-import-badge.is-low {
+  color: var(--lt-danger, #e5534b);
+}
+
+.lt-chart-import-warning {
+  color: var(--lt-warning, #e0a43a);
+}
+
+.lt-chart-import-key {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+}
+
+.lt-chart-import-note {
+  margin: 0 16px 12px;
+  opacity: 0.8;
+}

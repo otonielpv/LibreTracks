@@ -87,6 +87,26 @@ export function keyPrefersFlats(key: string | null | undefined): boolean {
 }
 
 /**
+ * Semitones up (0-11) from key `from` to key `to` ("G" → "A" = 2, "Bb" →
+ * "Do" = 2). `null` when either is not a key, or one is minor and the other
+ * major: moving roots between modes would be a wrong guess.
+ */
+export function keySemitonesBetween(from: string | null | undefined, to: string | null | undefined): number | null {
+  const read = (key: string | null | undefined) => {
+    const text = key?.trim() ?? "";
+    const note = text ? parseNote(text) : null;
+    if (!note) return null;
+    const rest = text.slice(note.length).trim();
+    if (rest && !/^(?:m|min|maj|M)?$/.test(rest)) return null;
+    return { semitone: note.semitone, minor: rest === "m" || rest === "min" };
+  };
+  const source = read(from);
+  const target = read(to);
+  if (!source || !target || source.minor !== target.minor) return null;
+  return (target.semitone - source.semitone + 12) % 12;
+}
+
+/**
  * Transposes one chord by `semitones`, keeping its notation and decoration.
  * Something that is not a chord comes back unchanged.
  */

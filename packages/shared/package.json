@@ -19,6 +19,7 @@
     "./charts/chartMatch": "./src/charts/chartMatch.ts",
     "./charts/chartImport": "./src/charts/chartImport.ts",
     "./charts/importedChart": "./src/charts/importedChart.ts",
+    "./charts/chartImportReview": "./src/charts/chartImportReview.ts",
     "./featureFlags": "./src/featureFlags.ts",
     "./networkApi": "./src/networkApi.ts",
     "./networkRoles": "./src/networkRoles.ts",
