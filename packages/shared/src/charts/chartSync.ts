@@ -1,13 +1,12 @@
 import {
   markerCategory,
   type ChartLink,
-  type MarkerKind,
   type SectionMarkerSummary,
   type SongRegionSummary,
 } from "../models";
 
-import { parseSectionHeader, type ChartDoc } from "./chordChart";
-import { sectionFamily } from "./sectionVocab";
+import { matchChartToMarkers } from "./chartMatch";
+import { type ChartDoc } from "./chordChart";
 
 /** The stored id of a link: arrangements give repeats `"{id}~{n}"`, and a
  * repeat uses the link of its original marker. Mirrors Rust
@@ -39,67 +38,13 @@ export function chartMarkersForRegion(
     .sort((left, right) => left.startSeconds - right.startSeconds);
 }
 
-function family(kind: MarkerKind | null | undefined): string | null {
-  return sectionFamily(kind);
-}
-
-/** What a marker names: its kind, or — for a custom marker called "Coro 2" —
- * what its name says. */
-function markerMeaning(marker: SectionMarkerSummary): { family: string | null; number: number | null } {
-  const fromKind = family(marker.kind);
-  if (fromKind) return { family: fromKind, number: marker.variant ?? null };
-  const header = parseSectionHeader(marker.name);
-  return { family: family(header?.kind), number: header?.number ?? marker.variant ?? null };
-}
-
 /**
- * Links each marker of a song to the chart section it most likely shows.
- *
- * Markers and sheet are walked in step, the way a musician reads along: each
- * marker takes the next section of its kind after the one the previous marker
- * took (so a chorus that comes back after the instrumental gets the chorus
- * written after the instrumental, which may be in another key). When the song
- * goes back — a second intro, a verse the sheet only writes once — it takes
- * the most recent section of that kind. A marker with a number ("Estrofa 2")
- * goes to the section with that number if the sheet has one.
- *
- * If nothing could be matched by meaning — custom markers with arbitrary
- * names — markers and sections are paired in order.
+ * Links each marker of a song to the chart section it most likely shows: the
+ * links of `matchChartToMarkers` (the one matcher, which also says how sure it
+ * is). Kept for the callers that only want the links.
  */
 export function autoLinkChart(doc: ChartDoc, markers: readonly SectionMarkerSummary[]): ChartLink[] {
-  const originals = markers.filter((marker) => !marker.id.includes("~"));
-  const families = doc.sections.map((section) => family(section.kind));
-  const links: ChartLink[] = [];
-  let cursor = 0;
-  for (const marker of originals) {
-    const meaning = markerMeaning(marker);
-    if (!meaning.family) continue;
-    const matches = (index: number) => families[index] === meaning.family;
-    let section = -1;
-    if (meaning.number !== null) {
-      section = doc.sections.findIndex(
-        (candidate, index) => matches(index) && candidate.number === meaning.number,
-      );
-    }
-    if (section < 0) {
-      for (let index = cursor; index < doc.sections.length && section < 0; index += 1) {
-        if (matches(index)) section = index;
-      }
-    }
-    if (section < 0) {
-      for (let index = Math.min(cursor, doc.sections.length) - 1; index >= 0 && section < 0; index -= 1) {
-        if (matches(index)) section = index;
-      }
-    }
-    if (section < 0) continue;
-    links.push({ markerId: marker.id, section });
-    cursor = section + 1;
-  }
-  if (links.length > 0) return links;
-
-  return originals
-    .slice(0, doc.sections.length)
-    .map((marker, index) => ({ markerId: marker.id, section: index }));
+  return matchChartToMarkers(doc, markers).links;
 }
 
 /**
