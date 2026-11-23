@@ -469,6 +469,10 @@ private:
         std::string path;
         int         channel_count = 0;
         void*       handle = nullptr;   // SNDFILE* / std::ifstream*
+        // The file is 16-bit PCM (the int16 cache, or a 16-bit WAV streamed in
+        // place): read it with sf_readf_short so the block keeps the exact
+        // samples instead of round-tripping through float and dither.
+        bool        pcm16 = false;
         // Value of fill_generation_ this handle was opened under. clear() bumps
         // the counter so workers drop handles to cache files that are about to
         // be deleted or rewritten — on Windows an open handle without

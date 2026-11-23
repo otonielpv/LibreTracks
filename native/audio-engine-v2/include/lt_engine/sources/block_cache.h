@@ -11,6 +11,10 @@
 //   - Audio thread reads; on miss it returns silence and marks the block
 //     needed (starvation diagnostic).
 //   - Eviction: LRU when at capacity.
+//   - Storage: int16 per block (half the RAM of float32), like the disk PCM
+//     cache. A block only stays float when it holds samples beyond full scale
+//     (a float source peaking over 0 dBFS), so no source is clipped by being
+//     cached. read() always hands out float.
 //
 // Thread model:
 //   - read():  audio thread — short mutex lookup, then lock-free PCM copy.
@@ -21,6 +25,7 @@
 #include <lt_engine/core/types.h>
 #include <array>
 #include <atomic>
+#include <cstdint>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -85,7 +90,10 @@ struct CacheKeyEqual {
 
 struct CacheBlock {
     CacheKey            key;
-    std::vector<float> samples;   // interleaved, block_frames * channels
+    // Interleaved, block_frames * channels. Exactly one of the two is filled:
+    // pcm16 normally, pcm_float only when the block exceeds full scale.
+    std::vector<int16_t> pcm16;
+    std::vector<float>   pcm_float;
     int                channel_count = 0;
     int                block_frames  = 0;
     std::atomic<bool>  ready{false};
@@ -93,7 +101,20 @@ struct CacheBlock {
     // Never evicted while set. Used for the preload set — the handful of blocks
     // that must be resident so playback can start without touching the disk.
     std::atomic<bool>  pinned{false};
+
+    bool   is_int16() const noexcept { return pcm_float.empty(); }
+    size_t bytes() const noexcept {
+        return pcm16.size() * sizeof(int16_t) + pcm_float.size() * sizeof(float);
+    }
 };
+
+// Converts one block of float PCM to the cache's storage. Samples within full
+// scale become int16 with TPDF dither (exact zeros stay zero, so digital
+// silence gains no noise floor). If any sample is beyond full scale (or NaN)
+// the block is kept as float instead. `dither_seed` makes the result
+// reproducible for the same block. Exposed for tests.
+void encode_cache_block(const float* interleaved, size_t sample_count,
+                        uint64_t dither_seed, CacheBlock& out);
 
 struct CacheDiagnostics {
     size_t blocks_cached  = 0;
@@ -124,12 +145,20 @@ public:
               float**    out,
               int        num_channels) noexcept;
 
-    // Worker thread — write a fully decoded block into the cache.
+    // Worker thread — write a fully decoded block into the cache. Float input
+    // is stored as dithered int16 (see encode_cache_block).
     void fill(const Id&          source_id,
               int                block_index,
               const float*       interleaved_samples,
               int                channel_count,
               int                actual_frames);
+    // Worker thread — same, from samples that already are int16 (a 16-bit
+    // file read with sf_readf_short). Stored as-is: no dither, bit-exact.
+    void fill_pcm16(const Id&      source_id,
+                    int            block_index,
+                    const int16_t* interleaved_samples,
+                    int            channel_count,
+                    int            actual_frames);
 
     // Check whether a block is cached (worker thread decision).
     bool has_block(const Id& source_id, int block_index) const;
@@ -209,6 +238,7 @@ public:
 
 private:
     void evict_if_needed();
+    void publish(std::shared_ptr<CacheBlock> prepared);
 
     int    block_frames_;
     size_t max_blocks_;

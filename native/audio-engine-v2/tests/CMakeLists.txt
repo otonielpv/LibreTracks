@@ -22,6 +22,7 @@ add_executable(lt_engine_tests
     test_audio_dump.cpp
     test_audio_decoder.cpp
     test_streaming_source_cache.cpp
+    test_block_cache_int16.cpp
     test_resampler_seek_continuity.cpp
     test_sinc_interpolator.cpp
     test_realtime_resample.cpp

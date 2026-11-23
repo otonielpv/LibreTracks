@@ -130,7 +130,8 @@ TEST_CASE("release_unprotected reports the bytes it actually freed") {
     CHECK(freed == before - after);
     CHECK(after < before);
     // 4 of 6 blocks, stereo float32.
-    CHECK(freed == 4 * static_cast<size_t>(kDefaultBlockFrames) * 2 * sizeof(float));
+    // Blocks are int16 (see BlockCache).
+    CHECK(freed == 4 * static_cast<size_t>(kDefaultBlockFrames) * 2 * sizeof(int16_t));
 }
 
 TEST_CASE("release_unprotected with keep=0 empties the cache") {
