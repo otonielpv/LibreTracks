@@ -10,6 +10,12 @@
 //! `/arrangements/{id}/sections` is never used: the real API merges sections
 //! and drops the played ones (see `docs/plans/smart-chart-import/spike-results.md`).
 
+pub mod client;
+pub mod error;
+pub mod model;
 pub mod oauth;
 
+pub use client::{PcoClient, PcoTokens};
+pub use error::PcoError;
+pub use model::*;
 pub use oauth::{is_configured, PlanningCenterOAuth};

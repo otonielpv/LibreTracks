@@ -159,6 +159,20 @@ impl TokenManager {
         self.store.clear()
     }
 
+    /// The API refused `rejected` before its expiry (revoked, or a clock off):
+    /// refresh now, unless another caller already replaced it while we waited
+    /// for the lock. A dead refresh token → [`CloudError::NotConnected`].
+    pub async fn refresh_rejected(&self, rejected: &str) -> Result<String, CloudError> {
+        let lock = refresh_lock(self.provider.name());
+        let _guard = lock.lock().await;
+        let mut token = self.store.load()?.ok_or(CloudError::NotConnected)?;
+        if token.access_token != rejected {
+            return Ok(token.access_token);
+        }
+        self.refresh(&mut token).await?;
+        Ok(token.access_token)
+    }
+
     async fn refresh(&self, token: &mut StoredToken) -> Result<(), CloudError> {
         let form = self.provider.refresh_form(&token.refresh_token);
         let response = self
