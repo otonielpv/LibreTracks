@@ -58,8 +58,35 @@ describe("repeats: in the sequence or with slashes in the sheet", () => {
     expect(result.sequence).toBeUndefined();
     // Coro plays 2 + 2 + 4 = 8 times; the intro 2.
     expect(result.chordChart).toBe(
-      ["INTRO //", "[D] [A]", "", "VERSO 1", "[D]Uno", "dos", "", "CORO", "//////// [G]Luz", "sol ////////", ""].join("\n"),
+      ["INTRO", "// [D] [A] //", "", "VERSO 1", "[D]Uno", "dos", "", "CORO", "//////// [G]Luz", "sol ////////", ""].join("\n"),
     );
   });
 });
 
+
+describe("markers of another kind on a section's chords", () => {
+  const named = (id: string, name: string, start: number): SectionMarkerSummary => ({ id, name, startSeconds: start, kind: "custom" });
+  const text = ["{section: Intro}", "[Bm] [D] [G] [A]", "{section: Coro}", "Digno de [G]alabar"].join("\n");
+  const markers = [named("i", "Intro", 0), named("c", "Coro", 10), named("v", "Vamp", 20), named("x", "Interludio", 30), named("x2", "Interludio 2", 40)];
+  const links = [
+    { markerId: "i", section: 0 },
+    { markerId: "c", section: 1 },
+    { markerId: "v", section: 0 },
+    { markerId: "x", section: 0 },
+    { markerId: "x2", section: 0 },
+  ];
+
+  it("with slashes, a Vamp and an Interludio on the intro are their own sections, not more intros", () => {
+    const { chordChart } = planningCenterExport(text, links, markers, "marks");
+    expect(chordChart).toBe(
+      ["INTRO", "[Bm] [D] [G] [A]", "", "VAMP", "[Bm] [D] [G] [A]", "", "INTERLUDIO", "// [Bm] [D] [G] [A] //", "", "CORO", "Digno de [G]alabar", ""].join("\n"),
+    );
+  });
+
+  it("in the sequence, each one by its own name", () => {
+    const result = planningCenterExport(text, links, markers, "sequence");
+    expect(result.sequence).toEqual(["Intro", "Coro", "Vamp", "Interludio", "Interludio"]);
+    expect(result.chordChart).toContain("VAMP\n[Bm] [D] [G] [A]");
+    expect(result.chordChart).not.toContain("//");
+  });
+});

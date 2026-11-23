@@ -120,3 +120,19 @@ describe("matching with repeats", () => {
     expect(review.rows[0].passes).toBe(2);
   });
 });
+
+describe("a sheet saved with slashes, imported again", () => {
+  it("reads the chords between slashes as a repeated part without words, and the copies by name", () => {
+    const imported = normalizeImportedChart(
+      planningCenterToImported({
+        id: "a",
+        songId: "s",
+        chordChart: ["INTRO", "// [Bm] [D] [G] [A] //", "", "VAMP", "[Bm] [D] [G] [A]", "", "CORO", "Digno de [G]alabar"].join("\n"),
+      }),
+    );
+    const doc = parseChordPro(imported.text);
+    expect(doc.sections.map((section) => section.label)).toEqual(["Intro", "Vamp", "Coro"]);
+    expect(imported.text).not.toContain("/");
+    expect(imported.repeats?.[0]).toBe(2);
+  });
+});

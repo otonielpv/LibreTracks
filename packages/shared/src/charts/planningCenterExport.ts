@@ -2,6 +2,7 @@ import type { ChartLink, SectionMarkerSummary } from "../models";
 
 import { chartLinkFor } from "./chartSync";
 import { parseChordPro, serializeLyricLine, type ChartSection } from "./chordChart";
+import { canonicalLabel } from "./sectionVocab";
 
 /** How the times a section plays inside a marker go to Planning Center. */
 export type RepeatStyle =
@@ -47,54 +48,67 @@ function joinRepeatedLines(lines: readonly string[]): Array<{ lines: string[]; c
   return blocks;
 }
 
+/** A section written again under another name: the intro's chords that the
+ * song plays as a "Vamp" or an "Interludio" marker. */
+export type SectionCopy = { label: string; times: number };
+
 export function toPlanningCenterChart(
   text: string,
   marks: ReadonlyMap<number, number> = new Map(),
   joinLines = false,
+  copies: ReadonlyMap<number, readonly SectionCopy[]> = new Map(),
 ): string {
   const doc = parseChordPro(text);
-  const blocks = doc.sections.map((section, sectionIndex) => {
-    const times = marks.get(sectionIndex) ?? 1;
-    const slashes = times > 1 ? "/".repeat(times) : "";
-    const lyricIndexes = section.lines.flatMap((_, index) => (hasWords(section, index) ? [index] : []));
-    const first = lyricIndexes[0];
-    const last = lyricIndexes[lyricIndexes.length - 1];
-    const lines: string[] = [];
-    if (section.label) {
-      // A part without words ("INTRO") carries its marks on the header.
-      lines.push(`${section.label.toUpperCase()}${slashes && first === undefined ? ` ${slashes}` : ""}`);
-    }
-    const body: string[] = [];
-    section.lines.forEach((line, index) => {
-      if (line.kind === "lyrics") {
-        let written = serializeLyricLine(line.segments);
-        if (slashes && index === first) written = `${slashes} ${written}`;
-        if (slashes && index === last) written = `${written.replace(/\s+$/, "")} ${slashes}`;
-        body.push(written);
-      } else if (line.kind === "comment") {
-        body.push(`(${line.text})`);
-      } else {
-        body.push(line.text);
-      }
-    });
-    if (joinLines && !slashes) {
-      for (const block of joinRepeatedLines(body)) {
-        if (block.count < 2) {
-          lines.push(...block.lines);
-          continue;
-        }
-        const marked = "/".repeat(block.count);
-        const joined = [...block.lines];
-        joined[0] = `${marked} ${joined[0]}`;
-        joined[joined.length - 1] = `${joined[joined.length - 1].replace(/\s+$/, "")} ${marked}`;
-        lines.push(...joined);
-      }
-    } else {
-      lines.push(...body);
-    }
-    return lines.join("\n");
-  });
+  const blocks = doc.sections.flatMap((section, sectionIndex) => [
+    writeSection(section, section.label, marks.get(sectionIndex) ?? 1, joinLines),
+    ...(copies.get(sectionIndex) ?? []).map((copy) => writeSection(section, copy.label, copy.times, joinLines)),
+  ]);
   return `${blocks.filter((block) => block.trim()).join("\n\n")}\n`;
+}
+
+function writeSection(section: ChartSection, label: string | null | undefined, times: number, joinLines: boolean): string {
+  const slashes = times > 1 ? "/".repeat(times) : "";
+  const lyricIndexes = section.lines.flatMap((_, index) => (hasWords(section, index) ? [index] : []));
+  // A part without words ("INTRO"): the marks wrap its chords, the same way
+  // as a sung part's lines ("// [Bm] [D] [G] [A] //").
+  const marked = lyricIndexes.length
+    ? lyricIndexes
+    : section.lines.flatMap((line, index) =>
+        line.kind === "lyrics" && serializeLyricLine(line.segments).trim() ? [index] : [],
+      );
+  const first = marked[0];
+  const last = marked[marked.length - 1];
+  const lines: string[] = [];
+  if (label) lines.push(label.toUpperCase());
+  const body: string[] = [];
+  section.lines.forEach((line, index) => {
+    if (line.kind === "lyrics") {
+      let written = serializeLyricLine(line.segments);
+      if (slashes && index === first) written = `${slashes} ${written}`;
+      if (slashes && index === last) written = `${written.replace(/\s+$/, "")} ${slashes}`;
+      body.push(written);
+    } else if (line.kind === "comment") {
+      body.push(`(${line.text})`);
+    } else {
+      body.push(line.text);
+    }
+  });
+  if (joinLines && !slashes) {
+    for (const block of joinRepeatedLines(body)) {
+      if (block.count < 2) {
+        lines.push(...block.lines);
+        continue;
+      }
+      const repeat = "/".repeat(block.count);
+      const joined = [...block.lines];
+      joined[0] = `${repeat} ${joined[0]}`;
+      joined[joined.length - 1] = `${joined[joined.length - 1].replace(/\s+$/, "")} ${repeat}`;
+      lines.push(...joined);
+    }
+  } else {
+    lines.push(...body);
+  }
+  return lines.join("\n");
 }
 
 /** The times each marker plays its section (1 when unset). */
@@ -120,19 +134,51 @@ export function planningCenterExport(
   style: RepeatStyle = "sequence",
 ): { chordChart: string; sequence?: string[] } {
   const doc = parseChordPro(text);
+  // A marker of another kind than the section it shows (a "Vamp" or an
+  // "Interludio" on the intro's chords) is its own section in Planning
+  // Center, named like the marker: otherwise the intro would read "///"
+  // when it opens the song once.
+  const kindOf = (label: string) => canonicalLabel(label, "free")?.kind ?? label.trim().toLowerCase();
   const played = markers.flatMap((marker) => {
     const link = chartLinkFor(links, marker.id);
-    return link && doc.sections[link.section]?.label ? [{ section: link.section, passes: passesOf(link) }] : [];
+    const label = link ? doc.sections[link.section]?.label : undefined;
+    if (!link || !label) return [];
+    // Only when both names say what they are: a marker named "c1" or
+    // "Guitarra" is just the section it shows.
+    const markerKind = canonicalLabel(marker.name, "free")?.kind;
+    const sectionKind = canonicalLabel(label, "free")?.kind;
+    const own = !markerKind || !sectionKind || markerKind === sectionKind;
+    return [{ section: link.section, label: own ? label : stripNumber(marker.name), copy: !own, passes: passesOf(link) }];
   });
+  const copies = new Map<number, SectionCopy[]>();
+  for (const entry of played) {
+    if (!entry.copy) continue;
+    const list = copies.get(entry.section) ?? [];
+    const found = list.find((copy) => kindOf(copy.label) === kindOf(entry.label));
+    if (found) found.times = Math.min(16, found.times + entry.passes);
+    else list.push({ label: entry.label, times: entry.passes });
+    copies.set(entry.section, list);
+  }
   if (style === "marks") {
     const totals = new Map<number, number>();
-    for (const entry of played) totals.set(entry.section, Math.min(16, (totals.get(entry.section) ?? 0) + entry.passes));
-    return { chordChart: toPlanningCenterChart(text, totals, true) };
+    for (const entry of played) {
+      if (!entry.copy) totals.set(entry.section, Math.min(16, (totals.get(entry.section) ?? 0) + entry.passes));
+    }
+    return { chordChart: toPlanningCenterChart(text, totals, true, copies) };
   }
-  const sequence = played.flatMap((entry) =>
-    Array.from({ length: entry.passes }, () => doc.sections[entry.section].label),
+  const named = new Map(
+    [...copies.values()].flat().map((copy) => [kindOf(copy.label), copy.label] as const),
   );
-  return { chordChart: toPlanningCenterChart(text), sequence };
+  const sequence = played.flatMap((entry) =>
+    Array.from({ length: entry.passes }, () => (entry.copy ? named.get(kindOf(entry.label)) ?? entry.label : entry.label)),
+  );
+  const once = new Map([...copies].map(([section, list]) => [section, list.map((copy) => ({ ...copy, times: 1 }))]));
+  return { chordChart: toPlanningCenterChart(text, new Map(), false, once), sequence };
+}
+
+/** "Interludio 2" -> "Interludio": the copy is one section for all of them. */
+function stripNumber(name: string): string {
+  return name.trim().replace(/\s+\d+$/, "");
 }
 
 /** The sequence alone, with the repeats in it. */
