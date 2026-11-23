@@ -144,6 +144,15 @@ impl DesktopSession {
         // project, from template, .ltset import).
         self.save_current_session_before_close();
 
+        // Engine Stop alone leaves two things of the outgoing session alive,
+        // because both are meant to survive a pause: the vamp between songs
+        // (the ended song's click keeps going until Play) and any jump armed
+        // in the native scheduler. Across a session change neither belongs to
+        // the new session: the old click sounded over the new one until the
+        // app was restarted (user report from mobile, 2026-11-23).
+        audio.end_song_gap_vamp()?;
+        self.song_gap_vamp_holding = false;
+        audio.cancel_scheduled_jumps()?;
         audio.stop()?;
         // LoadSession (via replace_song_buffers) initializes the complete C++ mixer runtime:
         // gain, pan, mute, solo, audio_to, transpose_behavior, folder parent chains.
