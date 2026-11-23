@@ -1,6 +1,8 @@
 #include <lt_engine/sources/block_cache.h>
 #include <algorithm>
 #include <chrono>
+#include <cmath>
+#include <functional>
 #include <cstdlib>
 #include <cstring>
 #include <thread>
@@ -20,7 +22,87 @@ inline void atomic_max(std::atomic<uint64_t>& slot, uint64_t value) {
            !slot.compare_exchange_weak(prev, value, std::memory_order_relaxed)) {
     }
 }
+
+// 1/32768: the same normalisation libsndfile uses when it reads PCM_16 as
+// float, so a block filled from sf_readf_short reads back bit-identical to
+// what sf_readf_float on the same file returned before blocks were int16.
+constexpr float kInt16ToFloat = 1.0f / 32768.0f;
+
+uint64_t dither_seed_for(const Id& source_id, int block_index) noexcept {
+    const uint64_t h = std::hash<std::string_view>{}(std::string_view(source_id));
+    return h ^ (static_cast<uint64_t>(static_cast<uint32_t>(block_index)) *
+                0x9E3779B97F4A7C15ull);
+}
+
+// Copies frames from an interleaved block into planar float output, mapping
+// channels the way the cache always has (mono → both sides, extra → dropped).
+template <typename Sample, typename ToFloat>
+void copy_to_planar(const Sample* src, int src_channels, int copy_frames,
+                    float** out, int num_channels, ToFloat to_float) noexcept {
+    if (num_channels == 2 && src_channels == 2) {
+        float* out_l = out[0];
+        float* out_r = out[1];
+        for (int f = 0; f < copy_frames; ++f) {
+            out_l[f] = to_float(src[f * 2]);
+            out_r[f] = to_float(src[f * 2 + 1]);
+        }
+    } else if (num_channels == 2 && src_channels == 1) {
+        float* out_l = out[0];
+        float* out_r = out[1];
+        for (int f = 0; f < copy_frames; ++f) {
+            const float sample = to_float(src[f]);
+            out_l[f] = sample;
+            out_r[f] = sample;
+        }
+    } else if (num_channels == 1 && src_channels >= 1) {
+        float* out_l = out[0];
+        for (int f = 0; f < copy_frames; ++f)
+            out_l[f] = to_float(src[f * src_channels]);
+    } else {
+        for (int f = 0; f < copy_frames; ++f) {
+            for (int ch = 0; ch < num_channels; ++ch) {
+                int src_ch = (src_channels > 0) ? std::min(ch, src_channels - 1) : 0;
+                out[ch][f] = to_float(src[f * src_channels + src_ch]);
+            }
+        }
+    }
+}
 } // namespace
+
+void encode_cache_block(const float* interleaved, size_t sample_count,
+                        uint64_t dither_seed, CacheBlock& out) {
+    out.pcm16.clear();
+    out.pcm_float.clear();
+    // `!(|x| <= 1)` also catches NaN, which must not reach lrintf.
+    for (size_t i = 0; i < sample_count; ++i) {
+        if (!(std::fabs(interleaved[i]) <= 1.0f)) {
+            out.pcm_float.assign(interleaved, interleaved + sample_count);
+            return;
+        }
+    }
+    out.pcm16.resize(sample_count);
+    // xorshift64*: cheap, and seeded per block so a re-fill is identical.
+    uint64_t state = dither_seed ? dither_seed : 0x2545F4914F6CDD1Dull;
+    auto next_unit = [&state]() noexcept {
+        state ^= state >> 12;
+        state ^= state << 25;
+        state ^= state >> 27;
+        const uint64_t r = state * 0x2545F4914F6CDD1Dull;
+        return static_cast<float>(r >> 40) * (1.0f / 16777216.0f);  // [0, 1)
+    };
+    for (size_t i = 0; i < sample_count; ++i) {
+        const float x = interleaved[i];
+        if (x == 0.0f) {
+            out.pcm16[i] = 0;
+            continue;
+        }
+        // TPDF dither: difference of two uniforms, ±1 LSB.
+        const float dither = next_unit() - next_unit();
+        const float scaled = x * 32768.0f + dither;
+        const long q = std::lrintf(std::min(32767.0f, std::max(-32768.0f, scaled)));
+        out.pcm16[i] = static_cast<int16_t>(q);
+    }
+}
 
 bool BlockCache::diag_enabled() noexcept {
     static const bool on = [] {
@@ -82,34 +164,15 @@ bool BlockCache::read(const Id&  source_id,
     const int copy_frames  = std::min(frames_needed, std::max(avail_frames, 0));
     if (copy_frames <= 0) return false;
 
-    const float* src = blk->samples.data() + frame_offset_in_block * src_channels;
-
-    if (num_channels == 2 && src_channels == 2) {
-        float* out_l = out[0];
-        float* out_r = out[1];
-        for (int f = 0; f < copy_frames; ++f) {
-            out_l[f] = src[f * 2];
-            out_r[f] = src[f * 2 + 1];
-        }
-    } else if (num_channels == 2 && src_channels == 1) {
-        float* out_l = out[0];
-        float* out_r = out[1];
-        for (int f = 0; f < copy_frames; ++f) {
-            const float sample = src[f];
-            out_l[f] = sample;
-            out_r[f] = sample;
-        }
-    } else if (num_channels == 1 && src_channels >= 1) {
-        float* out_l = out[0];
-        for (int f = 0; f < copy_frames; ++f)
-            out_l[f] = src[f * src_channels];
+    const size_t src_offset = static_cast<size_t>(frame_offset_in_block) * src_channels;
+    if (blk->is_int16()) {
+        copy_to_planar(blk->pcm16.data() + src_offset, src_channels, copy_frames,
+                       out, num_channels,
+                       [](int16_t v) noexcept { return static_cast<float>(v) * kInt16ToFloat; });
     } else {
-        for (int f = 0; f < copy_frames; ++f) {
-            for (int ch = 0; ch < num_channels; ++ch) {
-                int src_ch = (src_channels > 0) ? std::min(ch, src_channels - 1) : 0;
-                out[ch][f] = src[f * src_channels + src_ch];
-            }
-        }
+        copy_to_planar(blk->pcm_float.data() + src_offset, src_channels, copy_frames,
+                       out, num_channels,
+                       [](float v) noexcept { return v; });
     }
 
     // Zero-pad if fewer frames were available.
@@ -126,17 +189,36 @@ void BlockCache::fill(const Id&    source_id,
                       const float* interleaved_samples,
                       int          channel_count,
                       int          actual_frames) {
-    CacheKey key{ source_id, block_index };
-
-    // Allocate and copy PCM before taking the mutex shared with the audio
-    // thread. A default stereo block is ~32 KiB, so vector growth here must not
+    // Allocate and convert PCM before taking the mutex shared with the audio
+    // thread. A default stereo block is ~16 KiB, so vector growth here must not
     // consume callback time.
     auto prepared = std::make_shared<CacheBlock>();
-    prepared->key = key;
+    prepared->key = CacheKey{ source_id, block_index };
     prepared->channel_count = channel_count;
     prepared->block_frames = actual_frames;
-    prepared->samples.assign(interleaved_samples,
-                             interleaved_samples + actual_frames * channel_count);
+    encode_cache_block(interleaved_samples,
+                       static_cast<size_t>(actual_frames) * channel_count,
+                       dither_seed_for(source_id, block_index),
+                       *prepared);
+    publish(std::move(prepared));
+}
+
+void BlockCache::fill_pcm16(const Id&      source_id,
+                            int            block_index,
+                            const int16_t* interleaved_samples,
+                            int            channel_count,
+                            int            actual_frames) {
+    auto prepared = std::make_shared<CacheBlock>();
+    prepared->key = CacheKey{ source_id, block_index };
+    prepared->channel_count = channel_count;
+    prepared->block_frames = actual_frames;
+    prepared->pcm16.assign(interleaved_samples,
+                           interleaved_samples + static_cast<size_t>(actual_frames) * channel_count);
+    publish(std::move(prepared));
+}
+
+void BlockCache::publish(std::shared_ptr<CacheBlock> prepared) {
+    const CacheKey& key = prepared->key;
     prepared->last_used.store(clock_.fetch_add(1, std::memory_order_relaxed),
                               std::memory_order_relaxed);
     prepared->ready.store(true, std::memory_order_release);
@@ -153,14 +235,14 @@ void BlockCache::fill(const Id&    source_id,
         auto [it, inserted] = blocks_.try_emplace(key, prepared);
         if (inserted) {
             blocks_cached_.fetch_add(1, std::memory_order_relaxed);
-            bytes_used_.fetch_add(prepared->samples.size() * sizeof(float),
+            bytes_used_.fetch_add(prepared->bytes(),
                                   std::memory_order_relaxed);
         } else {
             replaced = std::move(it->second);
             it->second = prepared;
             const size_t old_bytes =
-                replaced ? replaced->samples.size() * sizeof(float) : 0;
-            const size_t new_bytes = prepared->samples.size() * sizeof(float);
+                replaced ? replaced->bytes() : 0;
+            const size_t new_bytes = prepared->bytes();
             if (new_bytes >= old_bytes)
                 bytes_used_.fetch_add(new_bytes - old_bytes, std::memory_order_relaxed);
             else
@@ -368,7 +450,7 @@ void BlockCache::evict_if_needed() {
                     != candidate.age)
                     continue;
                 const size_t block_bytes =
-                    candidate.block->samples.size() * sizeof(float);
+                    candidate.block->bytes();
                 retired.push_back(std::move(it->second));
                 blocks_.erase(it);
                 blocks_cached_.fetch_sub(1, std::memory_order_relaxed);
@@ -475,7 +557,7 @@ size_t BlockCache::release_unprotected(size_t keep_per_source) {
                 ++it;  // protected: the audio thread may be about to read it
                 continue;
             }
-            freed_bytes += block->samples.size() * sizeof(float);
+            freed_bytes += block->bytes();
             retired.push_back(std::move(it->second));
             it = blocks_.erase(it);
         }

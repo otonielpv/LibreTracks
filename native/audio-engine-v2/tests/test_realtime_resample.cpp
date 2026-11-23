@@ -64,6 +64,30 @@ bool write_float_wav(const std::string& path, const std::vector<float>& samples,
     return written == frames;
 }
 
+// 16-bit WAV, returned as the floats libsndfile reads back from it. Blocks of
+// a 16-bit file are cached as exact int16 (no dither), so this is the input
+// for which the cache path must still be bit-identical to the interpolator.
+// A float WAV would be dithered to int16 on its way into the cache.
+bool write_pcm16_wav(const std::string& path, std::vector<float>& samples,
+                     int channels, int rate) {
+    SF_INFO info{};
+    info.channels = channels;
+    info.samplerate = rate;
+    info.format = SF_FORMAT_WAV | SF_FORMAT_PCM_16;
+    SNDFILE* sf = sf_open(path.c_str(), SFM_WRITE, &info);
+    if (!sf) return false;
+    const sf_count_t frames = static_cast<sf_count_t>(samples.size() / channels);
+    const sf_count_t written = sf_writef_float(sf, samples.data(), frames);
+    sf_close(sf);
+    if (written != frames) return false;
+    SF_INFO rinfo{};
+    sf = sf_open(path.c_str(), SFM_READ, &rinfo);
+    if (!sf) return false;
+    const sf_count_t read = sf_readf_float(sf, samples.data(), frames);
+    sf_close(sf);
+    return read == frames;
+}
+
 std::vector<float> make_audio(Frame frames, int channels) {
     std::vector<float> s(static_cast<std::size_t>(frames) * static_cast<std::size_t>(channels));
     for (Frame f = 0; f < frames; ++f)
@@ -155,9 +179,9 @@ TEST_CASE("realtime resample: reads through the block cache match the interpolat
         // Several cache blocks, an odd length, so reads cross block edges and
         // reach the end of the file.
         const Frame file_frames = kDefaultBlockFrames * 5 + 333;
-        const auto file = make_audio(file_frames, channels);
+        auto file = make_audio(file_frames, channels);
         const auto path = temp_wav(channels == 2 ? "exact_st" : "exact_mono");
-        REQUIRE(write_float_wav(path, file, channels, rates.file));
+        REQUIRE(write_pcm16_wav(path, file, channels, rates.file));
 
         SourceManager manager;
         manager.set_seek_penalty_probe(fast_disk);

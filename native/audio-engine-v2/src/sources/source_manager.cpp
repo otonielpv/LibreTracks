@@ -121,6 +121,10 @@ size_t source_cache_blocks_from_env() {
         if (parsed >= 16 && parsed <= 4096)
             cache_mb = static_cast<size_t>(parsed);
     }
+    // Sized as if every block were stereo float32, which is how blocks used
+    // to be stored. They are int16 now (see BlockCache), so the same block
+    // count holds the same seconds of audio in half the RAM: the budget is a
+    // ceiling only a float source over 0 dBFS can reach.
     const size_t bytes_per_block =
         static_cast<size_t>(kDefaultBlockFrames) * sizeof(float) * 2;
     return std::max<size_t>(1, (cache_mb * 1024 * 1024) / bytes_per_block);
@@ -2266,6 +2270,7 @@ void SourceManager::FillReader::close() noexcept {
     source_id.clear();
     path.clear();
     channel_count = 0;
+    pcm16 = false;
 }
 
 bool SourceManager::FillReader::open_for(const Id& id,
@@ -2338,6 +2343,7 @@ bool SourceManager::FillReader::open_for(const Id& id,
         return finish_open(false, "cache channel count changed");
     }
     handle = sf;
+    pcm16 = (info.format & SF_FORMAT_SUBMASK) == SF_FORMAT_PCM_16;
 #else
     auto in = std::make_unique<std::ifstream>(file_path, std::ios::binary);
     if (!in || !*in)
@@ -2562,8 +2568,8 @@ void SourceManager::fill_blocks_from_disk(const Id& source_id,
         if (end > readable_frames)
             continue;
 
-        std::vector<float> data(
-            static_cast<std::size_t>(frames) * entry.channel_count, 0.f);
+        std::vector<float> data;
+        std::vector<int16_t> data16;
         int frames_read = 0;
         const auto read_started = std::chrono::steady_clock::now();
         // Reopen if a failed read above dropped the handle mid-batch.
@@ -2572,9 +2578,18 @@ void SourceManager::fill_blocks_from_disk(const Id& source_id,
             continue;
 #if LT_ENGINE_USE_LIBSNDFILE
         SNDFILE* sf = static_cast<SNDFILE*>(reader.handle);
+        const std::size_t sample_count =
+            static_cast<std::size_t>(frames) * entry.channel_count;
+        if (reader.pcm16)
+            data16.assign(sample_count, 0);
+        else
+            data.assign(sample_count, 0.f);
         if (sf_seek(sf, static_cast<sf_count_t>(start), SEEK_SET) >= 0) {
-            frames_read = static_cast<int>(
-                sf_readf_float(sf, data.data(), static_cast<sf_count_t>(frames)));
+            frames_read = reader.pcm16
+                ? static_cast<int>(sf_readf_short(
+                      sf, data16.data(), static_cast<sf_count_t>(frames)))
+                : static_cast<int>(sf_readf_float(
+                      sf, data.data(), static_cast<sf_count_t>(frames)));
         }
         // A failed read can leave the handle's position undefined; drop it so
         // the next batch starts from a clean open rather than a bad offset.
@@ -2582,6 +2597,7 @@ void SourceManager::fill_blocks_from_disk(const Id& source_id,
             reader.close();
 #else
         auto& in = *static_cast<std::ifstream*>(reader.handle);
+        data.assign(static_cast<std::size_t>(frames) * entry.channel_count, 0.f);
         const std::streamoff byte_offset =
             static_cast<std::streamoff>(start * entry.channel_count * sizeof(float));
         in.clear();
@@ -2621,12 +2637,14 @@ void SourceManager::fill_blocks_from_disk(const Id& source_id,
                 static_cast<Frame>(frames_read) - offset));
             if (block_read_frames <= 0)
                 continue;
-            block_cache_.fill(
-                source_id,
-                block,
-                data.data() + static_cast<std::size_t>(offset) * entry.channel_count,
-                entry.channel_count,
-                block_read_frames);
+            const std::size_t sample_offset =
+                static_cast<std::size_t>(offset) * entry.channel_count;
+            if (!data16.empty())
+                block_cache_.fill_pcm16(source_id, block, data16.data() + sample_offset,
+                                        entry.channel_count, block_read_frames);
+            else
+                block_cache_.fill(source_id, block, data.data() + sample_offset,
+                                  entry.channel_count, block_read_frames);
         }
     }
     if (!retain_reader)

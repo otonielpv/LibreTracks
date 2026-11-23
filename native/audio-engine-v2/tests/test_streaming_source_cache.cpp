@@ -1701,8 +1701,9 @@ TEST_CASE("BlockCache diagnostics stay exact across replace eviction and clear")
     constexpr int kChannels = 2;
     constexpr int kFrames = 64;
     constexpr size_t kMaxBlocks = 4;
+    // Blocks within full scale are stored as int16.
     constexpr size_t kBytesPerBlock =
-        kFrames * kChannels * sizeof(float);
+        kFrames * kChannels * sizeof(int16_t);
     BlockCache cache(kDefaultBlockFrames, kMaxBlocks, 1);
     auto block = make_reference_audio(kFrames, kChannels);
 
@@ -1721,7 +1722,7 @@ TEST_CASE("BlockCache diagnostics stay exact across replace eviction and clear")
     CHECK(diag.blocks_cached == before_count);
     CHECK(diag.bytes_used
           == (before_count - 1) * kBytesPerBlock
-           + kShortFrames * kChannels * sizeof(float));
+           + kShortFrames * kChannels * sizeof(int16_t));
 
     cache.clear();
     diag = cache.diagnostics();
