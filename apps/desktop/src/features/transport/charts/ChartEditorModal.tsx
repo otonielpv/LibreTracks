@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 
 import type {
   ChartLink,
+  ChartSource,
   SectionMarkerSummary,
   SongChart,
   SongRegionSummary,
@@ -13,6 +14,7 @@ import { usePortraitWhileOpen } from "../mobile/usePortraitWhileOpen";
 import { useVisibleViewportHeight } from "./useVisibleViewportHeight";
 import { parseChordPro } from "@libretracks/shared/charts/chordChart";
 import { autoLinkChart, chartLinkFor, remapChartLinks } from "@libretracks/shared/charts/chartSync";
+import { chartTextHash } from "@libretracks/shared/charts/importedChart";
 import {
   addChartTimes,
   applyChartTimes,
@@ -22,7 +24,8 @@ import {
   type ChartTiming,
 } from "@libretracks/shared/charts/chartTimes";
 import { CHART_FILE_ACCEPT, chordProFromFile } from "./importChart";
-import { useChartImportStore } from "../../chartSources/chartImportStore";
+import { useChartImportStore, type AdjustInput } from "../../chartSources/chartImportStore";
+import { ChartAdjustDialog } from "../../chartSources/ChartAdjustDialog";
 import { useChartSourcesAvailable } from "../../chartSources/useChartSourcesAvailable";
 
 type ChartEditorModalProps = {
@@ -34,6 +37,9 @@ type ChartEditorModalProps = {
   secondsPerBeatAt: (seconds: number) => number;
   onSave: (chart: SongChart | null) => Promise<void>;
   onClose: () => void;
+  /** A sheet just brought in as it comes (Planning Center from the song
+   * menu): shown, and "Adjust to the sequence" opens on it. */
+  initialImport?: AdjustInput;
 };
 
 /**
@@ -52,6 +58,7 @@ export function ChartEditorModal({
   secondsPerBeatAt,
   onSave,
   onClose,
+  initialImport,
 }: ChartEditorModalProps) {
   const { t } = useTranslation();
   const sourcesAvailable = useChartSourcesAvailable();
@@ -68,8 +75,22 @@ export function ChartEditorModal({
   const withTimes = (source: string, sourceLinks: readonly ChartLink[]) =>
     addChartTimes(source, chartLineTimeFor(parseChordPro(source), sourceLinks, timing));
 
-  const [text, setText] = useState(() => (chart ? withTimes(chart.text, chart.links) : ""));
-  const [links, setLinks] = useState<ChartLink[]>(chart?.links ?? []);
+  const [text, setText] = useState(() =>
+    initialImport ? initialImport.imported.text : chart ? withTimes(chart.text, chart.links) : "",
+  );
+  const [links, setLinks] = useState<ChartLink[]>(initialImport ? [] : (chart?.links ?? []));
+  /** Where the sheet came from: kept on save ("Update from Planning Center"),
+   * dropped when another file replaces it. Its fingerprint is the text as it
+   * came or as it was adjusted, so editing it afterwards shows. */
+  const [source, setSource] = useState<ChartSource | undefined>(() =>
+    initialImport?.imported.source
+      ? { ...initialImport.imported.source, importedHash: chartTextHash(initialImport.imported.text) }
+      : chart?.source,
+  );
+  /** A sheet brought in as it comes and its source's hints (sequence, key),
+   * waiting for "Adjust to the sequence". */
+  const [pending, setPending] = useState<AdjustInput | null>(initialImport ?? null);
+  const [adjustOpen, setAdjustOpen] = useState(Boolean(initialImport));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // Teléfono: escribir en vertical (plan portrait-text-modals).
@@ -157,6 +178,32 @@ export function ChartEditorModal({
     );
   };
 
+  /** A sheet replaces the text as it comes; "Adjust to the sequence" opens. */
+  const bringIn = (input: AdjustInput, nextSource: ChartSource | undefined) => {
+    setText(input.imported.text);
+    setLinks([]);
+    setSource(nextSource);
+    setPending(input);
+    setAdjustOpen(true);
+  };
+
+  /** What the adjust starts from: the text now in the editor (with any typing
+   * done since it came in) and the hints of where it came from. */
+  const adjustInput = (): AdjustInput => {
+    const base = pending ?? {
+      imported: { title: region.name, text: taken.text, key: source?.key ?? doc.key ?? null, source },
+    };
+    return { ...base, imported: { ...base.imported, text: taken.text } };
+  };
+
+  const applyAdjust = (adjusted: SongChart) => {
+    setLinks(adjusted.links);
+    setText(withTimes(adjusted.text, adjusted.links));
+    if (adjusted.source) setSource(adjusted.source);
+    setPending(null);
+    setAdjustOpen(false);
+  };
+
   const handleFile = async (event: ChangeEvent<HTMLInputElement>) => {
     const input = event.target;
     const file = input.files?.[0];
@@ -167,9 +214,9 @@ export function ChartEditorModal({
       const converted = await chordProFromFile(file).finally(() => {
         input.value = "";
       });
-      const linked = autoLinkChart(parseChordPro(converted), markers);
-      setLinks(linked);
-      setText(withTimes(converted, linked));
+      // As it comes (only turned into ChordPro): the adjust shows what it
+      // would change, and nothing changes until it is applied.
+      bringIn({ imported: { title: region.name, text: converted } }, undefined);
     } catch (cause) {
       const message = cause instanceof Error ? cause.message : String(cause);
       setError(
@@ -258,8 +305,13 @@ export function ChartEditorModal({
                         region,
                         markers: [...markers],
                         chart,
-                        secondsPerBeatAt,
-                        onSave: (next) => onSave(next),
+                        onPicked: (input) =>
+                          bringIn(
+                            input,
+                            input.imported.source
+                              ? { ...input.imported.source, importedHash: chartTextHash(input.imported.text) }
+                              : undefined,
+                          ),
                       })
                     }
                   >
@@ -275,10 +327,15 @@ export function ChartEditorModal({
                       useChartImportStore.getState().open({
                         region,
                         markers: [...markers],
-                        chart,
-                        secondsPerBeatAt,
-                        onSave: (next) => onSave(next),
+                        chart: chart ? { ...chart, text: taken.text, links: validLinks, ...(source ? { source } : {}) } : chart,
                         mode: "refresh",
+                        onPicked: (input) =>
+                          bringIn(
+                            input,
+                            input.imported.source
+                              ? { ...input.imported.source, importedHash: chartTextHash(input.imported.text) }
+                              : source,
+                          ),
                       })
                     }
                   >
@@ -306,10 +363,11 @@ export function ChartEditorModal({
                 type="button"
                 className="lt-chart-editor-button"
                 disabled={doc.sections.length === 0 || originals.length === 0}
-                onClick={() => setLinks(autoLinkChart(doc, markers))}
+                onClick={() => setAdjustOpen(true)}
+                title={t("chartSources.adjust.help")}
               >
                 <span className="material-symbols-outlined" aria-hidden="true">auto_fix_high</span>
-                {t("liveChart.autoLink")}
+                {t("chartSources.adjust.open")}
               </button>
             </div>
             {originals.length === 0 ? (
@@ -392,7 +450,7 @@ export function ChartEditorModal({
                 links: linksToSave(),
                 // Keeps "Update from Planning Center": an edited text no
                 // longer matches `importedHash`, and that is how it shows.
-                ...(chart?.source ? { source: chart.source } : {}),
+                ...(source ? { source } : {}),
               })
             }
           >
@@ -400,6 +458,15 @@ export function ChartEditorModal({
           </button>
         </div>
 
+        {adjustOpen ? (
+          <ChartAdjustDialog
+            region={region}
+            markers={markers}
+            input={adjustInput()}
+            onApply={applyAdjust}
+            onClose={() => setAdjustOpen(false)}
+          />
+        ) : null}
         <input
           ref={fileInputRef}
           type="file"

@@ -259,3 +259,29 @@ describe("Planning Center repeat marks", () => {
     expect(result.repeats).toEqual([2, 1]);
   });
 });
+
+describe("what the cleanup reports", () => {
+  it("lists each change so nothing changes unseen", () => {
+    const text = [
+      "INTRO  E  C#m",
+      "VERSO",
+      "[E]Uno",
+      "CORO",
+      "// [E]Luz //",
+      "COLUMN_BREAK",
+      "CORO",
+      "",
+      "PUENTE",
+      "[A]Dos",
+      "(Repetir coro)",
+    ].join("\n");
+    expect(normalizeImportedChart(chart(text)).changes).toEqual([
+      { kind: "layout", count: 1 },
+      { kind: "headerChords", label: "Intro" },
+      { kind: "repeatMarks", label: "Coro" },
+      { kind: "reference", label: "Coro" },
+      { kind: "repeatLine", label: "(Repetir coro)" },
+    ]);
+    expect(normalizeImportedChart(chart(["VERSO", "[G]Uno"].join("\n"))).changes).toEqual([]);
+  });
+});

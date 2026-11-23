@@ -7,7 +7,7 @@ import type { SongChart, SongView } from "@libretracks/shared/models";
 
 import type { PcoPlan, PcoPlanItem, PcoServiceType } from "../transport/desktopApi";
 import { chartSourceHandlers, type PlanEntry, type PlanSong } from "./chartSourceHandlers";
-import { ReviewView } from "./ChartImportDialog";
+import { ReviewView, SheetChangesList } from "./ReviewView";
 import { pcoErrorMessage, toPcoError } from "./pcoErrors";
 import "./chartSources.css";
 
@@ -268,6 +268,7 @@ export function PlanImportDialog({ song, save, onClose }: Props) {
                   song: regionName(current.regionId),
                 })}
               </p>
+              <SheetChangesList changes={current.review.changes} />
               <ReviewView
                 review={current.review}
                 transpose={transpose}
@@ -313,11 +314,11 @@ export function PlanImportDialog({ song, save, onClose }: Props) {
           ) : null}
           {step === "summary" ? (
             <>
-              <button type="button" className="lt-secondary-button" disabled={busy} onClick={reviewEach}>
-                {t("chartSources.plan.reviewEach")}
-              </button>
-              <button type="button" className="is-primary" disabled={busy} onClick={applyClear}>
+              <button type="button" className="lt-secondary-button" disabled={busy} onClick={applyClear}>
                 {t("chartSources.plan.applyClear")}
+              </button>
+              <button type="button" className="is-primary" disabled={busy} onClick={reviewEach}>
+                {t("chartSources.plan.reviewEach")}
               </button>
             </>
           ) : null}

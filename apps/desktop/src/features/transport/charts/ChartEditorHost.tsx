@@ -32,6 +32,7 @@ export function ChartEditorHost() {
       secondsPerBeatAt={session.secondsPerBeatAt}
       onSave={save}
       onClose={close}
+      initialImport={session.initialImport}
     />
   );
 }

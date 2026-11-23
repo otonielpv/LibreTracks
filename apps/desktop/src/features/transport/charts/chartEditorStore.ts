@@ -2,6 +2,8 @@ import { create } from "zustand";
 
 import type { SectionMarkerSummary, SongChart, SongRegionSummary } from "@libretracks/shared/models";
 
+import type { AdjustInput } from "../../chartSources/chartImportStore";
+
 /**
  * El editor de letra y acordes abierto, fuera del panel que lo abre.
  *
@@ -20,6 +22,9 @@ export type ChartEditorSession = {
   secondsPerBeatAt: (seconds: number) => number;
   /** Guarda (o borra con `null`); el host cierra el editor al terminar. */
   onSave: (next: SongChart | null) => Promise<void>;
+  /** Una hoja recién traída tal cual (Planning Center desde el menú de la
+   * canción): el editor la muestra y abre «Ajustar a la secuencia». */
+  initialImport?: AdjustInput;
 };
 
 type ChartEditorState = {

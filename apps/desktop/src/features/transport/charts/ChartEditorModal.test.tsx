@@ -174,3 +174,64 @@ describe("ChartEditorModal copied sections", () => {
     ]);
   });
 });
+
+describe("ChartEditorModal adjust to the sequence", () => {
+  const RAW = ["VERSO", "[G]uno", "", "CORO", "// [C]coro //"].join("\n");
+  const imported = {
+    imported: {
+      title: "Canción",
+      text: RAW,
+      source: { provider: "planningCenter", songId: "s1", arrangementId: "a1", updatedAt: "2026-11-20T10:00:00Z" },
+    },
+  };
+
+  function renderImported() {
+    const onSave = vi.fn(async () => {});
+    render(
+      <ChartEditorModal
+        region={region}
+        markers={markers}
+        chart={null}
+        secondsPerBeatAt={() => 0.5}
+        onSave={onSave}
+        onClose={vi.fn()}
+        initialImport={imported}
+      />,
+    );
+    return onSave;
+  }
+
+  it("a sheet brought in keeps its text until the adjust is applied", async () => {
+    const onSave = renderImported();
+    expect(screen.getByText("chartSources.adjust.title")).toBeTruthy();
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "chartSources.import.cancel" }));
+    });
+    const textarea = screen.getByRole("textbox", { name: "liveChart.textLabel" }) as HTMLTextAreaElement;
+    expect(textarea.value).toContain("// [C]coro //");
+    const saved = await saveAndRead(onSave);
+    expect(saved.source).toMatchObject({ provider: "planningCenter", arrangementId: "a1" });
+  });
+
+  it("applying the adjust cleans the text and links the markers", async () => {
+    const onSave = renderImported();
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "chartSources.adjust.apply" }));
+    });
+    const textarea = screen.getByRole("textbox", { name: "liveChart.textLabel" }) as HTMLTextAreaElement;
+    expect(textarea.value).not.toContain("//");
+    const saved = await saveAndRead(onSave);
+    expect(saved.links.map((link) => [link.markerId, link.section])).toEqual([
+      ["verse", 0],
+      ["chorus", 1],
+    ]);
+  });
+
+  it("the adjust button opens it on any sheet", async () => {
+    renderEditor();
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "chartSources.adjust.open" }));
+    });
+    expect(screen.getByText("chartSources.adjust.title")).toBeTruthy();
+  });
+});

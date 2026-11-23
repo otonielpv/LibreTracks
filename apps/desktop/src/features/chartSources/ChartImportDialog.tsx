@@ -1,74 +1,51 @@
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
 
-import {
-  buildImportReview,
-  finalizeImport,
-  relinkImportReview,
-  reviewTimingForSong,
-  type ImportReview,
-} from "@libretracks/shared/charts/chartImportReview";
-import { ChartImportError, planningCenterToImported } from "@libretracks/shared/charts/importedChart";
 import type { RefreshResult } from "@libretracks/shared/charts/chartRefresh";
-
-import type { SongChart } from "@libretracks/shared/models";
+import { reviewTimingForSong } from "@libretracks/shared/charts/chartImportReview";
+import { ChartImportError, planningCenterToImported } from "@libretracks/shared/charts/importedChart";
 
 import type { PcoArrangement, PcoSong } from "../transport/desktopApi";
 import { useSongStore } from "../transport/songStore";
 import { chartSourceHandlers } from "./chartSourceHandlers";
 import { useChartSourceStore } from "./chartSourceStore";
-import type { ChartImportSession } from "./chartImportStore";
+import type { AdjustInput, ChartImportSession } from "./chartImportStore";
 import { pcoErrorMessage, toPcoError } from "./pcoErrors";
 import "./chartSources.css";
 
 type Props = {
-  session: ChartImportSession & { onSave: (chart: SongChart) => Promise<void> };
+  session: ChartImportSession;
+  /** The sheet as it comes, for the chart editor and its adjust. */
+  onPicked: (input: AdjustInput) => void;
   onClose: () => void;
 };
 
 const hasText = (arrangement: PcoArrangement) => Boolean(arrangement.chordChart?.trim() || arrangement.lyrics?.trim());
 
 /**
- * "From Planning Center…": search the song, pick the arrangement, see the
- * song marker by marker with the words each marker will show, fix what looks
- * wrong and import (D13, D14). Every action is a `chartSourceHandlers` call;
- * the matching is `@libretracks/shared/charts`.
+ * "From Planning Center…": search the song and pick the arrangement. The sheet
+ * goes to the chart editor as it comes (only turned into ChordPro); adjusting
+ * it to the song is the editor's "Adjust to the sequence", where every change
+ * shows before it happens. Never adjusts on its own.
+ *
+ * In "refresh" mode: the imported song's arrangement read again, what changed
+ * in it, and the same hand-over to the editor.
  */
-export function ChartImportDialog({ session, onClose }: Props) {
+export function ChartImportDialog({ session, onPicked, onClose }: Props) {
   const { t } = useTranslation();
   const status = useChartSourceStore((state) => state.status);
   const connecting = useChartSourceStore((state) => state.connecting);
+  const song = useSongStore((state) => state.song);
   const { region, markers, chart } = session;
-  // Tempo and meter of the song, to count each marker's bars.
-  const sessionSong = useSongStore((state) => state.song);
-  const timing = useMemo(() => reviewTimingForSong(sessionSong, region), [sessionSong, region]);
+  const refreshing = session.mode === "refresh";
 
   const [query, setQuery] = useState(region.name);
   const [songs, setSongs] = useState<PcoSong[] | null>(null);
-  const [song, setSong] = useState<PcoSong | null>(null);
+  const [picked, setPicked] = useState<PcoSong | null>(null);
   const [arrangements, setArrangements] = useState<PcoArrangement[] | null>(null);
-  const [review, setReview] = useState<ImportReview | null>(null);
-  const [transpose, setTranspose] = useState(true);
+  const [refresh, setRefresh] = useState<RefreshResult | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  const refreshing = session.mode === "refresh";
-  const [refresh, setRefresh] = useState<RefreshResult | null>(null);
-
-  useEffect(() => {
-    void chartSourceHandlers.refreshStatus();
-  }, []);
-
-  const connectedNow = status?.state === "connected";
-  useEffect(() => {
-    if (!refreshing || !connectedNow || !chart || refresh) return;
-    void run(async () => {
-      const result = await chartSourceHandlers.refreshFromSource(chart, markers, region.key, region.name, timing);
-      setRefresh(result);
-      if (!result.upToDate) setReview(result.review);
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [refreshing, connectedNow]);
 
   const run = async (work: () => Promise<void>) => {
     setBusy(true);
@@ -77,67 +54,65 @@ export function ChartImportDialog({ session, onClose }: Props) {
       await work();
     } catch (cause) {
       setError(
-        cause instanceof ChartImportError
-          ? t(`chartSources.errors.${cause.code}`)
-          : pcoErrorMessage(t, toPcoError(cause)),
+        cause instanceof ChartImportError ? t(`chartSources.errors.${cause.code}`) : pcoErrorMessage(t, toPcoError(cause)),
       );
     } finally {
       setBusy(false);
     }
   };
 
+  useEffect(() => {
+    void chartSourceHandlers.refreshStatus();
+  }, []);
+
+  const connected = status?.state === "connected";
+  useEffect(() => {
+    if (!refreshing || !connected || !chart || refresh) return;
+    void run(async () => {
+      setRefresh(
+        await chartSourceHandlers.refreshFromSource(chart, markers, region.key, region.name, reviewTimingForSong(song, region)),
+      );
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [refreshing, connected]);
+
   const search = (event?: FormEvent) => {
     event?.preventDefault();
     if (!query.trim()) return;
     void run(async () => {
-      setSong(null);
+      setPicked(null);
       setArrangements(null);
       setSongs((await chartSourceHandlers.searchSongs(query.trim())).items);
     });
   };
 
-  const pickSong = (picked: PcoSong) =>
+  const pickSong = (candidate: PcoSong) =>
     void run(async () => {
-      setSong(picked);
-      setArrangements(await chartSourceHandlers.loadArrangements(picked.id));
+      setPicked(candidate);
+      setArrangements(await chartSourceHandlers.loadArrangements(candidate.id));
     });
 
   const pickArrangement = (arrangement: PcoArrangement) =>
     void run(async () => {
-      const fresh = await chartSourceHandlers.loadArrangement(arrangement.songId || song!.id, arrangement.id);
+      const fresh = await chartSourceHandlers.loadArrangement(arrangement.songId || picked!.id, arrangement.id);
       const imported = planningCenterToImported({
         ...fresh,
-        songTitle: song?.title ?? null,
-        songAuthor: song?.author ?? null,
+        songTitle: picked?.title ?? null,
+        songAuthor: picked?.author ?? null,
       });
-      setReview(buildImportReview(imported, markers, region.key, [], timing));
+      onPicked({ imported });
     });
 
-  const setPasses = (markerId: string, passes: number) => {
-    if (!review) return;
-    setReview(relinkImportReview(review, markers, review.locked, { ...review.passOverrides, [markerId]: passes }));
-  };
-
-  const setSection = (markerId: string, value: string) => {
-    if (!review) return;
-    const section = value === "" ? null : Number(value);
-    const locked = [...review.locked.filter((link) => link.markerId !== markerId), { markerId, section }];
-    setReview(relinkImportReview(review, markers, locked));
-  };
-
-  const apply = (linked: boolean) => {
-    if (!review) return;
-    const finalized = finalizeImport(review, { transpose: transpose && review.key.semitones !== null, linked });
-    // An update keeps the plan item the chart first came from.
-    const planItemId = refreshing ? chart?.source?.planItemId : undefined;
-    const next = planItemId && finalized.source ? { ...finalized, source: { ...finalized.source, planItemId } } : finalized;
-    void run(async () => {
-      await chartSourceHandlers.applyImport(session.onSave, next);
-      onClose();
+  const bringUpdate = () => {
+    if (!refresh || refresh.upToDate) return;
+    const review = refresh.review;
+    onPicked({
+      imported: review.imported,
+      locked: review.locked,
+      passOverrides: review.passOverrides,
+      keepLineBeats: review.keepLineBeats,
     });
   };
-
-  const connected = status?.state === "connected";
 
   return (
     <div className="lt-modal-backdrop lt-chart-import-backdrop" onClick={busy ? undefined : onClose}>
@@ -152,11 +127,7 @@ export function ChartImportDialog({ session, onClose }: Props) {
           <div>
             <span className="lt-settings-modal-eyebrow">{t("chartSources.import.eyebrow")}</span>
             <h2 id="lt-chart-import-title">
-              {refreshing
-                ? t("chartSources.refresh.title")
-                : review
-                  ? t("chartSources.import.reviewTitle")
-                  : t("chartSources.import.title")}
+              {refreshing ? t("chartSources.refresh.title") : t("chartSources.import.title")}
             </h2>
             <p>{region.name}</p>
           </div>
@@ -166,14 +137,14 @@ export function ChartImportDialog({ session, onClose }: Props) {
           {!connected ? (
             <div className="lt-chart-import-connect">
               <p>{t("chartSources.import.connectFirst")}</p>
-              <button type="button" className="is-primary" disabled={connecting} onClick={() => void chartSourceHandlers.connect()}>
+              <button type="button" disabled={connecting} onClick={() => void chartSourceHandlers.connect()}>
                 {connecting ? t("chartSources.account.connecting") : t("chartSources.account.connect")}
               </button>
             </div>
           ) : refreshing ? (
             refresh?.upToDate ? (
               <p role="status">{t("chartSources.refresh.upToDate")}</p>
-            ) : refresh && review ? (
+            ) : refresh ? (
               <>
                 {refresh.editedLocally ? (
                   <p className="lt-chart-import-warning" role="alert">
@@ -194,23 +165,17 @@ export function ChartImportDialog({ session, onClose }: Props) {
                     </ul>
                   )}
                 </section>
-                <ReviewView review={review} transpose={transpose} onTranspose={setTranspose} onSection={setSection} onPasses={setPasses} />
+                <p className="lt-chart-import-legend">{t("chartSources.refresh.bringHelp")}</p>
               </>
             ) : (
               <p>{t("chartSources.import.loading")}</p>
             )
-          ) : review ? (
-            <ReviewView review={review} transpose={transpose} onTranspose={setTranspose} onSection={setSection} onPasses={setPasses} />
           ) : (
             <>
               <form className="lt-chart-import-search" onSubmit={search}>
-                <input
-                  value={query}
-                  onChange={(event) => setQuery(event.target.value)}
-                  aria-label={t("chartSources.import.searchLabel")}
-                />
+                <input value={query} onChange={(event) => setQuery(event.target.value)} aria-label={t("chartSources.import.searchLabel")} />
                 <button type="submit" disabled={busy || !query.trim()}>
-                  {busy && !song ? t("chartSources.import.searching") : t("chartSources.import.search")}
+                  {busy && !picked ? t("chartSources.import.searching") : t("chartSources.import.search")}
                 </button>
               </form>
               {songs && songs.length === 0 ? <p>{t("chartSources.import.noResults")}</p> : null}
@@ -220,21 +185,17 @@ export function ChartImportDialog({ session, onClose }: Props) {
                     <li key={candidate.id}>
                       <button
                         type="button"
-                        className={candidate.id === song?.id ? "is-active" : undefined}
+                        className={candidate.id === picked?.id ? "is-active" : undefined}
                         onClick={() => pickSong(candidate)}
                       >
                         <strong>{candidate.title}</strong>
                         {candidate.author ? <span>{candidate.author}</span> : null}
                       </button>
-                      {candidate.id === song?.id && arrangements ? (
+                      {candidate.id === picked?.id && arrangements ? (
                         <ul className="lt-chart-import-arrangements" aria-label={t("chartSources.import.arrangements")}>
                           {arrangements.map((arrangement) => (
                             <li key={arrangement.id}>
-                              <button
-                                type="button"
-                                disabled={busy || !hasText(arrangement)}
-                                onClick={() => pickArrangement(arrangement)}
-                              >
+                              <button type="button" disabled={busy || !hasText(arrangement)} onClick={() => pickArrangement(arrangement)}>
                                 <span>{arrangement.name}</span>
                                 <span className="lt-chart-import-meta">
                                   {hasText(arrangement)
@@ -250,6 +211,7 @@ export function ChartImportDialog({ session, onClose }: Props) {
                   ))}
                 </ul>
               ) : null}
+              <p className="lt-chart-import-legend">{t("chartSources.import.asItComes")}</p>
             </>
           )}
           {error ? (
@@ -260,135 +222,16 @@ export function ChartImportDialog({ session, onClose }: Props) {
         </div>
 
         <div className="lt-inline-actions">
-          {review && !refreshing ? (
-            <button type="button" className="lt-secondary-button" disabled={busy} onClick={() => setReview(null)}>
-              {t("chartSources.import.back")}
-            </button>
-          ) : null}
           <button type="button" className="lt-secondary-button" disabled={busy} onClick={onClose}>
             {t("chartSources.import.cancel")}
           </button>
-          {review ? (
-            review.noMarkers ? (
-              <button type="button" className="is-primary" disabled={busy} onClick={() => apply(false)}>
-                {t("chartSources.import.importUnlinked")}
-              </button>
-            ) : (
-              <button type="button" className="is-primary" disabled={busy} onClick={() => apply(true)}>
-                {refreshing
-                  ? t("chartSources.refresh.apply")
-                  : chart
-                    ? t("chartSources.import.replace")
-                    : t("chartSources.import.apply")}
-              </button>
-            )
+          {refreshing && refresh && !refresh.upToDate ? (
+            <button type="button" className="is-primary" onClick={bringUpdate}>
+              {t("chartSources.refresh.bring")}
+            </button>
           ) : null}
         </div>
-        {review && chart && !refreshing ? (
-          <p className="lt-chart-import-note">{t("chartSources.import.replaceWarning")}</p>
-        ) : null}
       </section>
-    </div>
-  );
-}
-
-export function ReviewView({
-  review,
-  transpose,
-  onTranspose,
-  onSection,
-  onPasses,
-}: {
-  review: ImportReview;
-  transpose: boolean;
-  onTranspose: (value: boolean) => void;
-  onSection: (markerId: string, value: string) => void;
-  onPasses?: (markerId: string, passes: number) => void;
-}) {
-  const { t } = useTranslation();
-  const sectionName = (index: number) => review.doc.sections[index]?.label || `#${index + 1}`;
-  const unused = useMemo(() => review.match.unusedSections.map(sectionName), [review]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  return (
-    <div className="lt-chart-import-review">
-      {review.key.semitones ? (
-        <label className="lt-chart-import-key">
-          <input type="checkbox" checked={transpose} onChange={(event) => onTranspose(event.target.checked)} />
-          {t("chartSources.import.transpose", { source: review.key.source, song: review.key.song })}
-        </label>
-      ) : null}
-      {review.noMarkers ? (
-        <div className="lt-chart-import-warning">
-          <p>{t("chartSources.import.noMarkers")}</p>
-          <p>{t("chartSources.import.analyze")}</p>
-        </div>
-      ) : (
-        <>
-          <p className="lt-chart-import-help">{t("chartSources.import.reviewHelp")}</p>
-          {review.hasMissing ? <p className="lt-chart-import-warning" role="status">{t("chartSources.import.missing")}</p> : null}
-          {review.rows.some((row) => row.confidence !== "high") ? (
-            <p className="lt-chart-import-legend">{t("chartSources.import.legend")}</p>
-          ) : null}
-          <ul className="lt-chart-import-rows" aria-label={t("chartSources.import.reviewTitle")}>
-            {review.rows.map((row) => (
-              <li key={row.markerId} className={row.repeatOf ? "is-repeat" : undefined} data-testid="chart-import-row">
-                <span className="lt-chart-import-marker">
-                  {row.name}
-                  {row.repeatOf ? <small>{t("chartSources.import.repeatOf")}</small> : null}
-                </span>
-                <select
-                  value={row.section === null ? "" : String(row.section)}
-                  disabled={row.repeatOf !== null}
-                  aria-label={`${t("chartSources.import.section")}: ${row.name}`}
-                  onChange={(event) => onSection(row.markerId, event.target.value)}
-                >
-                  <option value="">{t("chartSources.import.none")}</option>
-                  {review.doc.sections.map((_, index) => (
-                    <option key={index} value={index}>
-                      {sectionName(index)}
-                    </option>
-                  ))}
-                </select>
-                {row.confidence !== "high" ? (
-                  <span
-                    className={`lt-chart-import-badge is-${row.confidence}`}
-                    title={t(`chartSources.import.reason.${row.reason}`)}
-                  >
-                    {t(`chartSources.import.confidence.${row.confidence}`)}
-                  </span>
-                ) : (
-                  <span className="lt-chart-import-badge is-high" title={t(`chartSources.import.reason.${row.reason}`)} />
-                )}
-                <span className="lt-chart-import-line">
-                  {row.section !== null && !row.repeatOf && onPasses ? (
-                    <select
-                      className="lt-chart-import-passes"
-                      value={row.passes}
-                      aria-label={`${t("chartSources.import.passes")}: ${row.name}`}
-                      title={t("chartSources.import.passesHelp")}
-                      onChange={(event) => onPasses(row.markerId, Number(event.target.value))}
-                    >
-                      {[1, 2, 3, 4].map((count) => (
-                        <option key={count} value={count}>
-                          ×{count}
-                        </option>
-                      ))}
-                    </select>
-                  ) : row.passes > 1 ? (
-                    <span className="lt-chart-import-meta">×{row.passes} </span>
-                  ) : null}
-                  {row.firstLine ?? ""}
-                </span>
-              </li>
-            ))}
-          </ul>
-          {unused.length > 0 ? (
-            <p className="lt-chart-import-unused">
-              {t("chartSources.import.unused")}: {unused.join(", ")}
-            </p>
-          ) : null}
-        </>
-      )}
     </div>
   );
 }

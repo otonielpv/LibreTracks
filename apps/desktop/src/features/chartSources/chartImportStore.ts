@@ -1,9 +1,22 @@
 import { create } from "zustand";
 
+import type { ImportedChart } from "@libretracks/shared/charts/importedChart";
 import type { SectionMarkerSummary, SongChart, SongRegionSummary } from "@libretracks/shared/models";
 
 /**
- * The Planning Center import open for one song. Lives outside the views (like
+ * A sheet brought in as it comes, waiting for "Adjust to the sequence": the
+ * text and the source's hints (sequence, key), plus, for an update from the
+ * source, what to keep of the current links.
+ */
+export type AdjustInput = {
+  imported: ImportedChart;
+  locked?: ReadonlyArray<{ markerId: string; section: number | null }>;
+  passOverrides?: Readonly<Record<string, number>>;
+  keepLineBeats?: Readonly<Record<string, { section: number; lineBeats: number[] }>>;
+};
+
+/**
+ * The Planning Center picker open for one song. Lives outside the views (like
  * `chartEditorStore`) so turning the phone or a view re-mounting does not
  * close it. Mounted by `ChartImportHost` in `LyricsRoot`.
  */
@@ -12,13 +25,11 @@ export type ChartImportSession = {
   /** The song's section markers in timeline order, repeats included. */
   markers: SectionMarkerSummary[];
   chart: SongChart | null;
-  /** The song's existing chart action. Absent when opened from the song
-   * menu: the host then saves with `set_song_region_chart`, as the editor. */
-  onSave?: (chart: SongChart) => Promise<void>;
-  /** Seconds per beat at a song position, to measure markers in beats. */
-  secondsPerBeatAt?: (seconds: number) => number;
-  /** "refresh": update the imported `chart` from its source (08). */
+  /** "refresh": bring the imported `chart`'s arrangement again (08). */
   mode?: "import" | "refresh";
+  /** Opened from the chart editor: the picked sheet goes back to it. From
+   * the song menu (absent), the host opens the editor with it. */
+  onPicked?: (input: AdjustInput) => void;
 };
 
 type ChartImportState = {

@@ -11,7 +11,7 @@ import { matchChartToMarkers, type ChartMatch, type MatchConfidence, type MatchR
 import { chartLinkFor, chartLinkMarkerId } from "./chartSync";
 import { parseChordPro, serializeChordPro, transposeChart, type ChartDoc, type ChartSection } from "./chordChart";
 import { keyPrefersFlats, keySemitonesBetween } from "./chordNotation";
-import { chartTextHash, normalizeImportedChart, type ImportedChart } from "./importedChart";
+import { chartTextHash, normalizeImportedChart, type ImportedChart, type SheetChange } from "./importedChart";
 import { isLyricless } from "./sectionVocab";
 
 /**
@@ -41,6 +41,8 @@ export type ImportReview = {
   sequence: string[] | undefined;
   /** Repeats read from the source's marks, for the matcher (not saved). */
   repeats: number[] | undefined;
+  /** What the cleanup changes in the sheet, shown before applying. */
+  changes: SheetChange[];
   match: ChartMatch;
   locked: ReadonlyArray<{ markerId: string; section: number | null }>;
   rows: ReviewRow[];
@@ -251,6 +253,7 @@ export function buildImportReview(
     doc,
     sequence: normalized.sequence,
     repeats: normalized.repeats,
+    changes: normalized.changes,
     match: { links: [], items: [], unusedSections: [] },
     locked,
     rows: [],

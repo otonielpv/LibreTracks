@@ -37,6 +37,17 @@ export class ChartImportError extends Error {
   }
 }
 
+/** One thing the cleanup did to the sheet, for the "changes in the sheet"
+ * list of the adjust review: nothing changes without the user seeing it. */
+export type SheetChange =
+  | { kind: "layout"; count: number }
+  | { kind: "headerChords"; label: string }
+  | { kind: "repeatMarks"; label: string }
+  | { kind: "reference"; label: string }
+  | { kind: "repeatLine"; label: string }
+  | { kind: "duplicate"; label: string }
+  | { kind: "emptyHeader"; label: string };
+
 /** Planning Center's page and column marks, never part of the song. */
 const LAYOUT_MARK = /^\s*(?:COLUMN_BREAK|PAGE_BREAK)\s*$/i;
 
@@ -92,7 +103,7 @@ function sameSection(left: ChartSection, right: ChartSection): boolean {
  */
 /** "INTRO  E  C#m  A   B" (Planning Center's header with the chords on the
  * same line) → the header, and the chords as a line of their own. */
-function splitHeaderWithChords(text: string): string {
+function splitHeaderWithChords(text: string, changes: SheetChange[] = []): string {
   return text
     .split("\n")
     .flatMap((line) => {
@@ -102,7 +113,9 @@ function splitHeaderWithChords(text: string): string {
         const header = tokens.slice(0, size).join(" ");
         const rest = tokens.slice(size);
         const chords = rest.every((token) => isChord(token) || isChordLineFiller(token)) && rest.some(isChord);
-        if (chords && parseSectionHeader(header)) {
+        const parsed = chords ? parseSectionHeader(header) : null;
+        if (parsed) {
+          changes.push({ kind: "headerChords", label: parsed.label });
           return [header, rest.map((token) => (isChord(token) ? `[${token}]` : token)).join(" ")];
         }
       }
@@ -122,7 +135,7 @@ const CLOSE_MARK = /\s*(\/{2,})\s*$/;
  * marks, or a header ending in them ("INTRO //"), reports how many times, so
  * the matcher may let two markers in a row stay on it.
  */
-function foldRepeatMarks(section: ChartSection): { section: ChartSection; repeat: number } {
+function foldRepeatMarks(section: ChartSection): { section: ChartSection; repeat: number; marks: boolean } {
   const bare = section.label.replace(/\s*(\/{2,})\s*$/, "");
   const headerMarks = /(\/{2,})\s*$/.exec(section.label)?.[1].length ?? 0;
   const label = parseSectionHeader(bare)?.label ?? bare;
@@ -155,7 +168,7 @@ function foldRepeatMarks(section: ChartSection): { section: ChartSection; repeat
   const whole =
     blocks.length === 1 && blocks[0].from === lyricIndexes[0] && blocks[0].to === lyricIndexes[lyricIndexes.length - 1];
   const repeat = Math.max(headerMarks, whole ? blocks[0].count : 1, sectionRepeat(label));
-  return { section: { ...section, label, lines }, repeat };
+  return { section: { ...section, label, lines }, repeat, marks: headerMarks > 0 || blocks.length > 0 };
 }
 
 export function normalizeImportedChart(chart: ImportedChart): {
@@ -164,9 +177,15 @@ export function normalizeImportedChart(chart: ImportedChart): {
   /** Times each section of `text` is played in a row, when the sheet says
    * (Planning Center's "// … //"). Import-time only: not stored. */
   repeats?: number[];
+  /** What the cleanup changed, in order. Empty: the sheet stays as it was. */
+  changes: SheetChange[];
 } {
-  const doc = parseChordPro(splitHeaderWithChords(stripLayoutMarks(chart.text)));
+  const changes: SheetChange[] = [];
+  const layout = chart.text.split(/\r?\n/).filter((line) => LAYOUT_MARK.test(line)).length;
+  if (layout > 0) changes.push({ kind: "layout", count: layout });
+  const doc = parseChordPro(splitHeaderWithChords(stripLayoutMarks(chart.text), changes));
   const folded = doc.sections.map(foldRepeatMarks);
+  for (const { section, marks } of folded) if (marks) changes.push({ kind: "repeatMarks", label: section.label });
   const repeatOf = new Map(folded.map(({ section, repeat }) => [section, repeat] as const));
   doc.sections = folded.map(({ section }) => section);
   const kept: ChartSection[] = [];
@@ -194,6 +213,7 @@ export function normalizeImportedChart(chart: ImportedChart): {
       const match = line.kind !== "tab" ? REPEAT_INSTRUCTION.exec(lineText(line)) : null;
       if (!match || !referenceMeaning(match[1].replace(/\s*\(?\s*(?:x\s?\d|\d\s?x)\s*\)?\s*$/i, ""))) return true;
       instructions.push({ label: match[1].replace(/\s*\(?\s*(?:x\s?\d|\d\s?x)\s*\)?\s*$/i, ""), count: repeatCount(match[1]) });
+      changes.push({ kind: "repeatLine", label: lineText(line) });
       return false;
     });
     // The label was tidied by `foldRepeatMarks` ("VERSE 1" → "Verse 1").
@@ -203,7 +223,10 @@ export function normalizeImportedChart(chart: ImportedChart): {
     if (cleaned.lines.length === 0 && cleaned.label) {
       if (next && next.lines.length > 0 && sameSection(cleaned, next)) {
         // `{soc}` followed by its own "CHORUS" header.
-      } else if (!refer(cleaned.label, repeatCount(cleaned.label))) {
+        changes.push({ kind: "emptyHeader", label: cleaned.label });
+      } else if (refer(cleaned.label, repeatCount(cleaned.label))) {
+        changes.push({ kind: "reference", label: cleaned.label });
+      } else {
         kept.push(cleaned);
         keptRepeats.push(repeatOf.get(section) ?? 1);
         implicit.push(cleaned.label);
@@ -215,6 +238,7 @@ export function normalizeImportedChart(chart: ImportedChart): {
       if (twin) {
         implicit.push(twin.label);
         referenced = true;
+        changes.push({ kind: "duplicate", label: cleaned.label });
       } else if (cleaned.label || cleaned.lines.length > 0) {
         kept.push(cleaned);
         keptRepeats.push(repeatOf.get(section) ?? 1);
@@ -227,7 +251,7 @@ export function normalizeImportedChart(chart: ImportedChart): {
   const text = serializeChordPro({ ...doc, sections: kept });
   const sequence = chart.sequence?.length ? chart.sequence : referenced ? implicit : undefined;
   const repeats = keptRepeats.some((count) => count > 1) ? keptRepeats : undefined;
-  return { text, ...(sequence ? { sequence } : {}), ...(repeats ? { repeats } : {}) };
+  return { text, ...(sequence ? { sequence } : {}), ...(repeats ? { repeats } : {}), changes };
 }
 
 /** One item of a Planning Center sequence (`sequence_full`): the number comes
@@ -284,6 +308,8 @@ export function planningCenterToImported(arrangement: PcoArrangement, item?: Pco
   const lyrics = stripLayoutMarks(arrangement.lyrics ?? "").trim();
   const raw = chordChart || lyrics;
   if (!raw) throw new ChartImportError("noText");
+  // As it comes: converted to ChordPro, never cleaned or adjusted here. The
+  // user adjusts it to the song with "Adjust to the sequence".
   const text = looksLikeChordPro(raw) ? raw : chordProFromText(raw);
   const key = item?.keyName?.trim() || arrangement.chordChartKey?.trim() || null;
   const sequence = sequenceLabels(item?.customArrangementSequenceFull) ?? sequenceLabels(arrangement.sequenceFull);

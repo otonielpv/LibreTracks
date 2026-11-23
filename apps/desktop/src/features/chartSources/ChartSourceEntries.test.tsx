@@ -1,4 +1,4 @@
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, renderHook, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { SongChart, SongRegionSummary, SongView } from "@libretracks/shared/models";
@@ -25,6 +25,7 @@ import { useChartImportStore } from "./chartImportStore";
 import { INITIAL_CHART_SOURCE_STATE, useChartSourceStore } from "./chartSourceStore";
 import { PlanImportButton } from "./PlanImportButton";
 import { usePlanImportStore } from "./planImportStore";
+import { useChartSourcesAvailable } from "./useChartSourcesAvailable";
 
 const imported: SongChart = {
   text: "{section: Coro}\n[C]Luz\n",
@@ -63,7 +64,7 @@ describe("the song menu entries", () => {
     const session = useChartImportStore.getState().session;
     expect(session).toMatchObject({ mode: "refresh", chart: imported, region: { id: "r1" } });
     expect(session?.markers.map((marker) => marker.id)).toEqual(["c"]);
-    expect(session?.onSave).toBeUndefined();
+    expect(session?.onPicked).toBeUndefined();
   });
 
   it("is not there with the flag off, for a network guest or a backup", () => {
@@ -94,5 +95,16 @@ describe("the plan button in the setlist", () => {
     render(<PlanImportButton />);
     await act(async () => {});
     expect(screen.queryByRole("button")).toBeNull();
+  });
+});
+
+describe("who may bring charts from Planning Center", () => {
+  it("not a network guest, not a backup", () => {
+    expect(renderHook(() => useChartSourcesAvailable()).result.current).toBe(true);
+    api.isGuestMirrorMode.mockReturnValue(true);
+    expect(renderHook(() => useChartSourcesAvailable()).result.current).toBe(false);
+    api.isGuestMirrorMode.mockReturnValue(false);
+    useRedundancyStore.setState({ status: { role: "backup" } as never });
+    expect(renderHook(() => useChartSourcesAvailable()).result.current).toBe(false);
   });
 });
