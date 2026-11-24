@@ -8,14 +8,14 @@ use std::path::{Path, PathBuf};
 use std::time::Instant;
 
 use libretracks_core::{
-    effective_bpm_at, Clip, Marker, MarkerKind, Song, SongRegion, TempoMarker, TimeSignatureMarker,
-    Track, TrackKind,
+    effective_bpm_at, Clip, Marker, MarkerKind, MidiClip, MidiEvent, Song, SongRegion, TempoMarker,
+    TimeSignatureMarker, Track, TrackKind,
 };
 
 use crate::audio::engine::{audio_debug_logging_enabled, AudioController};
 use crate::external_project::{
-    detect_external_project_kind, parse_ableton_project, parse_reaper_project, ExternalProjectKind,
-    ReaperProject,
+    detect_external_project_kind, parse_ableton_project, parse_reaper_project,
+    ExternalMidiItem, ExternalProjectKind, ReaperProject, ReaperTrack,
 };
 use crate::infra::error::DesktopError;
 use crate::models::SongPackageImportResponse;
@@ -125,9 +125,13 @@ impl DesktopSession {
             }
         }
 
-        if source_paths.is_empty() {
+        let has_midi = project
+            .tracks
+            .iter()
+            .any(|track| !track.midi_items.is_empty());
+        if source_paths.is_empty() && !has_midi {
             return Err(DesktopError::AudioCommand(
-                "el proyecto Reaper no contiene items de audio importables".into(),
+                "el proyecto no contiene audio ni MIDI importable".into(),
             ));
         }
         eprintln!(
@@ -155,11 +159,18 @@ impl DesktopSession {
             })
             .collect::<Result<Vec<_>, DesktopError>>()?;
 
-        let import_outcome = import_audio_files_from_paths_to_library(
-            &song_dir,
-            Some(&current_song),
-            &import_payloads,
-        )?;
+        let import_outcome = if import_payloads.is_empty() {
+            crate::models::LibraryImportResult {
+                assets: Vec::new(),
+                skipped: Vec::new(),
+            }
+        } else {
+            import_audio_files_from_paths_to_library(
+                &song_dir,
+                Some(&current_song),
+                &import_payloads,
+            )?
+        };
         eprintln!(
             "[libretracks-import] imported assets count={} skipped={}",
             import_outcome.assets.len(),
@@ -202,7 +213,16 @@ impl DesktopSession {
             .clips
             .iter()
             .map(|clip| clip.id.clone())
+            .chain(next_song.midi_clips.iter().map(|clip| clip.id.clone()))
             .collect::<HashSet<_>>();
+        // Ports the source DAW named are kept only when this machine has an
+        // output by that name; otherwise the track falls back to the app-wide
+        // output instead of sending to a port that is not there.
+        let available_midi_outputs = if has_midi {
+            crate::midi::output::get_midi_output_names().unwrap_or_default()
+        } else {
+            Vec::new()
+        };
 
         let import_debug_enabled = audio_debug_logging_enabled();
         if import_debug_enabled {
@@ -228,14 +248,14 @@ impl DesktopSession {
         let use_inferred_folder_groups = imported_tracks
             .iter()
             .all(|track| track.folder_depth_delta == 0)
-            && imported_tracks.iter().any(|track| track.items.is_empty())
-            && imported_tracks.iter().any(|track| !track.items.is_empty());
+            && imported_tracks.iter().any(|track| !track.has_content())
+            && imported_tracks.iter().any(ReaperTrack::has_content);
 
         let mut inferred_parent_by_index = HashMap::<usize, usize>::new();
         if use_inferred_folder_groups {
             let mut active_parent_index = None::<usize>;
             for (index, track) in imported_tracks.iter().enumerate() {
-                if track.items.is_empty() {
+                if !track.has_content() {
                     active_parent_index = Some(index);
                     continue;
                 }
@@ -273,6 +293,10 @@ impl DesktopSession {
             } else {
                 track.folder_depth_delta > 0
             };
+            // A track with only MIDI becomes a MIDI track; one with audio AND
+            // MIDI (Reaper allows it) keeps its audio and gets a MIDI track
+            // right after it.
+            let is_midi_only = !is_folder_track && track.items.is_empty() && !track.midi_items.is_empty();
             let track_id = unique_song_entity_id("track", &track.name, &mut used_track_ids);
             if import_debug_enabled {
                 eprintln!(
@@ -292,6 +316,8 @@ impl DesktopSession {
                 name: track.name.clone(),
                 kind: if is_folder_track {
                     TrackKind::Folder
+                } else if is_midi_only {
+                    TrackKind::Midi
                 } else {
                     TrackKind::Audio
                 },
@@ -309,8 +335,12 @@ impl DesktopSession {
                 channel_mode: Default::default(),
                 color: None,
                 auto_created: false,
-                midi_port: None,
-                midi_channel: 1,
+                midi_port: if is_midi_only {
+                    matching_midi_output(track.midi_port.as_deref(), &available_midi_outputs)
+                } else {
+                    None
+                },
+                midi_channel: track.midi_channel.unwrap_or(1),
                 midi_enabled: true,
                 collapsed: false,
                 height_offset: None,
@@ -318,6 +348,58 @@ impl DesktopSession {
                 song_region_id: None,
             });
             imported_track_ids_by_index.push(track_id.clone());
+
+            if !track.midi_items.is_empty() {
+                let midi_track_id = if is_midi_only {
+                    track_id.clone()
+                } else {
+                    let name = format!("{} MIDI", track.name);
+                    let midi_track_id = unique_song_entity_id("track", &name, &mut used_track_ids);
+                    next_song.tracks.push(Track {
+                        eq: None,
+                        id: midi_track_id.clone(),
+                        name,
+                        kind: TrackKind::Midi,
+                        parent_track_id: parent_track_id.clone(),
+                        volume: 1.0,
+                        pan: 0.0,
+                        muted: false,
+                        solo: false,
+                        transpose_enabled: true,
+                        audio_to: if parent_track_id.is_some() {
+                            "inherit".to_string()
+                        } else {
+                            "master".to_string()
+                        },
+                        channel_mode: Default::default(),
+                        color: None,
+                        auto_created: false,
+                        midi_port: matching_midi_output(
+                            track.midi_port.as_deref(),
+                            &available_midi_outputs,
+                        ),
+                        midi_channel: track.midi_channel.unwrap_or(1),
+                        midi_enabled: true,
+                        collapsed: false,
+                        height_offset: None,
+                        match_aliases: Vec::new(),
+                        song_region_id: None,
+                    });
+                    midi_track_id
+                };
+                let track_channel = track.midi_channel.unwrap_or(1);
+                for item in &track.midi_items {
+                    let clip_id = unique_song_entity_id("midi-clip", &track.name, &mut used_clip_ids);
+                    next_song.midi_clips.push(build_imported_midi_clip(
+                        item,
+                        clip_id,
+                        &midi_track_id,
+                        insert_at_seconds,
+                        track_channel,
+                    ));
+                    created_clip_count += 1;
+                }
+            }
 
             for item in track.items {
                 if item.muted {
@@ -373,7 +455,7 @@ impl DesktopSession {
 
         if created_clip_count == 0 {
             return Err(DesktopError::AudioCommand(
-                "no se pudieron convertir clips de Reaper".into(),
+                "no se pudieron convertir clips del proyecto".into(),
             ));
         }
         eprintln!(
@@ -667,7 +749,11 @@ pub fn parse_external_project(project_path: &str) -> Result<ReaperProject, Deskt
         .filter(|item| !item.muted)
         .map(|item| &item.source_path)
         .collect::<Vec<_>>();
+    let has_midi = parsed.tracks.iter().any(|track| !track.midi_items.is_empty());
     let Some(first_source) = sources.first() else {
+        if has_midi {
+            return Ok(parsed);
+        }
         return Err(DesktopError::AudioCommand(
             "el proyecto no contiene audio importable".into(),
         ));
@@ -681,6 +767,54 @@ pub fn parse_external_project(project_path: &str) -> Result<ReaperProject, Deskt
     }
 
     Ok(parsed)
+}
+
+/// The machine's output whose name matches the one the source DAW saved
+/// (ignoring case; Live may add or drop a suffix, so containment counts).
+fn matching_midi_output(wanted: Option<&str>, available: &[String]) -> Option<String> {
+    let wanted = wanted?.trim().to_lowercase();
+    if wanted.is_empty() {
+        return None;
+    }
+    available
+        .iter()
+        .find(|name| name.trim().to_lowercase() == wanted)
+        .or_else(|| {
+            available.iter().find(|name| {
+                let name = name.trim().to_lowercase();
+                name.contains(&wanted) || wanted.contains(&name)
+            })
+        })
+        .cloned()
+}
+
+fn build_imported_midi_clip(
+    item: &ExternalMidiItem,
+    clip_id: String,
+    track_id: &str,
+    insert_at_seconds: f64,
+    track_channel: u8,
+) -> MidiClip {
+    let events = item
+        .events
+        .iter()
+        .enumerate()
+        .map(|(index, event)| MidiEvent {
+            id: format!("{clip_id}-ev{index}"),
+            at_seconds: event.at_seconds.max(0.0),
+            channel: event.channel.filter(|channel| *channel != track_channel),
+            kind: event.kind.clone(),
+        })
+        .collect();
+    MidiClip {
+        id: clip_id,
+        track_id: track_id.to_string(),
+        timeline_start_seconds: insert_at_seconds + item.position_seconds.max(0.0),
+        name: item.name.clone(),
+        events,
+        color: None,
+        lead: None,
+    }
 }
 
 fn normalize_external_source_key(path: &Path) -> String {
@@ -858,7 +992,7 @@ fn ensure_unique_imported_song_entity_ids(song: &mut Song) {
 #[cfg(test)]
 mod tests {
     use super::{append_imported_section_marker, parse_external_project};
-    use libretracks_core::{MarkerCategory, MarkerKind, Song};
+    use libretracks_core::{MarkerCategory, MarkerKind, Song, TrackKind};
     use std::fs;
 
     #[test]
@@ -965,5 +1099,44 @@ mod tests {
         let path = temp.path().join("song.txt");
         fs::write(&path, b"x").expect("write");
         assert!(parse_external_project(path.to_string_lossy().as_ref()).is_err());
+    }
+
+    #[test]
+    fn a_midi_only_project_imports_as_midi_tracks_and_clips() {
+        let song: Song = serde_json::from_value(serde_json::json!({
+            "id": "midi-import", "title": "Vacia", "durationSeconds": 10.0,
+            "bpm": 120.0, "timeSignature": "4/4",
+            "tracks": [], "clips": [], "sectionMarkers": [], "regions": []
+        }))
+        .expect("empty song");
+        let mut session = crate::state::tests::session_with_song_dir("midi-import", song);
+        let temp = tempfile::tempdir().expect("tempdir");
+        let project = temp.path().join("letras.rpp");
+        fs::write(
+            &project,
+            "<REAPER_PROJECT 0.1 \"7.0/x64\" 1\n  TEMPO 120 4 4\n  <TRACK\n    NAME \"Letras\"\n    <ITEM\n      POSITION 1.0\n      LENGTH 2.0\n      <SOURCE MIDI\n        HASDATA 1 960 QN\n        E 0 93 3c 64\n        E 480 83 3c 00\n        E 0 c3 02 00\n        E 480 b0 7b 00\n      >\n    >\n  >\n>\n",
+        )
+        .expect("write rpp");
+
+        let audio = crate::audio::engine::AudioController::default();
+        session
+            .import_external_project(project.to_str().expect("utf8"), 0.0, &audio)
+            .expect("a MIDI-only project imports");
+
+        let song = session.engine.song().expect("song");
+        let track = song
+            .tracks
+            .iter()
+            .find(|track| track.name == "Letras")
+            .expect("imported track");
+        assert_eq!(track.kind, TrackKind::Midi);
+        assert_eq!(track.midi_channel, 4);
+        assert_eq!(song.midi_clips.len(), 1);
+        let clip = &song.midi_clips[0];
+        assert_eq!(clip.track_id, track.id);
+        assert!((clip.timeline_start_seconds - 1.0).abs() < 1e-6);
+        assert_eq!(clip.events.len(), 2);
+        // Same channel as the track: no per-event override.
+        assert!(clip.events.iter().all(|event| event.channel.is_none()));
     }
 }
