@@ -3,18 +3,107 @@ import SiteLayout from "../layouts/SiteLayout.astro";
 import StoreBadges from "./StoreBadges.astro";
 import "../styles/home.css";
 
-// Both locales used to be two hand-synced copies of the same 200-line page.
+// The locales used to be hand-synced copies of the same 200-line page.
 // The markup lives here once; only the copy differs.
 interface Props {
-  lang: "en" | "es";
+  lang: "en" | "es" | "pt";
 }
 
 const { lang } = Astro.props;
 const es = lang === "es";
-const prefix = es ? "/es" : "";
-const shots = `/screenshots/home/${lang}`;
+const pt = lang === "pt";
+const prefix = es ? "/es" : pt ? "/pt" : "";
+// Docs, guides and screenshots exist in English and Spanish only. The app has
+// no Portuguese interface either, so the Portuguese page shows the English UI.
+const docsPrefix = es ? "/es" : "";
+const shots = `/screenshots/home/${es ? "es" : "en"}`;
 
-const t = es
+const PT = {
+  title: "Player Multitrack Grátis para Tocar ao Vivo | LibreTracks",
+  description:
+    "Player multitrack grátis e de código aberto para tocar ao vivo com playback: stems, click, guia falada, MIDI, mudança de tom e controle pelo celular.",
+  badge: "Grátis e de código aberto",
+  h1: "Player multitrack para tocar ao vivo",
+  lead: "LibreTracks é um programa grátis para tocar com playback e multitracks. Organiza o show por músicas: faixas, click, guia falada, marcadores e saídas de áudio. Prepare na timeline, ensaie na Visão Compacta e toque ao vivo com saltos musicais, mudança de tom e andamento, MIDI e controle remoto pelo celular.",
+  download: "Baixar grátis",
+  howTo: "Como usar (em inglês)",
+  heroAlt: "Timeline do LibreTracks com três músicas, marcadores de seção e faixas com forma de onda",
+  phoneAlt: "Visão Live do LibreTracks no celular com os marcadores da música",
+  facts: [
+    ["Preço", "Grátis"],
+    ["Licença", "AGPL-3.0"],
+    ["Idioma do app", "Inglês e espanhol"],
+    ["Funciona em", "Windows · macOS · Linux · Android · iOS"],
+  ],
+  purposeEyebrow: "Para que serve",
+  purposeTitle: "Transforme seus multitracks em um show sob controle.",
+  purposeLead:
+    "LibreTracks não tenta substituir a sua DAW de produção. É uma ferramenta de palco que recebe faixas prontas, organiza por músicas e dá ao operador controles previsíveis para ensaio e show.",
+  capabilities: [
+    ["Multitracks organizados por música", "Organize o show como músicas, cada uma com suas regiões, clipes, andamento, volume master, marcadores e pacotes reutilizáveis."],
+    ["Controle musical ao vivo", "Use saltos para marcadores, saltos entre músicas, loops Vamp, modos de transição, atalhos e mapeamentos MIDI numa superfície focada."],
+    ["Mudança de tom e andamento", "Transponha músicas, ajuste o áudio ao andamento da timeline com Warp e escolha quais faixas acompanham a mudança de tom com o botão T de cada faixa."],
+    ["Saídas e controle remoto", "Mande faixas, click, cues, guia falada e buses de pasta para as saídas certas, e controle transporte e mixagem pelo celular ou tablet."],
+  ],
+  viewsEyebrow: "Uma sessão, cinco telas",
+  viewsTitle: "Prepare na timeline. Toque pela lista de músicas.",
+  viewsLead:
+    "Todas as telas mostram o mesmo projeto: clipes, saídas, músicas, cores e mixagem ficam sincronizados.",
+  views: [
+    ["timeline", "Timeline linear", "Monte o show", "Uma tela no estilo DAW para organizar faixas, editar clipes, revisar marcadores e preparar a estrutura do show.", "Timeline do LibreTracks com regiões de música e marcadores", 1440, 900],
+    ["setlist", "Visão Setlist", "Toque o repertório", "Suas músicas em cartões no topo, o mapa de seções sobre a forma de onda e o mixer da música embaixo. Salte de seção com um toque e troque de música sem sair da tela.", "Visão Setlist do LibreTracks com as músicas em cartões, as seções sobre a forma de onda e o mixer", 1200, 750],
+    ["compact", "Visão Compacta", "Ensaie música por música", "Uma tela pensada em músicas para ensaio e show, com colunas, controles de reprodução, faders master e mixer compartilhado.", "Visão Compacta do LibreTracks com uma coluna por música e o mixer", 1200, 750],
+    ["live", "Visão Live", "Legível do palco", "As seções da música em botões grandes, com o marcador atual, o próximo e o modo de salto à vista. Um toque dispara a seção.", "Visão Live do LibreTracks com os marcadores da música em botões grandes", 1200, 750],
+    ["remote", "Remote", "Controle de outro aparelho", "Abra o controle remoto no celular ou tablet para comandar o transporte, saltar entre seções e ajustar a mixagem sem tocar no computador.", "Controles do Remote do LibreTracks: transporte, saltos, músicas e marcadores", 1200, 659],
+  ],
+  viewsPrimary: "Sua primeira música (vídeo, em inglês)",
+  viewsSecondary: "Todos os guias (em inglês)",
+  workflowEyebrow: "Fluxo",
+  workflowTitle: "Das faixas ao repertório pronto para tocar.",
+  workflow: [
+    ["Monte a biblioteca", "Importe os áudios prontos, organize em pastas virtuais e reutilize músicas com pacotes do LibreTracks."],
+    ["Dê forma ao repertório", "Organize os clipes numa timeline musical, crie regiões de música, use cores em sessões grandes e coloque marcadores onde acontecem as decisões ao vivo."],
+    ["Ensaie e toque", "Mude para a Visão Compacta para ver uma coluna por música, ajustar a mixagem, disparar músicas e ler o repertório sob pressão."],
+  ],
+  videoLabel: "Importação de áudio na biblioteca do LibreTracks",
+  pause: "Pausar animação",
+  play: "Reproduzir animação",
+  controlEyebrow: "Controle ao vivo",
+  controlTitle: "Deixe o show flexível sem transformá-lo numa sessão de produção.",
+  controlLead:
+    "LibreTracks mantém as operações de palco perto da intenção musical: saltar para seções, segurar um Vamp, passar de uma música para outra, transpor o repertório, mandar cues e entregar a mixagem a outro aparelho.",
+  control: [
+    ["Saltos ao vivo", "Dispare seções na hora, no próximo marcador, depois de alguns compassos ou no fim da música, com transições opcionais."],
+    ["Warp e transposição", "Mude o andamento ou o tom por região de música mantendo click, guia e referências sob controle."],
+    ["Saídas de palco", "Use faixas de áudio, faixas de pasta, roteamento herdado, metrônomo, saídas da interface, MIDI Learn e controle remoto pelo celular."],
+  ],
+  fitEyebrow: "Onde se encaixa",
+  fitTitle: "Use a sua DAW para produzir. Use o LibreTracks no show.",
+  fitLead:
+    "LibreTracks complementa ferramentas como Reaper, Ableton Live, Logic ou Cubase levando o áudio pronto para um fluxo dedicado de playback ao vivo.",
+  fitLabel: "Comparação: DAW de estúdio e LibreTracks",
+  fitHead: ["Necessidade", "DAW de estúdio", "LibreTracks"],
+  fit: [
+    ["Produção", "Componha, grave, edite, mixe e crie timbres na sua DAW de estúdio.", "Traga o áudio pronto para uma sessão de playback focada no show."],
+    ["Preparar o repertório", "Uma DAW pode fazer isso, mas costuma depender de cenas, ações ou templates de roteamento próprios.", "Monte músicas, marcadores, clipes, saídas, pacotes e controles ao vivo em torno do repertório."],
+    ["Decisões ao vivo", "Flexível, mas presa à complexidade de uma sessão de produção.", "Use controles dedicados para Vamp, saltos, transições, transposição, saídas, MIDI e mixagem remota."],
+    ["Superfície de palco", "Poderosa para operadores que precisam do ambiente de produção inteiro.", "Focada em músicos, diretores musicais e operadores de playback que tocam shows preparados."],
+  ],
+  alternatives: [
+    ["/pt/alternativa-playback-multitracks/", "Alternativa grátis ao Playback"],
+    ["/alternatives/", "Outras alternativas (em inglês)"],
+    ["/ableton-live-alternative/", "vs Ableton Live (em inglês)"],
+    ["/ableset-alternative/", "vs AbleSet (em inglês)"],
+  ],
+  ctaTitle: "Leve suas faixas para o próximo show.",
+  ctaLead: "Baixe o LibreTracks, importe seus multitracks e tenha o repertório pronto para ensaiar hoje.",
+  ctaDocs: "Ler a documentação (em inglês)",
+  guidesPath: "/guides/",
+};
+
+const t = pt
+  ? PT
+  : es
   ? {
       title: "Reproductor Multitrack Gratis para Directo | LibreTracks",
       description:
@@ -91,6 +180,7 @@ const t = es
         ["/es/alternativa-ableton-live/", "Frente a Ableton Live"],
         ["/es/alternativa-reaper-directo/", "Frente a Reaper"],
         ["/es/alternativa-playback-multitracks/", "Frente a Playback"],
+        ["/es/alternativa-ableset/", "Frente a AbleSet"],
         ["/es/alternativa-prime-worship/", "Frente a Prime"],
       ],
       ctaTitle: "Lleva tus pistas al próximo directo.",
@@ -174,6 +264,7 @@ const t = es
         ["/ableton-live-alternative/", "vs Ableton Live"],
         ["/reaper-live-alternative/", "vs Reaper"],
         ["/playback-multitracks-alternative/", "vs Playback"],
+        ["/ableset-alternative/", "vs AbleSet"],
         ["/prime-worship-alternative/", "vs Prime"],
       ],
       ctaTitle: "Take your stems to the next show.",
@@ -273,7 +364,7 @@ const t = es
           ))}
         </div>
         <div class="hero-actions home-actions">
-          <a class="button-link primary" href={`${prefix}/docs/start/first-song/`}>{t.viewsPrimary}</a>
+          <a class="button-link primary" href={`${docsPrefix}/docs/start/first-song/`}>{t.viewsPrimary}</a>
           <a class="button-link" href={t.guidesPath}>{t.viewsSecondary}</a>
         </div>
       </div>
@@ -384,7 +475,7 @@ const t = es
           <a class="button-link primary" href={`${prefix}/download/`}>
             <span class="home-play" aria-hidden="true"></span>{t.download}
           </a>
-          <a class="button-link" href={`${prefix}/docs/`}>{t.ctaDocs}</a>
+          <a class="button-link" href={`${docsPrefix}/docs/`}>{t.ctaDocs}</a>
         </div>
         <StoreBadges lang={lang} />
       </div>

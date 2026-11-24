@@ -1,0 +1,101 @@
+---
+// Portuguese pair of the Playback comparison. Brazil is the fourth country by
+// clicks with no Portuguese page; worship teams there search for Playback by
+// name, so this is the comparison worth translating first.
+import AlternativePage from "../../components/AlternativePage.astro";
+
+const rows = [
+  [
+    "Modelo",
+    "Serviço por assinatura: você paga enquanto usar.",
+    "Software grátis e de código aberto (AGPL-3.0). Sem mensalidade, sem conta.",
+  ],
+  [
+    "De onde vêm as faixas",
+    "Do catálogo de multitracks licenciados, prontos para usar.",
+    "De onde você trouxer: compradas, produzidas pela sua equipe ou exportadas da sua DAW.",
+  ],
+  [
+    "Onde roda",
+    "Pensado principalmente para tablet e celular.",
+    "Windows, macOS, Linux, Android e iOS. O equipamento que você já tem serve.",
+  ],
+  [
+    "Internet",
+    "O catálogo e a conta ficam na nuvem.",
+    "Tudo é local. Depois de instalado, funciona offline.",
+  ],
+  [
+    "Preparar o repertório",
+    "Você escolhe músicas do catálogo e ajusta a instrumentação.",
+    "Você monta a sessão com suas faixas, marcadores, saídas e mixagem, e reutiliza.",
+  ],
+  [
+    "Guia falada e click",
+    "Incluídos, é uma das marcas do serviço.",
+    "Incluídos: guia falada em inglês ou espanhol e metrônomo, cada um com a sua saída.",
+  ],
+  [
+    "Se parar de pagar",
+    "Perde o acesso ao serviço.",
+    "Não há nada para pagar. O programa e as suas sessões são seus.",
+  ],
+];
+
+const strengths = [
+  [
+    "Suas faixas, sem mensalidade",
+    "Se a sua equipe já produz as próprias faixas, ou compra músicas avulsas, o LibreTracks toca tudo com controles de palco sem somar uma assinatura.",
+  ],
+  [
+    "Guia falada e contagem",
+    "Anuncia a próxima seção (refrão, verso, ponte) e conta a entrada antes do primeiro tempo, para ninguém precisar olhar a tela.",
+  ],
+  [
+    "Tom por música",
+    "Transponha uma música para o tom de quem canta no domingo e escolha com o botão T quais faixas acompanham a mudança.",
+  ],
+  [
+    "Roda no notebook da igreja",
+    "É um app nativo e leve, com saídas da interface de áudio, MIDI Learn e controle remoto pelo celular para quem está na mesa.",
+  ],
+];
+
+const limits = [
+  "O LibreTracks não tem catálogo de faixas. Se você precisa baixar multitracks prontos e licenciados de músicas conhecidas, é isso que o Playback faz e nós não.",
+  "Aqui as faixas são suas. Se a equipe não produz nem compra multitracks, um programa grátis não resolve o problema de fundo, que é conseguir o áudio.",
+  "A interface do app e a guia falada estão em inglês e espanhol, não em português.",
+  "Se a sua equipe está bem com a assinatura e ninguém quer mexer no sistema antes do domingo, mudar tem um custo real de tempo. Teste num ensaio durante a semana.",
+];
+
+const faq = [
+  [
+    "Existe uma alternativa grátis ao Playback da MultiTracks?",
+    "O LibreTracks é uma alternativa grátis e de código aberto se você já tem os seus próprios stems. Inclui player, click, guia falada, mudança de tom, MIDI e controle remoto, mas não um catálogo de músicas licenciadas.",
+  ],
+  [
+    "O LibreTracks funciona sem assinatura?",
+    "Sim. Não pede assinatura nem conta e funciona localmente. As sessões e os áudios ficam no seu aparelho e tocam offline.",
+  ],
+  [
+    "O ministério de louvor pode usar os próprios multitracks?",
+    "Sim. Importe stems produzidos pela equipe, comprados separadamente ou exportados de uma DAW e configure marcadores, avisos, click, tom e saídas de áudio para o repertório.",
+  ],
+];
+---
+
+<AlternativePage
+  lang="pt"
+  rival="Playback"
+  title="Alternativa Grátis ao Playback da MultiTracks | LibreTracks"
+  description="Alternativa grátis ao Playback para ministérios de louvor: suas próprias faixas, click, guia falada, mudança de tom e controle pelo celular, offline e sem assinatura."
+  eyebrow="Alternativa grátis ao Playback"
+  heading="Alternativa grátis ao Playback da MultiTracks para o louvor"
+  intro="O Playback resolve duas coisas ao mesmo tempo: o catálogo de multitracks e o player. Se a sua equipe já tem as próprias faixas, produzidas, compradas ou exportadas da DAW, só falta a segunda parte. O LibreTracks é essa parte: guia falada, click, mudança de tom, MIDI e controle remoto, grátis e de código aberto."
+  rows={rows}
+  strengths={strengths}
+  limitsTitle="Onde o Playback faz algo que nós não fazemos"
+  limits={limits}
+  faq={faq}
+  closing="Pegue as faixas de uma música que vocês já tocam, monte a sessão com os marcadores de seção e teste num ensaio durante a semana. É grátis e funciona offline, então você não arrisca nada."
+/>

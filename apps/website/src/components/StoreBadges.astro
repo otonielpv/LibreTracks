@@ -1,6 +1,6 @@
 ---
 interface Props {
-  lang: "en" | "es";
+  lang: "en" | "es" | "pt";
 }
 
 const { lang } = Astro.props;
@@ -10,8 +10,11 @@ const isSpanish = lang === "es";
 // the two listings as a single row of badges under the desktop installers.
 // The Spanish page points at the Spanish App Store storefront; the English one
 // uses the region-neutral URL so Apple redirects to the visitor's store.
+const isPortuguese = lang === "pt";
 const appStoreUrl = isSpanish
   ? "https://apps.apple.com/es/app/libretracks/id6811346212"
+  : isPortuguese
+  ? "https://apps.apple.com/br/app/libretracks/id6811346212"
   : "https://apps.apple.com/app/libretracks/id6811346212";
 
 // Google Play is the only Android install channel: a store build is signed
@@ -22,9 +25,17 @@ const appStoreUrl = isSpanish
 // the language of the listing page, the store region follows the visitor.
 const playStoreUrl = isSpanish
   ? "https://play.google.com/store/apps/details?id=com.libretracks.app&hl=es"
+  : isPortuguese
+  ? "https://play.google.com/store/apps/details?id=com.libretracks.app&hl=pt_BR"
   : "https://play.google.com/store/apps/details?id=com.libretracks.app";
 
-const copy = {
+const copy = isPortuguese ? {
+  label: "LibreTracks para celular e tablet",
+  iosTop: "Baixar na",
+  iosAria: "Baixar o LibreTracks na App Store",
+  androidTop: "Disponível no",
+  androidAria: "Baixar o LibreTracks no Google Play",
+} : {
   label: isSpanish ? "LibreTracks para móvil y tablet" : "LibreTracks for phones and tablets",
   iosTop: isSpanish ? "Consíguelo en el" : "Download on the",
   iosAria: isSpanish ? "Descargar LibreTracks en el App Store" : "Download LibreTracks on the App Store",

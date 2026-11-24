@@ -5,7 +5,7 @@ import "../styles/global.css";
 interface Props {
   title: string;
   description: string;
-  lang?: "en" | "es";
+  lang?: "en" | "es" | "pt";
   noIndex?: boolean;
   /** Site-relative image for social previews. Defaults to the locale's card. */
   image?: string;
@@ -17,56 +17,64 @@ interface Props {
 
 const { title, description, lang = "en", noIndex = false, image, schema = false, structuredData } = Astro.props;
 const isSpanish = lang === "es";
+const isPortuguese = lang === "pt";
+// Pick the copy for the page language. Portuguese covers only the pages with
+// the most Brazilian traffic (home, download, Playback comparison), so every
+// other link from a /pt/ page goes to the English section.
+const L = (en: string, es: string, pt: string) => (isSpanish ? es : isPortuguese ? pt : en);
 const socialCard = image ?? (isSpanish ? "/og-image.png" : "/og-image-en.png");
-const prefix = isSpanish ? "/es" : "";
+const prefix = isSpanish ? "/es" : isPortuguese ? "/pt" : "";
+const sectionPrefix = isSpanish ? "/es" : "";
 
-// Language switch should stay on the equivalent page in the other language
-// (e.g. /download ↔ /es/download), not jump back to the home page. Strip or
-// add the `/es` prefix on the current path to build the counterpart URL.
 const currentPath = Astro.url.pathname;
 
-// Landing pages that target search terms use a translated slug, so the plain
-// `/es` prefix swap below would point at a 404. Map those pairs explicitly.
-// Keys and values are stored without a trailing slash.
-const TRANSLATED_SLUGS: Record<string, string> = {
-  "/alternatives": "/es/alternativas",
-  "/ableton-live-alternative": "/es/alternativa-ableton-live",
-  "/reaper-live-alternative": "/es/alternativa-reaper-directo",
-  "/playback-multitracks-alternative": "/es/alternativa-playback-multitracks",
-  "/prime-worship-alternative": "/es/alternativa-prime-worship",
-  "/ableset-alternative": "/es/alternativa-ableset",
-  "/guides": "/es/guias",
-  "/guides/run-backing-tracks-live": "/es/guias/lanzar-pistas-en-directo",
-  "/guides/multitrack-audio-routing": "/es/guias/salidas-audio-multitrack",
-  "/guides/backing-track-software": "/es/guias/programa-secuencias-en-vivo",
-  "/guides/free-multitracks": "/es/guias/multitracks-gratis",
-};
-const ES_TO_EN = Object.fromEntries(
-  Object.entries(TRANSLATED_SLUGS).map(([en, es]) => [es, en]),
-);
+// Landing pages that target search terms use a translated slug, so a plain
+// `/es` prefix swap would point at a 404. Each row is one page in every
+// language it exists in. Paths are stored without a trailing slash.
+type Locale = "en" | "es" | "pt";
+const PAGE_GROUPS: Partial<Record<Locale, string>>[] = [
+  { en: "/", es: "/es", pt: "/pt" },
+  { en: "/download", es: "/es/download", pt: "/pt/download" },
+  { en: "/playback-multitracks-alternative", es: "/es/alternativa-playback-multitracks", pt: "/pt/alternativa-playback-multitracks" },
+  { en: "/alternatives", es: "/es/alternativas" },
+  { en: "/ableton-live-alternative", es: "/es/alternativa-ableton-live" },
+  { en: "/reaper-live-alternative", es: "/es/alternativa-reaper-directo" },
+  { en: "/prime-worship-alternative", es: "/es/alternativa-prime-worship" },
+  { en: "/ableset-alternative", es: "/es/alternativa-ableset" },
+  { en: "/guides", es: "/es/guias" },
+  { en: "/guides/run-backing-tracks-live", es: "/es/guias/lanzar-pistas-en-directo" },
+  { en: "/guides/multitrack-audio-routing", es: "/es/guias/salidas-audio-multitrack" },
+  { en: "/guides/backing-track-software", es: "/es/guias/programa-secuencias-en-vivo" },
+  { en: "/guides/free-multitracks", es: "/es/guias/multitracks-gratis" },
+];
 
 const bare = currentPath.replace(/\/$/, "") || "/";
-let switchHref: string;
-if (isSpanish) {
-  // /es/download → /download ; /es or /es/ → /
-  switchHref = ES_TO_EN[bare] ?? (currentPath.replace(/^\/es(?=\/|$)/, "") || "/");
-} else {
-  // /download → /es/download ; / → /es/
-  switchHref =
-    TRANSLATED_SLUGS[bare] ?? (currentPath === "/" ? "/es/" : `/es${currentPath}`);
-}
+const group = PAGE_GROUPS.find((row) => Object.values(row).includes(bare));
+// Pages outside the table (privacy, stats) exist in en and es under the same
+// slug, so the counterpart is the `/es` prefix swapped in or out.
+const alternates: Partial<Record<Locale, string>> = group ?? {
+  en: currentPath.replace(/^\/es(?=\/|$)/, "") || "/",
+  es: isSpanish ? currentPath : currentPath === "/" ? "/es/" : `/es${currentPath}`,
+};
 
 // hreflang must point at the other page's canonical URL exactly, and canonicals
-// here carry a trailing slash. The mapped slugs above are stored without one,
-// so normalise before the URLs are built.
-if (!switchHref.endsWith("/")) switchHref += "/";
+// here carry a trailing slash.
+const withSlash = (path: string) => (path.endsWith("/") ? path : `${path}/`);
+const LOCALE_NAMES: Record<Locale, string> = { en: "English", es: "Español", pt: "Português" };
+const OG_LOCALES: Record<Locale, string> = { en: "en_US", es: "es_ES", pt: "pt_BR" };
+const switchLinks = (Object.keys(alternates) as Locale[])
+  .filter((code) => code !== lang)
+  .map((code) => ({ code, label: LOCALE_NAMES[code], href: withSlash(alternates[code]!) }));
 
-// Canonical + hreflang. Without these Google treats /  and /es/ as competing
-// pages for the same product instead of two locales of one page.
+// Canonical + hreflang. Without these Google treats / and /es/ as competing
+// pages for the same product instead of locales of one page.
 const site = Astro.site ?? new URL("https://libretracks.com");
 const canonical = new URL(currentPath, site);
-const altEn = new URL(isSpanish ? switchHref : currentPath, site);
-const altEs = new URL(isSpanish ? currentPath : switchHref, site);
+const hreflangs = (Object.keys(alternates) as Locale[]).map((code) => ({
+  code,
+  href: new URL(withSlash(alternates[code]!), site).href,
+}));
+const xDefault = new URL(withSlash(alternates.en ?? currentPath), site);
 const ogImage = new URL(socialCard, site);
 
 const softwareSchema = {
@@ -74,15 +82,17 @@ const softwareSchema = {
   "@type": "SoftwareApplication",
   name: "LibreTracks",
   applicationCategory: "MultimediaApplication",
-  applicationSubCategory: isSpanish
-    ? "Reproductor multitrack para directo"
-    : "Multitrack playback software for live performance",
+  applicationSubCategory: L(
+    "Multitrack playback software for live performance",
+    "Reproductor multitrack para directo",
+    "Player multitrack para tocar ao vivo",
+  ),
   operatingSystem: "Windows, macOS, Linux, Android, iOS",
   description,
   url: canonical.href,
   downloadUrl: new URL(`${prefix}/download/`, site).href,
   image: ogImage.href,
-  inLanguage: isSpanish ? "es" : "en",
+  inLanguage: isSpanish ? "es" : isPortuguese ? "pt-BR" : "en",
   license: "https://www.gnu.org/licenses/agpl-3.0.html",
   isAccessibleForFree: true,
   offers: {
@@ -139,9 +149,8 @@ const pageSchemas = structuredData
     {noIndex && <meta name="robots" content="noindex, nofollow, noarchive" />}
     {noIndex && <meta name="referrer" content="no-referrer" />}
     {!noIndex && <link rel="canonical" href={canonical.href} />}
-    {!noIndex && <link rel="alternate" hreflang="en" href={altEn.href} />}
-    {!noIndex && <link rel="alternate" hreflang="es" href={altEs.href} />}
-    {!noIndex && <link rel="alternate" hreflang="x-default" href={altEn.href} />}
+    {!noIndex && hreflangs.map(({ code, href }) => <link rel="alternate" hreflang={code} href={href} />)}
+    {!noIndex && <link rel="alternate" hreflang="x-default" href={xDefault.href} />}
 
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="LibreTracks" />
@@ -149,8 +158,10 @@ const pageSchemas = structuredData
     <meta property="og:description" content={description} />
     <meta property="og:url" content={canonical.href} />
     <meta property="og:image" content={ogImage.href} />
-    <meta property="og:locale" content={isSpanish ? "es_ES" : "en_US"} />
-    <meta property="og:locale:alternate" content={isSpanish ? "en_US" : "es_ES"} />
+    <meta property="og:locale" content={OG_LOCALES[lang]} />
+    {hreflangs.filter(({ code }) => code !== lang).map(({ code }) => (
+      <meta property="og:locale:alternate" content={OG_LOCALES[code]} />
+    ))}
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content={title} />
     <meta name="twitter:description" content={description} />
@@ -176,22 +187,24 @@ const pageSchemas = structuredData
   <body>
     <div class="site-page">
       <a class="skip-link" href="#main-content">
-        {isSpanish ? "Saltar al contenido" : "Skip to content"}
+        {L("Skip to content", "Saltar al contenido", "Pular para o conteúdo")}
       </a>
       <header class="site-header"><div class="site-shell site-nav">
         <a class="brand" href={`${prefix}/`}>
           <img src="/icon.svg" alt="" width="32" height="32" />
           <span translate="no">LibreTracks</span>
         </a>
-        <nav class="nav-links" aria-label={isSpanish ? "Navegación principal" : "Primary navigation"}>
-          <a href={`${prefix}/docs/`}>{isSpanish ? "Documentación" : "Docs"}</a>
-          <a href={`${prefix}/${isSpanish ? "guias" : "guides"}/`}>
-            {isSpanish ? "Guías" : "Guides"}
+        <nav class="nav-links" aria-label={L("Primary navigation", "Navegación principal", "Navegação principal")}>
+          <a href={`${sectionPrefix}/docs/`}>{L("Docs", "Documentación", "Documentação")}</a>
+          <a href={`${sectionPrefix}/${isSpanish ? "guias" : "guides"}/`}>
+            {L("Guides", "Guías", "Guias")}
           </a>
-          <a href={`${prefix}/${isSpanish ? "alternativas" : "alternatives"}/`}>
-            {isSpanish ? "Alternativas" : "Alternatives"}
+          <a href={`${sectionPrefix}/${isSpanish ? "alternativas" : "alternatives"}/`}>
+            {L("Alternatives", "Alternativas", "Alternativas")}
           </a>
-          <a href={switchHref} hreflang={isSpanish ? "en" : "es"}>{isSpanish ? "English" : "Español"}</a>
+          {switchLinks.map(({ code, label, href }) => (
+            <a href={href} hreflang={code} lang={code}>{label}</a>
+          ))}
           <a
             class="social-link"
             href="https://github.com/otonielpv/LibreTracks"
@@ -207,7 +220,7 @@ const pageSchemas = structuredData
           <a
             class="social-link"
             href="https://www.facebook.com/groups/1795788251804551"
-            aria-label={isSpanish ? "Grupo de Facebook" : "Facebook group"}
+            aria-label={L("Facebook group", "Grupo de Facebook", "Grupo no Facebook")}
           >
             <svg viewBox="0 0 24 24" aria-hidden="true">
               <path
@@ -219,7 +232,7 @@ const pageSchemas = structuredData
           <a
             class="social-link"
             href="https://www.reddit.com/r/LibreTracks/"
-            aria-label={isSpanish ? "Comunidad en Reddit" : "Reddit community"}
+            aria-label={L("Reddit community", "Comunidad en Reddit", "Comunidade no Reddit")}
           >
             <svg viewBox="0 0 24 24" aria-hidden="true">
               <path
@@ -231,7 +244,7 @@ const pageSchemas = structuredData
           <a
             class="social-link"
             href="https://www.youtube.com/@LibreTracks"
-            aria-label={isSpanish ? "Canal de YouTube" : "YouTube channel"}
+            aria-label={L("YouTube channel", "Canal de YouTube", "Canal no YouTube")}
           >
             <svg viewBox="0 0 24 24" aria-hidden="true">
               <path
@@ -240,7 +253,7 @@ const pageSchemas = structuredData
               />
             </svg>
           </a>
-          <a class="nav-cta" href={`${prefix}/download/`}>{isSpanish ? "Descargar" : "Download"}</a>
+          <a class="nav-cta" href={`${prefix}/download/`}>{L("Download", "Descargar", "Baixar")}</a>
         </nav>
       </div></header>
       <div id="main-content" tabindex="-1">
@@ -254,26 +267,28 @@ const pageSchemas = structuredData
               <span translate="no">LibreTracks</span>
             </a>
             <p>
-              {isSpanish
-                ? "Reproductor multitrack libre para directo. Funciona sin cuenta, sin suscripción y sin conexión."
-                : "Free multitrack playback for live performance. No account, no subscription, works offline."}
+              {L(
+                "Free multitrack playback for live performance. No account, no subscription, works offline.",
+                "Reproductor multitrack libre para directo. Funciona sin cuenta, sin suscripción y sin conexión.",
+                "Player multitrack gratuito para tocar ao vivo. Sem conta, sem assinatura e funciona offline.",
+              )}
             </p>
           </div>
-          <nav class="site-footer-links" aria-label={isSpanish ? "Enlaces del pie" : "Footer navigation"}>
-            <a href={`${prefix}/download/`}>{isSpanish ? "Descargas" : "Downloads"}</a>
-            <a href={`${prefix}/docs/`}>{isSpanish ? "Documentación" : "Docs"}</a>
-            <a href={`${prefix}/${isSpanish ? "guias" : "guides"}/`}>{isSpanish ? "Guías" : "Guides"}</a>
-            <a href={`${prefix}/${isSpanish ? "alternativas" : "alternatives"}/`}>
-              {isSpanish ? "Alternativas" : "Alternatives"}
+          <nav class="site-footer-links" aria-label={L("Footer navigation", "Enlaces del pie", "Links do rodapé")}>
+            <a href={`${prefix}/download/`}>{L("Downloads", "Descargas", "Downloads")}</a>
+            <a href={`${sectionPrefix}/docs/`}>{L("Docs", "Documentación", "Documentação")}</a>
+            <a href={`${sectionPrefix}/${isSpanish ? "guias" : "guides"}/`}>{L("Guides", "Guías", "Guias")}</a>
+            <a href={`${sectionPrefix}/${isSpanish ? "alternativas" : "alternatives"}/`}>
+              {L("Alternatives", "Alternativas", "Alternativas")}
             </a>
-            <a href={`${prefix}/privacy/`}>{isSpanish ? "Privacidad" : "Privacy"}</a>
-            <a href="https://github.com/otonielpv/LibreTracks">{isSpanish ? "Código fuente" : "Source code"}</a>
+            <a href={`${sectionPrefix}/privacy/`}>{L("Privacy", "Privacidad", "Privacidade")}</a>
+            <a href="https://github.com/otonielpv/LibreTracks">{L("Source code", "Código fuente", "Código-fonte")}</a>
           </nav>
         </div>
         <div class="site-shell site-footer-legal">
           <p>© {new Date().getFullYear()} <span translate="no">LibreTracks</span></p>
           <p>
-            {isSpanish ? "Publicado bajo la licencia " : "Released under the "}
+            {L("Released under the ", "Publicado bajo la licencia ", "Publicado sob a licença ")}
             <a href="https://www.gnu.org/licenses/agpl-3.0.html">AGPL-3.0</a>.
           </p>
         </div>

@@ -7,7 +7,7 @@ import { osIcons } from "./osIcons";
 interface Props {
   owner?: string;
   repo?: string;
-  lang?: "en" | "es";
+  lang?: "en" | "es" | "pt";
 }
 
 type ReleaseAsset = {
@@ -29,6 +29,7 @@ type Release = {
 
 const { owner = "otonielpv", repo = "LibreTracks", lang = "en" } = Astro.props;
 const isSpanish = lang === "es";
+const isPortuguese = lang === "pt";
 
 // Release bodies ship both the Spanish ("## Novedades de vX") and English
 // ("## What's New in vX") sections. Show only the one matching the current
@@ -90,7 +91,39 @@ try {
   error = caught instanceof Error ? caught.message : "Unknown error";
 }
 
-const labels = {
+// Portuguese overrides. Release notes have no Portuguese section, so the
+// English one is shown on /pt/download/.
+const PT_LABELS = {
+  currentVersion: "Versão atual",
+  latestBadge: "Mais recente",
+  prereleaseBadge: "Prévia",
+  published: "Publicado",
+  assets: "Instaladores",
+  notes: "Notas da versão (em inglês)",
+  olderTitle: "Versões anteriores",
+  olderHint: "Abra uma versão no GitHub para ver os instaladores e as notas.",
+  supportTitle: "Apoie o LibreTracks",
+  supportText: "O LibreTracks é grátis. Doações voluntárias ajudam com manutenção, testes, documentação, versões e desenvolvimento contínuo.",
+  supportDisclaimer: "A doação não libera funções, suporte prioritário, acesso antecipado nem compromissos de desenvolvimento.",
+  supportAction: "Apoiar no Ko-fi",
+  downloadThanks: "Obrigado por baixar o LibreTracks.",
+  downloadSupportText: "Se o projeto for útil para você, pode apoiá-lo com uma doação voluntária no Ko-fi.",
+  downloadClose: "Agora não, obrigado",
+  fallback: "Não foi possível carregar as versões durante o build. Você pode abrir o GitHub Releases diretamente.",
+  noAssets: "Esta versão não tem instaladores publicados.",
+  open: "Abrir no GitHub",
+  price: "Preço",
+  free: "Grátis",
+  license: "Licença",
+  downloadFor: "Baixar para",
+  allInstallers: "Todos os instaladores",
+  perks: ["Sem conta nem assinatura", "Funciona offline", "Código aberto, licença AGPL-3.0"],
+  shotAlt: "Visão Compacta do LibreTracks com uma coluna por música e o mixer",
+  mobile: "Celular e tablet",
+  mobileNote: "No iPhone, iPad e Android, o LibreTracks é instalado pelas lojas.",
+};
+
+const baseLabels = {
   currentVersion: isSpanish ? "Versión actual" : "Current version",
   latestBadge: isSpanish ? "Última" : "Latest",
   prereleaseBadge: isSpanish ? "Preliminar" : "Pre-release",
@@ -143,24 +176,27 @@ const INSTALLER_ASSET = /\.(msi|exe|dmg|deb|appimage|rpm)$/i;
 const releaseUrl = `https://github.com/${owner}/${repo}/releases`;
 const donationUrl = "https://ko-fi.com/otonielpv";
 
+const labels = isPortuguese ? { ...baseLabels, ...PT_LABELS } : baseLabels;
+const numberLocale = isSpanish ? "es" : isPortuguese ? "pt-BR" : "en";
+
 function formatDate(value: string | null): string | null {
   if (!value) return null;
-  return new Intl.DateTimeFormat(isSpanish ? "es" : "en", { dateStyle: "medium" }).format(new Date(value));
+  return new Intl.DateTimeFormat(numberLocale, { dateStyle: "medium" }).format(new Date(value));
 }
 
-const sizeFormatter = new Intl.NumberFormat(isSpanish ? "es" : "en");
+const sizeFormatter = new Intl.NumberFormat(numberLocale);
 
 // What the file is, in words: a visitor picks ".deb · Debian, Ubuntu" faster
 // than they parse `LibreTracks_1.16.0_amd64.deb`.
 function describeAsset(name: string): string {
-  if (/\.exe$/i.test(name)) return isSpanish ? "Instalador · .exe" : "Installer · .exe";
-  if (/\.msi$/i.test(name)) return isSpanish ? "Instalador · .msi" : "Installer · .msi";
+  if (/\.exe$/i.test(name)) return isSpanish || isPortuguese ? "Instalador · .exe" : "Installer · .exe";
+  if (/\.msi$/i.test(name)) return isSpanish || isPortuguese ? "Instalador · .msi" : "Installer · .msi";
   if (/\.dmg$/i.test(name)) {
-    return /universal/i.test(name) ? "Universal · .dmg" : isSpanish ? "Imagen de disco · .dmg" : "Disk image · .dmg";
+    return /universal/i.test(name) ? "Universal · .dmg" : isSpanish ? "Imagen de disco · .dmg" : isPortuguese ? "Imagem de disco · .dmg" : "Disk image · .dmg";
   }
   if (/\.deb$/i.test(name)) return "Debian, Ubuntu · .deb";
   if (/\.rpm$/i.test(name)) return "Fedora, openSUSE · .rpm";
-  if (/\.appimage$/i.test(name)) return isSpanish ? "Cualquier distro · AppImage" : "Any distro · AppImage";
+  if (/\.appimage$/i.test(name)) return isSpanish ? "Cualquier distro · AppImage" : isPortuguese ? "Qualquer distro · AppImage" : "Any distro · AppImage";
   return name;
 }
 
@@ -257,7 +293,7 @@ function extension(name: string): string {
         </div>
         <img
           class="dl-hero-shot"
-          src={`/screenshots/home/${lang}/compact.webp`}
+          src={`/screenshots/home/${isSpanish ? "es" : "en"}/compact.webp`}
           alt={labels.shotAlt}
           width="1200"
           height="750"

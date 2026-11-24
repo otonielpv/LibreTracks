@@ -10,7 +10,7 @@ import SiteLayout from "../layouts/SiteLayout.astro";
 interface Props {
   title: string;
   description: string;
-  lang: "en" | "es";
+  lang: "en" | "es" | "pt";
   /** Product this page compares against, e.g. "Ableton Live". */
   rival: string;
   eyebrow: string;
@@ -50,8 +50,28 @@ const {
 } = Astro.props;
 
 const isSpanish = lang === "es";
-const prefix = isSpanish ? "/es" : "";
-const t = isSpanish
+const isPortuguese = lang === "pt";
+const prefix = isSpanish ? "/es" : isPortuguese ? "/pt" : "";
+// The docs exist in English and Spanish only.
+const docsPrefix = isSpanish ? "/es" : "";
+const t = isPortuguese
+  ? {
+      need: "Necessidade",
+      libre: "LibreTracks",
+      download: "Baixar grátis",
+      docs: "Ver a documentação (em inglês)",
+      strengthsEyebrow: "O que o LibreTracks oferece",
+      strengthsHeading: "Pensado para o palco, não para o estúdio.",
+      compareEyebrow: "Comparação",
+      compareHeading: `LibreTracks e ${rival}, lado a lado`,
+      limitsEyebrow: "Sendo realista",
+      faqEyebrow: "Perguntas frequentes",
+      faqHeading: `Perguntas sobre o LibreTracks como alternativa ao ${rival}`,
+      closingEyebrow: "Experimente",
+      closingHeading: "Baixe e monte um repertório numa tarde",
+      coreConcepts: "Conceitos básicos (em inglês)",
+    }
+  : isSpanish
   ? {
       need: "Necesidad",
       libre: "LibreTracks",
@@ -65,6 +85,8 @@ const t = isSpanish
       faqHeading: `Preguntas sobre LibreTracks como alternativa a ${rival}`,
       closingEyebrow: "Pruébalo",
       closingHeading: "Descárgalo y monta un set en una tarde",
+      strengthsHeading: "Pensado para el escenario, no para el estudio.",
+      coreConcepts: "Conceptos base",
     }
   : {
       need: "Need",
@@ -79,6 +101,8 @@ const t = isSpanish
       faqHeading: `Questions about LibreTracks and ${rival}`,
       closingEyebrow: "Try it",
       closingHeading: "Download it and build a set this afternoon",
+      strengthsHeading: "Built for the stage, not the studio.",
+      coreConcepts: "Core concepts",
     };
 ---
 
@@ -92,7 +116,7 @@ const t = isSpanish
           <p>{intro}</p>
           <div class="hero-actions">
             <a class="button-link primary" href={`${prefix}/download/`}>{t.download}</a>
-            <a class="button-link" href={`${prefix}/docs/`}>{t.docs}</a>
+            <a class="button-link" href={`${docsPrefix}/docs/`}>{t.docs}</a>
           </div>
         </div>
         <div class="product-shot">
@@ -104,6 +128,8 @@ const t = isSpanish
             decoding="async"
             alt={heroAlt ?? (isSpanish
               ? "Vista Compacta de LibreTracks con una columna por canción"
+              : isPortuguese
+              ? "Visão Compacta do LibreTracks com uma coluna por música"
               : "LibreTracks Compact View with one column per song")}
           />
         </div>
@@ -133,7 +159,7 @@ const t = isSpanish
       <div class="site-shell">
         <div class="section-heading">
           <p class="eyebrow">{t.strengthsEyebrow}</p>
-          <h2>{isSpanish ? "Pensado para el escenario, no para el estudio." : "Built for the stage, not the studio."}</h2>
+          <h2>{t.strengthsHeading}</h2>
         </div>
         <div class="feature-grid">
           {strengths.map(([name, body]) => (
@@ -189,8 +215,8 @@ const t = isSpanish
           <p>{closing}</p>
           <div class="hero-actions">
             <a class="button-link primary" href={`${prefix}/download/`}>{t.download}</a>
-            <a class="button-link" href={`${prefix}/docs/core-concepts/`}>
-              {isSpanish ? "Conceptos base" : "Core concepts"}
+            <a class="button-link" href={`${docsPrefix}/docs/core-concepts/`}>
+              {t.coreConcepts}
             </a>
           </div>
         </div>
