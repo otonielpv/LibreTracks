@@ -155,6 +155,10 @@ const en = {
     save: "Save",
     saving: "Saving…",
     saved: "Saved in Planning Center. Save the lyrics here to keep the link.",
+    pickTitle: "Which Planning Center song?",
+    pickHelp: "These lyrics did not come from Planning Center. Search the song there and choose where to save them; from then on they stay linked to it.",
+    pickNew: "Save as a new arrangement",
+    pickReplace: "Replace “{{name}}”",
   },
   errors: {
     notConfigured: "This build cannot connect to Planning Center.",
@@ -324,6 +328,10 @@ const es: Texts<typeof en> = {
     save: "Guardar",
     saving: "Guardando…",
     saved: "Guardado en Planning Center. Guarda la letra aquí para mantener el enlace.",
+    pickTitle: "¿Qué canción de Planning Center?",
+    pickHelp: "Esta letra no viene de Planning Center. Busca la canción allí y elige dónde guardarla; desde entonces queda enlazada a ella.",
+    pickNew: "Guardar como arreglo nuevo",
+    pickReplace: "Reemplazar «{{name}}»",
   },
   errors: {
     notConfigured: "Esta versión no puede conectarse a Planning Center.",

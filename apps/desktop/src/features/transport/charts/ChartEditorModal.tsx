@@ -360,6 +360,9 @@ export function ChartEditorModal({
               onSave={saveDraft}
               onImportFile={() => fileInputRef.current?.click()}
               onImportPlanningCenter={sourcesAvailable ? openPlanningCenter : null}
+              onSaveToPlanningCenter={
+                sourcesAvailable && taken.text.trim() && (!source || source.provider === "planningCenter") ? () => setPcoSaveOpen(true) : null
+              }
             />
           ) : (
           <>
@@ -391,7 +394,8 @@ export function ChartEditorModal({
                     {t("chartSources.import.open")}
                   </button>
                 ) : null}
-                {sourcesAvailable && source?.provider === "planningCenter" ? (
+                {/* Also for lyrics not from Planning Center: the song is picked there first. */}
+                {sourcesAvailable && (!source || source.provider === "planningCenter") ? (
                   <button
                     type="button"
                     className="lt-chart-editor-button"
@@ -542,7 +546,7 @@ export function ChartEditorModal({
           </button>
         </div>
 
-        {pcoSaveOpen && source ? (
+        {pcoSaveOpen ? (
           <SaveToPlanningCenterDialog
             region={region}
             markers={markers}

@@ -19,6 +19,7 @@ import type { PcoArrangement } from "../transport/desktopApi";
 import { getSong } from "../transport/songStore";
 import { chartSourceHandlers } from "./chartSourceHandlers";
 import { pcoErrorMessage, toPcoError } from "./pcoErrors";
+import { PcoSaveTargetPicker } from "./PcoSaveTargetPicker";
 import "./chartSources.css";
 
 type Props = {
@@ -27,7 +28,9 @@ type Props = {
   /** The chart as it is in the editor now (adjusted and corrected). */
   text: string;
   links: readonly ChartLink[];
-  source: ChartSource;
+  /** Where it was imported from; absent for lyrics written here or from a
+   * file: the song to save to is picked in Planning Center first. */
+  source?: ChartSource;
   /** Where the chart is linked now (the new arrangement, or the replaced one
    * with its new date), for the editor to save with the lyrics. */
   onSaved: (source: ChartSource) => void;
@@ -57,10 +60,53 @@ export function songTimingFor(
  * explicit, confirmed choice, with what changes and a warning when it changed
  * there since the import.
  */
-export function SaveToPlanningCenterDialog({ region, markers, text, links, source, onSaved, onClose }: Props) {
+export function SaveToPlanningCenterDialog(props: Props) {
+  const { t } = useTranslation();
+  const [target, setTarget] = useState<{ source: ChartSource; kind: "new" | "replace" } | null>(() =>
+    props.source ? { source: props.source, kind: "new" } : null,
+  );
+  if (target) return <SaveToPlanningCenterForm {...props} source={target.source} initialKind={target.kind} />;
+  return (
+    <div className="lt-modal-backdrop lt-chart-import-backdrop" onClick={props.onClose}>
+      <section
+        className="lt-settings-modal lt-chart-import"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="lt-pco-save-title"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <header className="lt-settings-modal-header">
+          <div>
+            <span className="lt-settings-modal-eyebrow">{t("chartSources.save.eyebrow")}</span>
+            <h2 id="lt-pco-save-title">{t("chartSources.save.pickTitle")}</h2>
+            <p>{props.region.name}</p>
+          </div>
+        </header>
+        <div className="lt-settings-modal-body lt-chart-import-body">
+          <PcoSaveTargetPicker
+            initialQuery={props.region.name}
+            onPicked={(source, kind) => setTarget({ source, kind })}
+            onCancel={props.onClose}
+          />
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function SaveToPlanningCenterForm({
+  region,
+  markers,
+  text,
+  links,
+  source,
+  initialKind,
+  onSaved,
+  onClose,
+}: Props & { source: ChartSource; initialKind: "new" | "replace" }) {
   const { t } = useTranslation();
   const [current, setCurrent] = useState<PcoArrangement | null>(null);
-  const [kind, setKind] = useState<"new" | "replace">("new");
+  const [kind, setKind] = useState<"new" | "replace">(initialKind);
   const [name, setName] = useState(() => t("chartSources.save.defaultName"));
   // The key the lyrics are written in now ({key: D} once adjusted); the
   // song's or the source's only for a sheet that does not say.

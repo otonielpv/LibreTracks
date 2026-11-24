@@ -9,6 +9,7 @@ const api = vi.hoisted(() => ({
   getPcoArrangements: vi.fn(),
   createPcoArrangement: vi.fn(),
   updatePcoArrangement: vi.fn(),
+  searchPcoSongs: vi.fn(),
 }));
 vi.mock("../transport/desktopApi", () => api);
 
@@ -192,5 +193,28 @@ describe("the arrangement's BPM and meter", () => {
 
   it("sends nothing without a song", () => {
     expect(songTimingFor(null, region)).toEqual({});
+  });
+
+  it("lyrics not from Planning Center: the song is picked there first, then saved and linked to it", async () => {
+    api.searchPcoSongs.mockResolvedValue({ items: [{ id: "s1", title: "Camino", author: null }] });
+    const onSaved = vi.fn((_source: ChartSource) => {});
+    render(<SaveToPlanningCenterDialog region={region} markers={markers} text={TEXT} links={links} onSaved={onSaved} onClose={vi.fn()} />);
+    expect(screen.getByText("chartSources.save.pickTitle")).toBeTruthy();
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "chartSources.import.search" }));
+    });
+    expect(api.searchPcoSongs).toHaveBeenCalledWith("Camino", 0);
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /Camino/ }));
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "chartSources.save.pickNew" }));
+    });
+    // The usual form, saving a new arrangement in that song.
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "chartSources.save.save" }));
+    });
+    expect(api.createPcoArrangement.mock.calls[0][0]).toBe("s1");
+    expect(onSaved).toHaveBeenCalledWith(expect.objectContaining({ provider: "planningCenter", songId: "s1", arrangementId: "a9" }));
   });
 });

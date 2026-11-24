@@ -20,6 +20,8 @@ type SimpleLyricsEditorProps = {
   onSave: () => void;
   onImportFile: () => void;
   onImportPlanningCenter: (() => void) | null;
+  /** "Save to Planning Center" (picking the song there when it did not come from it). */
+  onSaveToPlanningCenter: (() => void) | null;
 };
 
 /**
@@ -29,7 +31,15 @@ type SimpleLyricsEditorProps = {
  * it. The text box keeps what is typed and each change is written to the
  * draft right away, so saving never misses the last keystroke.
  */
-export function SimpleLyricsEditor({ chart, markers, onChange, onSave, onImportFile, onImportPlanningCenter }: SimpleLyricsEditorProps) {
+export function SimpleLyricsEditor({
+  chart,
+  markers,
+  onChange,
+  onSave,
+  onImportFile,
+  onImportPlanningCenter,
+  onSaveToPlanningCenter,
+}: SimpleLyricsEditorProps) {
   const { t, i18n } = useTranslation() as ReturnType<typeof useTranslation> & { i18n?: { language?: string } };
   const language: "es" | "en" = i18n?.language?.startsWith("en") ? "en" : "es";
   const parts = useMemo(() => chartParts(chart, markers), [chart, markers]);
@@ -123,6 +133,12 @@ export function SimpleLyricsEditor({ chart, markers, onChange, onSave, onImportF
               <button type="button" className="lt-chart-editor-button" onClick={onImportPlanningCenter}>
                 <span className="material-symbols-outlined" aria-hidden="true">library_music</span>
                 {t("chartSources.import.open")}
+              </button>
+            ) : null}
+            {onSaveToPlanningCenter ? (
+              <button type="button" className="lt-chart-editor-button" onClick={onSaveToPlanningCenter}>
+                <span className="material-symbols-outlined" aria-hidden="true">cloud_upload</span>
+                {t("chartSources.save.open")}
               </button>
             ) : null}
         </div>
