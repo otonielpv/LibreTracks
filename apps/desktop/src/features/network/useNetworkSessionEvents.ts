@@ -3,8 +3,11 @@ import { useEffect } from "react";
 import {
   getGuestSnapshot,
   getHostStatus,
+  joinTargetFromLink,
   listenToGuestStatus,
   listenToHostStatus,
+  listenToJoinLink,
+  takeJoinLink,
 } from "@libretracks/shared/networkApi";
 import { isTauriApp } from "@libretracks/shared/desktopApi";
 
@@ -32,6 +35,22 @@ export function useNetworkSessionEvents() {
 
     keep(listenToHostStatus(store.setHost));
     keep(listenToGuestStatus(store.setGuest));
+
+    // The host's QR scanned with the camera: while running it arrives as an
+    // event; on a cold start it waits in the backend until asked for here.
+    const offerJoin = (url: string | null) => {
+      const target = url ? joinTargetFromLink(url) : null;
+      if (target && !disposed) store.openJoin(target);
+    };
+    keep(
+      listenToJoinLink((url) => {
+        offerJoin(url);
+        void takeJoinLink().catch(() => null);
+      }),
+    );
+    void takeJoinLink()
+      .then(offerJoin)
+      .catch(() => {});
 
     void getHostStatus()
       .then((host) => {

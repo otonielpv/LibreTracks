@@ -273,3 +273,19 @@ export function stopDiscovery() {
 export function listenToDiscoveredHosts(handler: (hosts: NetworkDiscoveredHost[]) => void) {
   return listenTo("link://discovered", handler);
 }
+
+/**
+ * The host's QR (`libretracks://join?host=IP:PORT&name=…`) scanned with the
+ * phone's camera opens the app with it. The link that launched the app,
+ * taken once; null when the app was opened another way.
+ */
+export function takeJoinLink() {
+  return invokeCommand<string | null>("link_take_join_link");
+}
+
+/** A QR link arriving while the app is already running. */
+export function listenToJoinLink(handler: (url: string) => void) {
+  return listenTo("link://join-link", handler);
+}
+
+export { joinTargetFromLink } from "./networkJoinLink";

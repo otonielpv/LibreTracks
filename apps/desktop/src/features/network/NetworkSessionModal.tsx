@@ -69,6 +69,17 @@ export function NetworkSessionModal() {
     if (isOpen && guest.joined) setTab("join");
   }, [isOpen, guest.joined]);
 
+  // A scanned QR: Join tab with the host's address filled in. Not joined
+  // straight away, because the host may ask for a PIN.
+  const joinTarget = useNetworkSessionStore((state) => state.joinTarget);
+  const clearJoinTarget = useNetworkSessionStore((state) => state.clearJoinTarget);
+  useEffect(() => {
+    if (!isOpen || !joinTarget) return;
+    setTab("join");
+    setTarget(joinTarget);
+    clearJoinTarget();
+  }, [isOpen, joinTarget, clearJoinTarget]);
+
   if (!isOpen) return null;
 
   const run = async (action: () => Promise<unknown>) => {

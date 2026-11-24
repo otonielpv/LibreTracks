@@ -131,6 +131,16 @@
         <string>db-zja1w62v8or5jkw</string>
       </array>
     </dict>
+    <!-- El QR de la sesion de red (libretracks://join?host=IP:PUERTO&name=...),
+         escaneado con la camara: src/link/join_link.rs. -->
+    <dict>
+      <key>CFBundleURLName</key>
+      <string>com.libretracks.app.join</string>
+      <key>CFBundleURLSchemes</key>
+      <array>
+        <string>libretracks</string>
+      </array>
+    </dict>
   </array>
 </dict>
 </plist>

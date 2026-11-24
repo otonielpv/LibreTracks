@@ -34,9 +34,14 @@ export const EMPTY_GUEST_STATUS: NetworkGuestStatus = {
 
 export type NetworkSessionState = {
   isModalOpen: boolean;
+  /** Address from a scanned QR, for the Join tab; the modal takes it. */
+  joinTarget: string | null;
   host: NetworkHostStatus | null;
   guest: NetworkGuestStatus;
   openModal: () => void;
+  /** Open on the Join tab with `target` in the address field (QR link). */
+  openJoin: (target: string) => void;
+  clearJoinTarget: () => void;
   closeModal: () => void;
   setHost: (host: NetworkHostStatus) => void;
   setGuest: (guest: NetworkGuestStatus) => void;
@@ -45,6 +50,7 @@ export type NetworkSessionState = {
 
 export const INITIAL_NETWORK_SESSION_STATE = {
   isModalOpen: false,
+  joinTarget: null,
   host: null,
   guest: EMPTY_GUEST_STATUS,
 };
@@ -52,6 +58,8 @@ export const INITIAL_NETWORK_SESSION_STATE = {
 export const useNetworkSessionStore = create<NetworkSessionState>()((set) => ({
   ...INITIAL_NETWORK_SESSION_STATE,
   openModal: () => set({ isModalOpen: true }),
+  openJoin: (target) => set({ isModalOpen: true, joinTarget: target }),
+  clearJoinTarget: () => set({ joinTarget: null }),
   closeModal: () => set({ isModalOpen: false }),
   setHost: (host) => {
     if (host.hosting) recordProductEvent("feature_network_host");

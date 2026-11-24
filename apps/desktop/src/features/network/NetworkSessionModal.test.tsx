@@ -142,6 +142,18 @@ describe("NetworkSessionModal — join", () => {
     await waitFor(() => expect(api.joinHost).toHaveBeenCalledWith("192.168.1.20", "1111", true));
   });
 
+  it("a scanned QR opens the Join tab with the host's address", async () => {
+    useNetworkSessionStore.setState({ ...INITIAL_NETWORK_SESSION_STATE });
+    render(<NetworkSessionModal />);
+    act(() => useNetworkSessionStore.getState().openJoin("192.168.1.20:3041"));
+    expect(screen.getByRole("tab", { name: "Unirse" }).getAttribute("aria-selected")).toBe("true");
+    expect((screen.getByLabelText(/^Dirección del anfitrión/) as HTMLInputElement).value).toBe(
+      "192.168.1.20:3041",
+    );
+    expect(useNetworkSessionStore.getState().joinTarget).toBeNull();
+    expect(api.joinHost).not.toHaveBeenCalled();
+  });
+
   it("joins as viewer without a PIN", async () => {
     render(<NetworkSessionModal />);
     fireEvent.click(screen.getByRole("tab", { name: "Unirse" }));

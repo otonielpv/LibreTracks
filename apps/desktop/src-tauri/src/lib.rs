@@ -179,6 +179,10 @@ pub fn run() {
             // acumularia manejadores durante toda la vida del proceso.
             #[cfg(any(target_os = "android", target_os = "ios"))]
             commands::cloud::register_deep_link_handler(app.handle());
+            // El QR de la sesion de red escaneado con la camara: si ese
+            // enlace es el que lanzo la app, se guarda para la interfaz.
+            #[cfg(any(target_os = "android", target_os = "ios"))]
+            link::join_link::offer_launch_link(app.handle());
 
             // Montar/desmontar una microSD o un pendrive por OTG: la Activity
             // recibe el broadcast y avisa aqui, y aqui hace falta con quien
@@ -370,6 +374,7 @@ pub fn run() {
             link::commands::link_proxy_invoke,
             link::commands::link_start_discovery,
             link::commands::link_stop_discovery,
+            link::join_link::link_take_join_link,
             commands::system::get_remote_server_info,
             commands::system::get_remote_firewall_status,
             commands::system::allow_remote_through_firewall,

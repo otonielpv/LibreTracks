@@ -372,15 +372,22 @@ pub(crate) fn pending_redirect() -> &'static std::sync::Mutex<Option<tokio::sync
     PENDING_REDIRECT.get_or_init(|| std::sync::Mutex::new(None))
 }
 
-/// Route OAuth redirects to whichever sign-in is waiting. Call once, at setup.
+/// Route OAuth redirects to whichever sign-in is waiting, and the network
+/// session's QR link to `link::join_link`. Call once, at setup.
 #[cfg(any(target_os = "android", target_os = "ios"))]
 pub fn register_deep_link_handler(app: &AppHandle) {
     use tauri_plugin_deep_link::DeepLinkExt;
 
-    app.deep_link().on_open_url(|event| {
+    let handle = app.clone();
+    app.deep_link().on_open_url(move |event| {
         let Some(url) = event.urls().first().map(|url| url.to_string()) else {
             return;
         };
+        // The network session's QR shares this one handler (it cannot be
+        // registered twice); it is not a redirect and must not consume one.
+        if crate::link::join_link::offer(&handle, &url) {
+            return;
+        }
         // Taken, not cloned: a redirect is consumed once. A second link arriving
         // with nothing waiting is dropped, which is what should happen to a
         // stale one the system replays after the app was killed.

@@ -10,6 +10,7 @@ pub mod commands;
 pub mod config;
 pub mod discovery;
 pub mod guest;
+pub mod join_link;
 pub mod host;
 pub mod lifecycle;
 pub mod proxy;
