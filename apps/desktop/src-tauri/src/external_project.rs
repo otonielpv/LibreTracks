@@ -6,6 +6,8 @@ use flate2::read::GzDecoder;
 use quick_xml::events::{BytesStart, Event};
 use quick_xml::Reader;
 
+use libretracks_core::MidiEventKind;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ExternalProjectKind {
     Reaper,
@@ -65,6 +67,58 @@ pub struct ReaperTrack {
     pub solo: bool,
     pub folder_depth_delta: i32,
     pub items: Vec<ReaperItem>,
+    /// MIDI clips on this track (Ableton `MidiTrack`, Reaper inline MIDI items).
+    pub midi_items: Vec<ExternalMidiItem>,
+    /// Output channel (1-16) the source DAW routed this track to, if it said.
+    pub midi_channel: Option<u8>,
+    /// Output port name the source DAW routed this track to, if it said.
+    pub midi_port: Option<String>,
+}
+
+impl ReaperTrack {
+    /// Whether the track carries anything to import (audio or MIDI). A track
+    /// with neither is a group/folder header.
+    pub fn has_content(&self) -> bool {
+        !self.items.is_empty() || !self.midi_items.is_empty()
+    }
+}
+
+/// A MIDI clip read from another DAW, already in seconds. `events[].at_seconds`
+/// is an offset from `position_seconds`, like [`libretracks_core::MidiEvent`].
+#[derive(Debug, Clone)]
+pub struct ExternalMidiItem {
+    pub name: String,
+    pub position_seconds: f64,
+    pub length_seconds: f64,
+    pub events: Vec<ExternalMidiEvent>,
+}
+
+#[derive(Debug, Clone)]
+pub struct ExternalMidiEvent {
+    pub at_seconds: f64,
+    /// Channel (1-16) the source event carried. `None` = the track's.
+    pub channel: Option<u8>,
+    pub kind: MidiEventKind,
+}
+
+impl ExternalMidiItem {
+    /// Multiplies every time in the item (Ableton reads in beats first).
+    fn scale_time(&mut self, factor: f64) {
+        self.position_seconds *= factor;
+        self.length_seconds *= factor;
+        for event in &mut self.events {
+            event.at_seconds *= factor;
+            match &mut event.kind {
+                MidiEventKind::Note {
+                    duration_seconds, ..
+                }
+                | MidiEventKind::ControlCurve {
+                    duration_seconds, ..
+                } => *duration_seconds *= factor,
+                MidiEventKind::ControlChange { .. } | MidiEventKind::ProgramChange { .. } => {}
+            }
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -86,6 +140,8 @@ struct ReaperTrackBuilder {
     solo: bool,
     folder_depth_delta: i32,
     items: Vec<ReaperItem>,
+    first_item_name: Option<String>,
+    midi_items: Vec<ReaperPendingMidi>,
 }
 
 impl Default for ReaperTrackBuilder {
@@ -98,6 +154,8 @@ impl Default for ReaperTrackBuilder {
             solo: false,
             folder_depth_delta: 0,
             items: Vec::new(),
+            first_item_name: None,
+            midi_items: Vec::new(),
         }
     }
 }
@@ -110,6 +168,11 @@ struct ReaperItemBuilder {
     source_path: Option<PathBuf>,
     gain: f64,
     muted: bool,
+    name: Option<String>,
+    loop_source: bool,
+    midi: Option<ReaperMidiSource>,
+    /// Inside the `<SOURCE MIDI` block currently being read.
+    in_midi_source: bool,
 }
 
 impl Default for ReaperItemBuilder {
@@ -121,8 +184,45 @@ impl Default for ReaperItemBuilder {
             source_path: None,
             gain: 1.0,
             muted: false,
+            name: None,
+            loop_source: false,
+            midi: None,
+            in_midi_source: false,
         }
     }
+}
+
+/// An inline `<SOURCE MIDI` as read: event times in ticks from the source
+/// start. Turned into seconds once the whole tempo map is known.
+#[derive(Debug, Clone)]
+struct ReaperMidiSource {
+    ticks_per_quarter: f64,
+    /// `IGNTEMPO 1 <bpm>`: the source keeps its own tempo, not the project's.
+    own_bpm: Option<f64>,
+    ticks: u64,
+    events: Vec<ReaperMidiRawEvent>,
+    /// Notes switched on and not yet off: (channel, note, start tick, velocity).
+    open_notes: Vec<(u8, u8, u64, u8)>,
+}
+
+#[derive(Debug, Clone)]
+struct ReaperMidiRawEvent {
+    tick: u64,
+    channel: u8,
+    /// Note length in ticks; `0` for instantaneous messages.
+    duration_ticks: u64,
+    kind: MidiEventKind,
+}
+
+/// A Reaper MIDI item waiting for the tempo map.
+#[derive(Debug, Clone)]
+struct ReaperPendingMidi {
+    name: String,
+    position_seconds: f64,
+    length_seconds: f64,
+    source_offset_seconds: f64,
+    loop_source: bool,
+    source: ReaperMidiSource,
 }
 
 pub fn detect_external_project_kind(path: &Path) -> Option<ExternalProjectKind> {
@@ -149,11 +249,13 @@ pub fn parse_reaper_project(path: &Path) -> Result<ReaperProject, String> {
     let mut tempo_markers = Vec::<ReaperTempoMarker>::new();
     let mut time_signature_markers = Vec::<ReaperTimeSignatureMarker>::new();
     let mut tracks = Vec::new();
+    let mut pending_midi = Vec::<Vec<ReaperPendingMidi>>::new();
 
     let mut current_track: Option<ReaperTrackBuilder> = None;
     let mut current_item: Option<ReaperItemBuilder> = None;
     let mut source_depth = 0_u32;
     let mut tempo_env_depth = 0_u32;
+    let mut other_block_depth = 0_u32;
 
     for raw_line in content.lines() {
         let line = raw_line.trim();
@@ -194,8 +296,18 @@ pub fn parse_reaper_project(path: &Path) -> Result<ReaperProject, String> {
             continue;
         }
 
+        if other_block_depth > 0 {
+            if line.starts_with('<') {
+                other_block_depth = other_block_depth.saturating_add(1);
+            } else if line == ">" {
+                other_block_depth -= 1;
+            }
+            continue;
+        }
+
         if line.starts_with("<TRACK") {
             if let Some(track) = current_track.take() {
+                pending_midi.push(track.midi_items.clone());
                 tracks.push(build_track(track, tracks.len()));
             }
             current_track = Some(ReaperTrackBuilder::default());
@@ -212,23 +324,78 @@ pub fn parse_reaper_project(path: &Path) -> Result<ReaperProject, String> {
 
         if line.starts_with("<SOURCE") {
             source_depth = source_depth.saturating_add(1);
+            if let Some(item) = current_item.as_mut() {
+                let is_midi = tokenize_space_separated(line)
+                    .get(1)
+                    .is_some_and(|kind| kind.eq_ignore_ascii_case("MIDI"));
+                // Only the first MIDI take of an item is read.
+                if source_depth == 1 && is_midi && item.midi.is_none() {
+                    item.in_midi_source = true;
+                    item.midi = Some(ReaperMidiSource {
+                        ticks_per_quarter: 960.0,
+                        own_bpm: None,
+                        ticks: 0,
+                        events: Vec::new(),
+                        open_notes: Vec::new(),
+                    });
+                }
+            }
+            continue;
+        }
+
+        // Any other block opened inside a source (`<X` sysex/text events in a
+        // MIDI source) closes with its own `>`; without counting it that `>`
+        // closed the source early.
+        if source_depth > 0 && line.starts_with('<') {
+            source_depth = source_depth.saturating_add(1);
+            if let Some(midi) = current_item
+                .as_mut()
+                .filter(|item| item.in_midi_source)
+                .and_then(|item| item.midi.as_mut())
+            {
+                if let Some(delta) = tokenize_space_separated(line)
+                    .get(1)
+                    .and_then(|value| value.parse::<u64>().ok())
+                {
+                    midi.ticks = midi.ticks.saturating_add(delta);
+                }
+            }
+            continue;
+        }
+
+        // Any other block (`<FXCHAIN`, `<VOLENV2`, `<METRONOME`...) is skipped
+        // whole. Its closing `>` used to be read as the end of the track, so
+        // every item after a track's FX chain was dropped.
+        if line.starts_with('<') && !line.starts_with("<REAPER_PROJECT") {
+            other_block_depth = 1;
             continue;
         }
 
         if line == ">" {
             if source_depth > 0 {
                 source_depth -= 1;
+                if source_depth == 0 {
+                    if let Some(item) = current_item.as_mut() {
+                        if item.in_midi_source {
+                            item.in_midi_source = false;
+                            if let Some(midi) = item.midi.as_mut() {
+                                close_open_reaper_notes(midi);
+                            }
+                        }
+                    }
+                }
                 continue;
             }
 
             if let Some(item_builder) = current_item.take() {
-                if let (Some(track), Some(item)) = (current_track.as_mut(), build_item(item_builder)) {
-                    track.items.push(item);
+                if let Some(track) = current_track.as_mut() {
+                    push_reaper_item(track, item_builder);
                 }
                 continue;
             }
 
             if let Some(track) = current_track.take() {
+                pending_midi.push(track.midi_items.clone());
                 tracks.push(build_track(track, tracks.len()));
                 continue;
             }
@@ -239,6 +406,12 @@ pub fn parse_reaper_project(path: &Path) -> Result<ReaperProject, String> {
         if let Some(track) = current_track.as_mut() {
             if let Some(item) = current_item.as_mut() {
                 if source_depth > 0 {
+                    if item.in_midi_source {
+                        if let Some(midi) = item.midi.as_mut() {
+                            parse_reaper_midi_source_line(midi, line);
+                        }
+                        continue;
+                    }
                     if line.starts_with("FILE ") {
                         if let Some(file_value) = parse_quoted_or_tail(line, "FILE") {
                             item.source_path = Some(resolve_source_path(root, &file_value));
@@ -275,6 +448,20 @@ pub fn parse_reaper_project(path: &Path) -> Result<ReaperProject, String> {
                         .unwrap_or(false);
                     continue;
                 }
+                if line.starts_with("LOOPSRC ") {
+                    item.loop_source = tokenize_space_separated(line)
+                        .get(1)
+                        .and_then(|value| value.parse::<i32>().ok())
+                        .is_some_and(|value| value != 0);
+                    continue;
+                }
+                // The take name. Before, it fell through to the track's NAME
+                // below and renamed the track after its last item.
+                if line.starts_with("NAME ") {
+                    item.name = parse_quoted_or_tail(line, "NAME");
+                    continue;
+                }
+                continue;
             }
 
             if line.starts_with("NAME ") {
@@ -351,11 +538,12 @@ pub fn parse_reaper_project(path: &Path) -> Result<ReaperProject, String> {
     }
 
     if let Some(item_builder) = current_item.take() {
-        if let (Some(track), Some(item)) = (current_track.as_mut(), build_item(item_builder)) {
-            track.items.push(item);
+        if let Some(track) = current_track.as_mut() {
+            push_reaper_item(track, item_builder);
         }
     }
     if let Some(track) = current_track.take() {
+        pending_midi.push(track.midi_items.clone());
         tracks.push(build_track(track, tracks.len()));
     }
 
@@ -363,10 +551,33 @@ pub fn parse_reaper_project(path: &Path) -> Result<ReaperProject, String> {
         return Err("el proyecto Reaper no contiene pistas importables".to_string());
     }
 
+    {
+        let mut tempo_points = tempo_markers.clone();
+        normalize_tempo_markers(&mut tempo_points);
+        let tempo_map = TempoMap::new(&tempo_points, bpm.unwrap_or(120.0));
+        for (track, pending) in tracks.iter_mut().zip(pending_midi) {
+            track.midi_items = pending
+                .into_iter()
+                .filter_map(|item| convert_reaper_midi_item(item, &tempo_map))
+                .collect();
+            track.midi_channel = most_common_event_channel(&track.midi_items);
+        }
+    }
+
     let source_duration_seconds = tracks
         .iter()
-        .flat_map(|track| track.items.iter())
-        .map(|item| item.position_seconds + item.length_seconds)
+        .flat_map(|track| {
+            track
+                .items
+                .iter()
+                .map(|item| item.position_seconds + item.length_seconds)
+                .chain(
+                    track
+                        .midi_items
+                        .iter()
+                        .map(|item| item.position_seconds + item.length_seconds),
+                )
+        })
         .fold(0.0_f64, f64::max)
         .max(1.0);
 
@@ -475,6 +686,7 @@ pub fn parse_ableton_project(path: &Path) -> Result<ReaperProject, String> {
     let mut track_builders = Vec::<AbletonTrackBuilder>::new();
     let mut current_track: Option<AbletonTrackBuilder> = None;
     let mut current_clip: Option<AbletonClipBuilder> = None;
+    let mut current_midi_clip: Option<AbletonMidiClipBuilder> = None;
     let mut current_locator: Option<AbletonLocatorBuilder> = None;
 
     let mut title: Option<String> = None;
@@ -503,6 +715,7 @@ pub fn parse_ableton_project(path: &Path) -> Result<ReaperProject, String> {
                     &mut signature_denominator,
                     &mut current_track,
                     &mut current_clip,
+                    &mut current_midi_clip,
                     &mut current_locator,
                     &mut section_markers,
                     &mut tempo_markers,
@@ -526,6 +739,7 @@ pub fn parse_ableton_project(path: &Path) -> Result<ReaperProject, String> {
                     &mut signature_denominator,
                     &mut current_track,
                     &mut current_clip,
+                    &mut current_midi_clip,
                     &mut current_locator,
                     &mut section_markers,
                     &mut tempo_markers,
@@ -540,7 +754,17 @@ pub fn parse_ableton_project(path: &Path) -> Result<ReaperProject, String> {
                             track.items.push(item);
                         }
                     }
-                } else if tag.eq_ignore_ascii_case("AudioTrack") {
+                } else if tag.eq_ignore_ascii_case("MidiClip") {
+                    if let (Some(track), Some(clip)) =
+                        (current_track.as_mut(), current_midi_clip.take())
+                    {
+                        if let Some(item) = build_ableton_midi_item(clip) {
+                            track.midi_items.push(item);
+                        }
+                    }
+                } else if tag.eq_ignore_ascii_case("AudioTrack")
+                    || tag.eq_ignore_ascii_case("MidiTrack")
+                {
                     if let Some(track) = current_track.take() {
                         track_builders.push(track);
                     }
@@ -614,6 +838,9 @@ pub fn parse_ableton_project(path: &Path) -> Result<ReaperProject, String> {
                 entry.item.source_start_seconds *= beats_to_seconds;
             }
         }
+        for item in &mut track.midi_items {
+            item.scale_time(beats_to_seconds);
+        }
     }
 
     let mut tracks = track_builders
@@ -621,10 +848,10 @@ pub fn parse_ableton_project(path: &Path) -> Result<ReaperProject, String> {
         .enumerate()
         .map(|(index, builder)| build_ableton_track(builder, index))
         .collect::<Vec<_>>();
-    tracks.retain(|track| !track.items.is_empty());
+    tracks.retain(ReaperTrack::has_content);
 
     if tracks.is_empty() {
-        return Err("el proyecto Ableton no contiene pistas de audio importables".to_string());
+        return Err("el proyecto Ableton no contiene pistas de audio ni MIDI importables".to_string());
     }
 
     if let (Some(numerator), Some(denominator)) = (signature_numerator, signature_denominator) {
@@ -660,8 +887,18 @@ pub fn parse_ableton_project(path: &Path) -> Result<ReaperProject, String> {
 
     let duration_seconds = tracks
         .iter()
-        .flat_map(|track| track.items.iter())
-        .map(|item| item.position_seconds + item.length_seconds)
+        .flat_map(|track| {
+            track
+                .items
+                .iter()
+                .map(|item| item.position_seconds + item.length_seconds)
+                .chain(
+                    track
+                        .midi_items
+                        .iter()
+                        .map(|item| item.position_seconds + item.length_seconds),
+                )
+        })
         .fold(0.0_f64, f64::max)
         .max(
             section_markers
@@ -735,6 +972,67 @@ struct AbletonTrackBuilder {
     muted: bool,
     solo: bool,
     items: Vec<AbletonItem>,
+    /// MIDI clips, still in beats until the tempo is known.
+    midi_items: Vec<ExternalMidiItem>,
+    midi_routing: AbletonMidiRouting,
+}
+
+/// `<MidiOutputRouting>` of a MIDI track: where Live sent it.
+#[derive(Debug, Clone, Default)]
+struct AbletonMidiRouting {
+    target: Option<String>,
+    upper: Option<String>,
+    lower: Option<String>,
+}
+
+impl AbletonMidiRouting {
+    /// The external port name, only when the track really goes out to a
+    /// device (not "No Output" nor another track).
+    fn port(&self) -> Option<String> {
+        let target = self.target.as_deref()?;
+        if !target.starts_with("MidiOut/External") {
+            return None;
+        }
+        self.upper
+            .as_deref()
+            .map(str::trim)
+            .filter(|name| !name.is_empty())
+            .map(str::to_string)
+    }
+
+    /// "Ch. 3" -> 3. "All Channels" (or a localized label without a number)
+    /// leaves the channel to the default.
+    fn channel(&self) -> Option<u8> {
+        self.port()?;
+        let digits = self
+            .lower
+            .as_deref()?
+            .chars()
+            .filter(char::is_ascii_digit)
+            .collect::<String>();
+        digits.parse::<u8>().ok().filter(|ch| (1..=16).contains(ch))
+    }
+}
+
+/// A `<MidiClip>` in the arrangement as read (all times in beats).
+#[derive(Debug, Clone, Default)]
+struct AbletonMidiClipBuilder {
+    current_start: Option<f64>,
+    current_end: Option<f64>,
+    loop_on: bool,
+    loop_start: Option<f64>,
+    loop_end: Option<f64>,
+    start_relative: f64,
+    name: Option<String>,
+    disabled: bool,
+    bank_coarse: Option<i32>,
+    bank_fine: Option<i32>,
+    program: Option<i32>,
+    /// (key, time, duration, velocity), clip-relative beats.
+    notes: Vec<(u8, f64, f64, u8)>,
+    /// Key of the `<KeyTrack>` being read; Live writes it AFTER its notes.
+    key_track_key: Option<u8>,
+    key_track_pending: Vec<(f64, f64, u8)>,
 }
 
 /// A clip as read, before the beats -> seconds pass (the tempo comes after
@@ -756,6 +1054,8 @@ impl Default for AbletonTrackBuilder {
             muted: false,
             solo: false,
             items: Vec::new(),
+            midi_items: Vec::new(),
+            midi_routing: AbletonMidiRouting::default(),
         }
     }
 }
@@ -871,13 +1171,26 @@ fn handle_ableton_node(
     signature_denominator: &mut Option<u32>,
     current_track: &mut Option<AbletonTrackBuilder>,
     current_clip: &mut Option<AbletonClipBuilder>,
+    current_midi_clip: &mut Option<AbletonMidiClipBuilder>,
     current_locator: &mut Option<AbletonLocatorBuilder>,
     section_markers: &mut Vec<ReaperSectionMarker>,
     tempo_markers: &mut Vec<ReaperTempoMarker>,
     time_signature_markers: &mut Vec<ReaperTimeSignatureMarker>,
 ) {
-    if tag.eq_ignore_ascii_case("AudioTrack") {
+    if tag.eq_ignore_ascii_case("AudioTrack") || tag.eq_ignore_ascii_case("MidiTrack") {
         *current_track = Some(AbletonTrackBuilder::default());
+        return;
+    }
+    // Only arrangement clips: Session View clip slots hold MidiClips too, but
+    // they are not on the timeline.
+    if tag.eq_ignore_ascii_case("MidiClip") {
+        if current_track.is_some() && stack_contains(stack, "ArrangerAutomation") {
+            *current_midi_clip = Some(AbletonMidiClipBuilder::default());
+        }
+        return;
+    }
+    if let Some(clip) = current_midi_clip.as_mut() {
+        handle_ableton_midi_clip_node(clip, stack, tag, attributes);
         return;
     }
     if tag.eq_ignore_ascii_case("AudioClip") {
@@ -924,6 +1237,20 @@ fn handle_ableton_node(
 
     if let Some(track) = current_track.as_mut() {
         if let Some(node_value) = value {
+            if parent_is(stack, "MidiOutputRouting") {
+                let slot = if tag.eq_ignore_ascii_case("Target") {
+                    Some(&mut track.midi_routing.target)
+                } else if tag.eq_ignore_ascii_case("UpperDisplayString") {
+                    Some(&mut track.midi_routing.upper)
+                } else if tag.eq_ignore_ascii_case("LowerDisplayString") {
+                    Some(&mut track.midi_routing.lower)
+                } else {
+                    None
+                };
+                if let Some(slot) = slot {
+                    *slot = Some(node_value.to_string());
+                }
+            }
             if tag.eq_ignore_ascii_case("EffectiveName") || tag.eq_ignore_ascii_case("UserName") {
                 if !node_value.trim().is_empty() {
                     track.name = Some(node_value.trim().to_string());
@@ -1625,6 +1952,12 @@ fn build_track(builder: ReaperTrackBuilder, index: usize) -> ReaperTrack {
             .name
             .map(|name| name.trim().to_string())
             .filter(|name| !name.is_empty())
+            .or_else(|| {
+                builder
+                    .first_item_name
+                    .map(|name| name.trim().to_string())
+                    .filter(|name| !name.is_empty())
+            })
             .unwrap_or_else(|| format!("Track {}", index + 1)),
         volume: builder.volume.max(0.0),
         pan: builder.pan.clamp(-1.0, 1.0),
@@ -1632,6 +1965,32 @@ fn build_track(builder: ReaperTrackBuilder, index: usize) -> ReaperTrack {
         solo: builder.solo,
         folder_depth_delta: builder.folder_depth_delta,
         items: builder.items,
+        // Filled in after the tempo map is read (see parse_reaper_project).
+        midi_items: Vec::new(),
+        midi_channel: None,
+        midi_port: None,
+    }
+}
+
+fn push_reaper_item(track: &mut ReaperTrackBuilder, mut builder: ReaperItemBuilder) {
+    if track.first_item_name.is_none() {
+        track.first_item_name = builder.name.clone();
+    }
+    if let Some(midi) = builder.midi.take() {
+        if !builder.muted && builder.length_seconds > 0.0 && !midi.events.is_empty() {
+            track.midi_items.push(ReaperPendingMidi {
+                name: builder.name.clone().unwrap_or_default(),
+                position_seconds: builder.position_seconds.max(0.0),
+                length_seconds: builder.length_seconds,
+                source_offset_seconds: builder.source_start_seconds.max(0.0),
+                loop_source: builder.loop_source,
+                source: midi,
+            });
+        }
+        return;
+    }
+    if let Some(item) = build_item(builder) {
+        track.items.push(item);
     }
 }
 
@@ -1664,7 +2023,188 @@ fn build_ableton_track(builder: AbletonTrackBuilder, index: usize) -> ReaperTrac
         solo: builder.solo,
         folder_depth_delta: 0,
         items: builder.items.into_iter().map(|entry| entry.item).collect(),
+        midi_channel: builder.midi_routing.channel(),
+        midi_port: builder.midi_routing.port(),
+        midi_items: builder.midi_items,
     }
+}
+
+fn handle_ableton_midi_clip_node(
+    clip: &mut AbletonMidiClipBuilder,
+    stack: &[String],
+    tag: &str,
+    attributes: &[(String, String)],
+) {
+    if tag.eq_ignore_ascii_case("KeyTrack") {
+        clip.key_track_key = None;
+        clip.key_track_pending.clear();
+        return;
+    }
+    if tag.eq_ignore_ascii_case("MidiNoteEvent") {
+        let enabled = attributes
+            .iter()
+            .find(|(key, _)| key.eq_ignore_ascii_case("IsEnabled"))
+            .map_or(true, |(_, value)| !value.eq_ignore_ascii_case("false"));
+        let (Some(time), Some(duration)) =
+            (attr_f64(attributes, "Time"), attr_f64(attributes, "Duration"))
+        else {
+            return;
+        };
+        if !enabled || duration <= 0.0 {
+            return;
+        }
+        let velocity = attr_f64(attributes, "Velocity")
+            .unwrap_or(100.0)
+            .round()
+            .clamp(1.0, 127.0) as u8;
+        match clip.key_track_key {
+            Some(key) => clip.notes.push((key, time, duration, velocity)),
+            None => clip.key_track_pending.push((time, duration, velocity)),
+        }
+        return;
+    }
+
+    let Some(value) = attributes
+        .iter()
+        .find(|(key, _)| key.eq_ignore_ascii_case("Value"))
+        .map(|(_, value)| value.as_str())
+    else {
+        return;
+    };
+    if tag.eq_ignore_ascii_case("MidiKey") && parent_is(stack, "KeyTrack") {
+        if let Ok(key) = value.parse::<i32>() {
+            let key = key.clamp(0, 127) as u8;
+            clip.key_track_key = Some(key);
+            for (time, duration, velocity) in clip.key_track_pending.drain(..) {
+                clip.notes.push((key, time, duration, velocity));
+            }
+        }
+        return;
+    }
+    if parent_is(stack, "Loop") {
+        let number = value.parse::<f64>().ok();
+        if tag.eq_ignore_ascii_case("LoopStart") {
+            clip.loop_start = number;
+        } else if tag.eq_ignore_ascii_case("LoopEnd") {
+            clip.loop_end = number;
+        } else if tag.eq_ignore_ascii_case("StartRelative") {
+            clip.start_relative = number.unwrap_or(0.0);
+        } else if tag.eq_ignore_ascii_case("LoopOn") {
+            clip.loop_on = value.eq_ignore_ascii_case("true");
+        }
+        return;
+    }
+    if !parent_is(stack, "MidiClip") {
+        return;
+    }
+    if tag.eq_ignore_ascii_case("CurrentStart") {
+        clip.current_start = value.parse::<f64>().ok();
+    } else if tag.eq_ignore_ascii_case("CurrentEnd") {
+        clip.current_end = value.parse::<f64>().ok();
+    } else if tag.eq_ignore_ascii_case("Name") {
+        clip.name = Some(value.trim().to_string()).filter(|name| !name.is_empty());
+    } else if tag.eq_ignore_ascii_case("Disabled") {
+        clip.disabled = value.eq_ignore_ascii_case("true");
+    } else if tag.eq_ignore_ascii_case("BankSelectCoarse") {
+        clip.bank_coarse = value.parse::<i32>().ok();
+    } else if tag.eq_ignore_ascii_case("BankSelectFine") {
+        clip.bank_fine = value.parse::<i32>().ok();
+    } else if tag.eq_ignore_ascii_case("ProgramChange") {
+        clip.program = value.parse::<i32>().ok();
+    }
+}
+
+/// Lays an arrangement MIDI clip out on the timeline (still in beats): the
+/// notes that fall inside the visible part, repeated when the clip loops.
+fn build_ableton_midi_item(clip: AbletonMidiClipBuilder) -> Option<ExternalMidiItem> {
+    if clip.disabled {
+        return None;
+    }
+    let position = clip.current_start?.max(0.0);
+    let length = clip.current_end? - position;
+    if length <= 0.0 {
+        return None;
+    }
+    let loop_start = clip.loop_start.unwrap_or(0.0);
+    let loop_end = clip.loop_end.unwrap_or(loop_start + length);
+    let looping = clip.loop_on && loop_end > loop_start + 1e-6;
+    let content_start = loop_start + if looping { clip.start_relative } else { 0.0 };
+
+    let mut events = Vec::new();
+    // Live's clip "Bank/Sub/Pgm" boxes: sent when the clip starts. -1 = off.
+    let data = |value: Option<i32>| value.filter(|v| (0..=127).contains(v)).map(|v| v as u8);
+    if let Some(value) = data(clip.bank_coarse) {
+        events.push(ExternalMidiEvent {
+            at_seconds: 0.0,
+            channel: None,
+            kind: MidiEventKind::ControlChange {
+                controller: 0,
+                value,
+            },
+        });
+    }
+    if let Some(value) = data(clip.bank_fine) {
+        events.push(ExternalMidiEvent {
+            at_seconds: 0.0,
+            channel: None,
+            kind: MidiEventKind::ControlChange {
+                controller: 32,
+                value,
+            },
+        });
+    }
+    if let Some(program) = data(clip.program) {
+        events.push(ExternalMidiEvent {
+            at_seconds: 0.0,
+            channel: None,
+            kind: MidiEventKind::ProgramChange { program },
+        });
+    }
+
+    let mut notes = clip.notes;
+    notes.sort_by(|a, b| a.1.total_cmp(&b.1));
+    // Each pass plays clip time [window_start, window_end) starting at
+    // timeline offset `offset`. Without loop there is one pass up to the end
+    // marker (LoopEnd doubles as it when the loop is off).
+    let mut window_start = content_start;
+    let mut offset = 0.0_f64;
+    while offset < length && events.len() < MAX_IMPORTED_MIDI_EVENTS_PER_CLIP {
+        let window_end = if looping { loop_end } else { content_start + length };
+        for &(key, time, duration, velocity) in &notes {
+            if time < window_start - 1e-9 || time >= window_end {
+                continue;
+            }
+            let at = offset + (time - window_start);
+            if at >= length {
+                break;
+            }
+            let until = (offset + (time + duration).min(window_end) - window_start).min(length);
+            events.push(ExternalMidiEvent {
+                at_seconds: at,
+                channel: None,
+                kind: MidiEventKind::Note {
+                    note: key,
+                    velocity,
+                    duration_seconds: (until - at).max(1e-3),
+                },
+            });
+        }
+        if !looping {
+            break;
+        }
+        offset += window_end - window_start;
+        window_start = loop_start;
+    }
+
+    if events.is_empty() {
+        return None;
+    }
+    Some(ExternalMidiItem {
+        name: clip.name.unwrap_or_default(),
+        position_seconds: position,
+        length_seconds: length,
+        events,
+    })
 }
 
 /// Live's automatic audio track names: `<number>-Audio` for an empty track,
@@ -1693,6 +2233,266 @@ fn build_item(builder: ReaperItemBuilder) -> Option<ReaperItem> {
         gain: builder.gain.max(0.0),
         muted: builder.muted,
     })
+}
+
+/// One line inside a Reaper `<SOURCE MIDI` block. Events are
+/// `E <delta ticks> <status> <data1> <data2>` in hex (`e` = selected, an `m`
+/// in the flag = muted); the delta always advances the clock, muted or not.
+fn parse_reaper_midi_source_line(midi: &mut ReaperMidiSource, line: &str) {
+    let parts = tokenize_space_separated(line);
+    let Some(flag) = parts.first() else {
+        return;
+    };
+    if *flag == "HASDATA" {
+        if let Some(ppq) = parts.get(2).and_then(|value| value.parse::<f64>().ok()) {
+            if ppq > 0.0 {
+                midi.ticks_per_quarter = ppq;
+            }
+        }
+        return;
+    }
+    if *flag == "IGNTEMPO" {
+        let ignores = parts.get(1).is_some_and(|value| *value == "1");
+        midi.own_bpm = if ignores {
+            parts
+                .get(2)
+                .and_then(|value| value.parse::<f64>().ok())
+                .filter(|bpm| *bpm > 0.0)
+        } else {
+            None
+        };
+        return;
+    }
+    let is_event = flag.starts_with('E') || flag.starts_with('e');
+    if !is_event || flag.len() > 3 || !flag.chars().all(|c| c.is_ascii_alphabetic()) {
+        return;
+    }
+    let Some(delta) = parts.get(1).and_then(|value| value.parse::<u64>().ok()) else {
+        return;
+    };
+    midi.ticks = midi.ticks.saturating_add(delta);
+    if flag[1..].contains('m') {
+        return;
+    }
+    let hex = |index: usize| {
+        parts
+            .get(index)
+            .and_then(|value| u8::from_str_radix(value, 16).ok())
+    };
+    let (Some(status), Some(data1)) = (hex(2), hex(3)) else {
+        return;
+    };
+    let data2 = hex(4).unwrap_or(0);
+    let channel = (status & 0x0f) + 1;
+    let tick = midi.ticks;
+    match status & 0xf0 {
+        0x90 if data2 > 0 => {
+            close_reaper_note(midi, channel, data1, tick);
+            midi.open_notes.push((channel, data1 & 0x7f, tick, data2 & 0x7f));
+        }
+        0x80 | 0x90 => close_reaper_note(midi, channel, data1, tick),
+        // CC 123 (all notes off) is how Reaper marks the end of the source.
+        0xb0 if data1 == 123 => {}
+        0xb0 => midi.events.push(ReaperMidiRawEvent {
+            tick,
+            channel,
+            duration_ticks: 0,
+            kind: MidiEventKind::ControlChange {
+                controller: data1 & 0x7f,
+                value: data2 & 0x7f,
+            },
+        }),
+        0xc0 => midi.events.push(ReaperMidiRawEvent {
+            tick,
+            channel,
+            duration_ticks: 0,
+            kind: MidiEventKind::ProgramChange {
+                program: data1 & 0x7f,
+            },
+        }),
+        _ => {}
+    }
+}
+
+fn close_reaper_note(midi: &mut ReaperMidiSource, channel: u8, note: u8, tick: u64) {
+    let note = note & 0x7f;
+    if let Some(index) = midi
+        .open_notes
+        .iter()
+        .position(|(ch, n, _, _)| *ch == channel && *n == note)
+    {
+        let (_, _, start, velocity) = midi.open_notes.remove(index);
+        midi.events.push(ReaperMidiRawEvent {
+            tick: start,
+            channel,
+            duration_ticks: tick.saturating_sub(start),
+            kind: MidiEventKind::Note {
+                note,
+                velocity,
+                duration_seconds: 0.0,
+            },
+        });
+    }
+}
+
+/// Notes still held when the source ends last until its end.
+fn close_open_reaper_notes(midi: &mut ReaperMidiSource) {
+    let end = midi.ticks;
+    while let Some((channel, note, _, _)) = midi.open_notes.first().copied() {
+        close_reaper_note(midi, channel, note, end);
+    }
+    midi.events.sort_by_key(|event| event.tick);
+}
+
+/// Piecewise-constant tempo map (ramps are read as steps), for turning a
+/// position in seconds into beats and back.
+struct TempoMap {
+    /// (start seconds, start beat, bpm), sorted.
+    segments: Vec<(f64, f64, f64)>,
+}
+
+impl TempoMap {
+    fn new(markers: &[ReaperTempoMarker], base_bpm: f64) -> Self {
+        let mut segments = vec![(0.0, 0.0, base_bpm.max(1.0))];
+        for marker in markers {
+            let (sec, beat, bpm) = *segments.last().unwrap();
+            let start = marker.start_seconds.max(0.0);
+            if start <= sec + 1e-9 {
+                segments.last_mut().unwrap().2 = marker.bpm.max(1.0);
+                continue;
+            }
+            segments.push((start, beat + (start - sec) * bpm / 60.0, marker.bpm.max(1.0)));
+        }
+        Self { segments }
+    }
+
+    fn seconds_to_beats(&self, seconds: f64) -> f64 {
+        let (sec, beat, bpm) = self
+            .segments
+            .iter()
+            .rev()
+            .find(|(sec, _, _)| *sec <= seconds)
+            .copied()
+            .unwrap_or(self.segments[0]);
+        beat + (seconds - sec) * bpm / 60.0
+    }
+
+    fn beats_to_seconds(&self, beats: f64) -> f64 {
+        let (sec, beat, bpm) = self
+            .segments
+            .iter()
+            .rev()
+            .find(|(_, beat, _)| *beat <= beats)
+            .copied()
+            .unwrap_or(self.segments[0]);
+        sec + (beats - beat) * 60.0 / bpm
+    }
+}
+
+/// Upper bound on events produced by repeating a looped clip, so a tiny loop
+/// stretched over a long item cannot balloon the session.
+const MAX_IMPORTED_MIDI_EVENTS_PER_CLIP: usize = 20_000;
+
+fn convert_reaper_midi_item(item: ReaperPendingMidi, tempo: &TempoMap) -> Option<ExternalMidiItem> {
+    let source = &item.source;
+    let ppq = source.ticks_per_quarter.max(1.0);
+    let start = item.position_seconds;
+    let end = start + item.length_seconds;
+    // Source time (quarter notes from the source start) -> project seconds.
+    // A source with its own tempo plays at that tempo whatever the project's.
+    let start_beat = tempo.seconds_to_beats(start);
+    let item_beats = tempo.seconds_to_beats(end) - start_beat;
+    let (offset_beats, to_seconds): (f64, Box<dyn Fn(f64) -> f64 + '_>) = match source.own_bpm {
+        Some(bpm) => (
+            item.source_offset_seconds * bpm / 60.0,
+            Box::new(move |beats| start + beats * 60.0 / bpm),
+        ),
+        None => (
+            tempo.seconds_to_beats(start + item.source_offset_seconds) - start_beat,
+            Box::new(move |beats| tempo.beats_to_seconds(start_beat + beats)),
+        ),
+    };
+    let length_beats = match source.own_bpm {
+        Some(bpm) => item.length_seconds * bpm / 60.0,
+        None => item_beats,
+    };
+    let source_beats = source.ticks as f64 / ppq;
+    let period = if item.loop_source && source_beats > 1e-6 {
+        Some(source_beats)
+    } else {
+        None
+    };
+
+    let mut events = Vec::new();
+    let mut pass = 0_u32;
+    'passes: loop {
+        let pass_offset = period.map_or(0.0, |period| f64::from(pass) * period) - offset_beats;
+        if pass_offset >= length_beats {
+            break;
+        }
+        for raw in &source.events {
+            let at = raw.tick as f64 / ppq + pass_offset;
+            if at < -1e-9 {
+                continue;
+            }
+            if at >= length_beats {
+                break;
+            }
+            let at_seconds = (to_seconds(at) - start).max(0.0);
+            let kind = match raw.kind.clone() {
+                MidiEventKind::Note { note, velocity, .. } => {
+                    let until = (at + raw.duration_ticks as f64 / ppq).min(length_beats);
+                    let note_end = period.map_or(until, |period| {
+                        until.min(pass_offset + period)
+                    });
+                    MidiEventKind::Note {
+                        note,
+                        velocity: velocity.max(1),
+                        duration_seconds: (to_seconds(note_end) - start - at_seconds).max(0.001),
+                    }
+                }
+                other => other,
+            };
+            events.push(ExternalMidiEvent {
+                at_seconds,
+                channel: Some(raw.channel),
+                kind,
+            });
+            if events.len() >= MAX_IMPORTED_MIDI_EVENTS_PER_CLIP {
+                break 'passes;
+            }
+        }
+        if period.is_none() {
+            break;
+        }
+        pass += 1;
+    }
+
+    if events.is_empty() {
+        return None;
+    }
+    Some(ExternalMidiItem {
+        name: item.name,
+        position_seconds: start,
+        length_seconds: item.length_seconds,
+        events,
+    })
+}
+
+/// The channel most of a track's events use, so it becomes the track's
+/// channel and only the odd ones out keep a per-event override.
+fn most_common_event_channel(items: &[ExternalMidiItem]) -> Option<u8> {
+    let mut counts = [0_usize; 17];
+    for event in items.iter().flat_map(|item| item.events.iter()) {
+        if let Some(channel) = event.channel.filter(|ch| (1..=16).contains(ch)) {
+            counts[usize::from(channel)] += 1;
+        }
+    }
+    let (channel, count) = counts
+        .iter()
+        .enumerate()
+        .max_by_key(|(channel, count)| (**count, std::cmp::Reverse(*channel)))?;
+    (*count > 0).then_some(channel as u8)
 }
 
 fn parse_quoted_or_tail(line: &str, prefix: &str) -> Option<String> {
@@ -2520,4 +3320,269 @@ mod tests {
                 // 8 beats at 120 bpm.
                 assert!((parsed.tracks[0].items[0].length_seconds - 4.0).abs() < 0.001);
         }
+
+    // ---- MIDI import -------------------------------------------------------
+
+    fn note_events(item: &super::ExternalMidiItem) -> Vec<(f64, u8, f64)> {
+        item.events
+            .iter()
+            .filter_map(|event| match event.kind {
+                libretracks_core::MidiEventKind::Note {
+                    note,
+                    duration_seconds,
+                    ..
+                } => Some((event.at_seconds, note, duration_seconds)),
+                _ => None,
+            })
+            .collect()
+    }
+
+    fn approx(a: f64, b: f64) -> bool {
+        (a - b).abs() < 1e-6
+    }
+
+    #[test]
+    fn ableton_imports_arrangement_midi_tracks_with_routing() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let project_path = temp.path().join("midi.als");
+        // 120 bpm: 1 beat = 0.5 s. Clip at beat 8, 4 beats long, loop of 2
+        // beats -> the two notes play twice. A Session View clip (ClipSlot) and
+        // a disabled note must be ignored.
+        let als = r#"<?xml version="1.0" encoding="UTF-8"?>
+<Ableton>
+  <LiveSet>
+    <Tracks>
+      <MidiTrack Id="1">
+        <Name><EffectiveName Value="Letras" /><UserName Value="Letras" /></Name>
+        <DeviceChain>
+          <MidiOutputRouting>
+            <Target Value="MidiOut/External/abc/Ch3" />
+            <UpperDisplayString Value="loopMIDI Port" />
+            <LowerDisplayString Value="Ch. 3" />
+          </MidiOutputRouting>
+          <MainSequencer>
+            <ClipSlotList>
+              <ClipSlot><ClipSlot><Value>
+                <MidiClip Id="9" Time="0">
+                  <CurrentStart Value="0" /><CurrentEnd Value="4" />
+                  <Notes><KeyTracks><KeyTrack Id="0"><Notes>
+                    <MidiNoteEvent Time="0" Duration="1" Velocity="100" IsEnabled="true" />
+                  </Notes><MidiKey Value="70" /></KeyTrack></KeyTracks></Notes>
+                </MidiClip>
+              </Value></ClipSlot></ClipSlot>
+            </ClipSlotList>
+            <ClipTimeable><ArrangerAutomation><Events>
+              <MidiClip Id="0" Time="8">
+                <CurrentStart Value="8" />
+                <CurrentEnd Value="12" />
+                <Loop>
+                  <LoopStart Value="0" />
+                  <LoopEnd Value="2" />
+                  <StartRelative Value="0" />
+                  <LoopOn Value="true" />
+                </Loop>
+                <Name Value="Verso" />
+                <ProgramChange Value="5" />
+                <Notes><KeyTracks>
+                  <KeyTrack Id="0">
+                    <Notes>
+                      <MidiNoteEvent Time="0" Duration="0.5" Velocity="100" IsEnabled="true" />
+                      <MidiNoteEvent Time="1.5" Duration="1" Velocity="90" IsEnabled="true" />
+                      <MidiNoteEvent Time="1" Duration="0.5" Velocity="90" IsEnabled="false" />
+                    </Notes>
+                    <MidiKey Value="60" />
+                  </KeyTrack>
+                </KeyTracks></Notes>
+              </MidiClip>
+            </Events></ArrangerAutomation></ClipTimeable>
+          </MainSequencer>
+        </DeviceChain>
+      </MidiTrack>
+    </Tracks>
+    <MasterTrack><DeviceChain><Mixer><Tempo><Manual Value="120" /></Tempo></Mixer></DeviceChain></MasterTrack>
+  </LiveSet>
+</Ableton>"#;
+        fs::write(&project_path, als).expect("write als");
+
+        let parsed = parse_ableton_project(&project_path).expect("parse ableton");
+        assert_eq!(parsed.tracks.len(), 1);
+        let track = &parsed.tracks[0];
+        assert_eq!(track.name, "Letras");
+        assert!(track.items.is_empty());
+        assert_eq!(track.midi_port.as_deref(), Some("loopMIDI Port"));
+        assert_eq!(track.midi_channel, Some(3));
+        assert_eq!(track.midi_items.len(), 1);
+        let item = &track.midi_items[0];
+        assert_eq!(item.name, "Verso");
+        assert!(approx(item.position_seconds, 4.0));
+        assert!(approx(item.length_seconds, 2.0));
+        assert!(matches!(
+            item.events[0].kind,
+            libretracks_core::MidiEventKind::ProgramChange { program: 5 }
+        ));
+        let notes = note_events(item);
+        assert_eq!(notes.len(), 4, "{notes:?}");
+        assert!(approx(notes[0].0, 0.0) && notes[0].1 == 60 && approx(notes[0].2, 0.25));
+        // Second note: 1.5 beats in, cut at the loop end (0.5 beat).
+        assert!(approx(notes[1].0, 0.75) && approx(notes[1].2, 0.25));
+        assert!(approx(notes[2].0, 1.0));
+        assert!(approx(notes[3].0, 1.75));
+        assert!(approx(parsed.duration_seconds, 6.0));
+    }
+
+    #[test]
+    fn ableton_midi_track_without_external_output_has_no_port() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let project_path = temp.path().join("midi-none.als");
+        let als = r#"<?xml version="1.0" encoding="UTF-8"?>
+<Ableton><LiveSet><Tracks>
+  <MidiTrack Id="1">
+    <Name><EffectiveName Value="Luces" /></Name>
+    <DeviceChain>
+      <MidiOutputRouting>
+        <Target Value="MidiOut/None" />
+        <UpperDisplayString Value="No Output" />
+        <LowerDisplayString Value="" />
+      </MidiOutputRouting>
+      <MainSequencer><ClipTimeable><ArrangerAutomation><Events>
+        <MidiClip Id="0" Time="0">
+          <CurrentStart Value="0" /><CurrentEnd Value="4" />
+          <Loop><LoopStart Value="0" /><LoopEnd Value="4" /><LoopOn Value="false" /></Loop>
+          <Notes><KeyTracks><KeyTrack Id="0"><MidiKey Value="36" /><Notes>
+            <MidiNoteEvent Time="2" Duration="4" Velocity="127" />
+            <MidiNoteEvent Time="5" Duration="1" Velocity="127" />
+          </Notes></KeyTrack></KeyTracks></Notes>
+        </MidiClip>
+      </Events></ArrangerAutomation></ClipTimeable></MainSequencer>
+    </DeviceChain>
+  </MidiTrack>
+</Tracks>
+<MasterTrack><DeviceChain><Mixer><Tempo><Manual Value="60" /></Tempo></Mixer></DeviceChain></MasterTrack>
+</LiveSet></Ableton>"#;
+        fs::write(&project_path, als).expect("write als");
+
+        let parsed = parse_ableton_project(&project_path).expect("parse ableton");
+        let track = &parsed.tracks[0];
+        assert_eq!(track.midi_port, None);
+        assert_eq!(track.midi_channel, None);
+        // MidiKey before the notes works too; the note past the end marker is
+        // dropped and the held one is cut at the clip end.
+        let notes = note_events(&track.midi_items[0]);
+        assert_eq!(notes.len(), 1, "{notes:?}");
+        assert!(approx(notes[0].0, 2.0) && notes[0].1 == 36 && approx(notes[0].2, 2.0));
+    }
+
+    #[test]
+    fn reaper_imports_inline_midi_items() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let project_path = temp.path().join("midi.rpp");
+        // 120 bpm, 960 ticks per quarter = 0.5 s per 960 ticks. The FX chain
+        // before the item used to end the track early and drop the item.
+        let rpp = r#"
+<REAPER_PROJECT 0.1 "7.0/x64" 1710000000
+  TEMPO 120 4 4
+  <TRACK
+    NAME "Luces"
+    <FXCHAIN
+      SHOW 0
+      <VST "VST: ReaSynth" reasynth.dll 0
+        abc
+      >
+    >
+    <ITEM
+      POSITION 2.0
+      LENGTH 2.0
+      NAME "Escena"
+      <SOURCE MIDI
+        HASDATA 1 960 QN
+        E 0 c2 07 00
+        E 0 92 3c 64
+        <X 480 0
+          /w8BAA==
+        >
+        E 0 b2 07 7f
+        e 480 82 3c 00
+        Em 480 92 3e 64
+        E 0 91 40 50
+        E 960 81 40 00
+        E 0 b0 7b 00
+      >
+    >
+  >
+>
+"#;
+        fs::write(&project_path, rpp).expect("write rpp");
+
+        let parsed = parse_reaper_project(&project_path).expect("parse reaper");
+        assert_eq!(parsed.tracks.len(), 1);
+        let track = &parsed.tracks[0];
+        // The take name no longer renames the track.
+        assert_eq!(track.name, "Luces");
+        assert_eq!(track.midi_items.len(), 1);
+        let item = &track.midi_items[0];
+        assert_eq!(item.name, "Escena");
+        assert!(approx(item.position_seconds, 2.0));
+        assert_eq!(track.midi_channel, Some(3));
+
+        use libretracks_core::MidiEventKind as K;
+        let kinds = item
+            .events
+            .iter()
+            .map(|event| (event.at_seconds, event.channel, event.kind.clone()))
+            .collect::<Vec<_>>();
+        assert!(kinds.iter().any(|(at, ch, kind)| approx(*at, 0.0)
+            && *ch == Some(3)
+            && matches!(kind, K::ProgramChange { program: 7 })));
+        // CC after the 480-tick sysex block: 0.25 s.
+        assert!(kinds.iter().any(|(at, _, kind)| approx(*at, 0.25)
+            && matches!(kind, K::ControlChange { controller: 7, value: 127 })));
+        let notes = note_events(item);
+        // The muted note is skipped but its delta still counts.
+        assert_eq!(notes.len(), 2, "{notes:?}");
+        assert!(approx(notes[0].0, 0.0) && notes[0].1 == 60 && approx(notes[0].2, 0.5));
+        assert!(approx(notes[1].0, 0.75) && notes[1].1 == 64 && approx(notes[1].2, 0.5));
+        assert_eq!(
+            item.events
+                .iter()
+                .find(|event| matches!(event.kind, K::Note { note: 64, .. }))
+                .and_then(|event| event.channel),
+            Some(2)
+        );
+    }
+
+    #[test]
+    fn reaper_looped_midi_item_repeats_its_source() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let project_path = temp.path().join("loop.rpp");
+        let rpp = r#"
+<REAPER_PROJECT 0.1 "7.0/x64" 1710000000
+  TEMPO 60 4 4
+  <TRACK
+    NAME "Clic"
+    <ITEM
+      POSITION 0
+      LENGTH 3.5
+      LOOPSRC 1
+      <SOURCE MIDI
+        HASDATA 1 960 QN
+        E 0 90 3c 64
+        E 480 80 3c 00
+        E 480 b0 7b 00
+      >
+    >
+  >
+>
+"#;
+        fs::write(&project_path, rpp).expect("write rpp");
+
+        let parsed = parse_reaper_project(&project_path).expect("parse reaper");
+        let notes = note_events(&parsed.tracks[0].midi_items[0]);
+        let starts = notes.iter().map(|note| note.0).collect::<Vec<_>>();
+        assert_eq!(starts.len(), 4, "{starts:?}");
+        for (start, expected) in starts.iter().zip([0.0, 1.0, 2.0, 3.0]) {
+            assert!(approx(*start, expected), "{starts:?}");
+        }
+        // The last repeat is cut at the item end.
+        assert!(approx(notes[3].2, 0.5));
+    }
 }
