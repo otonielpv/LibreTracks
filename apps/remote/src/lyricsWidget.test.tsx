@@ -127,4 +127,12 @@ describe("LyricsWidget", () => {
     expect(lyricsRegionAt(regions, 10)?.id).toBe("a");
     expect(lyricsRegionAt(regions, 45)?.id).toBe("b");
   });
+
+  it("without section markers shows the whole sheet and says how to follow it", () => {
+    const view = { ...songView([region("song", 0, 40, chart)]), sectionMarkers: [] } as SongView;
+    const { container } = render(<LyricsWidget songView={view} getPositionSeconds={() => 12} pendingMarkerId={null} />);
+    expect([...container.querySelectorAll(".lyrics-block-label")].map((node) => node.textContent)).toEqual(["Verso 1", "Coro 1"]);
+    expect(container.querySelector(".lyrics-block.is-current")).toBeNull();
+    expect(container.querySelector(".lyrics-hint")?.textContent).toMatch(/marca|marker/i);
+  });
 });

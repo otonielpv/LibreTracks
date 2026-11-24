@@ -728,6 +728,7 @@ export const LiveChartPanel = memo(function LiveChartPanel({
           onPointerDown={markManualScroll}
           data-testid="live-chart-scroller"
         >
+          {markers.length === 0 ? <p className="lt-live-chart-hint">{t("liveChart.noMarkers")}</p> : null}
           {blocks.map((block, blockIndex) => {
             const isCurrent = blockIndex === currentBlock;
             const blockDoc = docAt(markerStarts.get(block.markerId) ?? region?.startSeconds ?? 0) ?? doc;

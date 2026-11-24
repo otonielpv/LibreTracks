@@ -198,6 +198,12 @@
   font-size: 0.7rem;
 }
 
+.lt-live-chart-hint {
+  margin: 0 0 0.6rem;
+  color: #8a9893;
+  font-size: 0.75rem;
+}
+
 .lt-live-chart-empty-actions {
   display: flex;
   flex-wrap: wrap;

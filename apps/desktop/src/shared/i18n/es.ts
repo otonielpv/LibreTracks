@@ -3462,6 +3462,7 @@ const es = {
     empty: "«{{song}}» no tiene letra. Importa un PDF o un archivo de acordes y se convertirá en texto que sigue la canción línea a línea.",
     importFile: "Importar archivo…",
     pasteText: "Escribir o pegar",
+    noMarkers: "Añade marcas de sección para que la letra siga la canción.",
     formats: "PDF, ChordPro (.cho, .pro), texto con acordes encima de la letra",
     pdfNoText: "Este PDF no tiene texto (parece una imagen escaneada). Pega la letra a mano.",
     fileTooLarge: "El archivo pesa {{size}} MB; el máximo son 25 MB.",

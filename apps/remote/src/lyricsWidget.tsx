@@ -309,6 +309,7 @@ export const LyricsWidget = memo(function LyricsWidget({
           onPointerDown={markManual}
           data-testid="lyrics-scroller"
         >
+          {markers.length === 0 ? <p className="lyrics-hint">{STRINGS.lyricsNoMarkers}</p> : null}
           {blocks.map((block, blockIndex) => {
             const isCurrent = blockIndex === currentBlock;
             const blockDoc =

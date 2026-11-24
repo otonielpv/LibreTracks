@@ -3430,6 +3430,7 @@ const en = {
     empty: "“{{song}}” has no lyrics. Import a PDF or a chord file and it becomes text that follows the song line by line.",
     importFile: "Import file…",
     pasteText: "Type or paste",
+    noMarkers: "Add section markers so the lyrics follow the song.",
     formats: "PDF, ChordPro (.cho, .pro), text with chords above the lyrics",
     pdfNoText: "This PDF has no text (it looks like a scanned image). Paste the lyrics by hand.",
     fileTooLarge: "The file is {{size}} MB; the maximum is 25 MB.",

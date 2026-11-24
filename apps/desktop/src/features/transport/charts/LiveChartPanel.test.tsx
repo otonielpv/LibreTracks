@@ -567,4 +567,29 @@ describe("LiveChartPanel", () => {
     const chords = [...container.querySelectorAll(".lt-chart-chord")].map((node) => node.textContent);
     expect(chords).toEqual(["G#", "Bb"]);
   });
+
+  it("without section markers shows the whole sheet in order, nothing current, and says how to follow it", () => {
+    const target = region(linked);
+    const view = { ...songView(target), sectionMarkers: [] } as SongView;
+    const { container } = render(
+      <LiveChartPanel
+        song={view}
+        region={target}
+        positionSecondsRef={{ current: 12 }}
+        pendingMarkerId={null}
+        expanded={false}
+        onToggleExpanded={vi.fn()}
+        onClose={vi.fn()}
+        onChartChange={vi.fn(async () => {})}
+      />,
+    );
+    expect([...container.querySelectorAll(".lt-chart-section-label")].map((node) => node.textContent)).toEqual(["Verso 1", "Coro 1"]);
+    expect(container.querySelector(".lt-chart-section.is-current")).toBeNull();
+    expect(screen.getByText("liveChart.noMarkers")).toBeTruthy();
+  });
+
+  it("with section markers there is no notice", () => {
+    renderPanel(region(linked), { current: 0 });
+    expect(screen.queryByText("liveChart.noMarkers")).toBeNull();
+  });
 });
