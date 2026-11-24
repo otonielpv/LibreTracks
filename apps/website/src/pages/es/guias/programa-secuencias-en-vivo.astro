@@ -1,0 +1,81 @@
+---
+// Landing for "secuencias", the word Latin America uses for backing tracks
+// ("tocar con secuencias", "programa para secuencias"). Search Console showed
+// queries with it and the site never used the word, so this page owns it.
+import GuidePage from "../../../components/GuidePage.astro";
+
+const sections = [
+  {
+    heading: "1. Qué hace un programa de secuencias",
+    paragraphs: [
+      "Tocar con secuencias es sumar a la banda pistas pregrabadas que suenan a tiempo con el click: pads, cuerdas, coros, percusión o cualquier instrumento que no tienes en el escenario. El programa de secuencias reproduce esas pistas por separado, manda el click y la voz guía solo a los músicos y te deja moverte por la canción si el momento lo pide.",
+      "LibreTracks es un programa de secuencias gratis y de código abierto. No tiene suscripción, no pide cuenta y funciona sin internet una vez instalado, en Windows, macOS, Linux, Android e iOS.",
+    ],
+    checklist: [
+      "Cada instrumento en su pista, con su volumen y su salida.",
+      "Click y voz guía que no llegan al público.",
+      "Saltos a secciones, repeticiones y cambio de tono durante el directo.",
+    ],
+    media: { src: "/guide/articles/es/compact-view.webp", alt: "Setlist de secuencias por canción en la Vista Compacta de LibreTracks", width: 1600, height: 940 },
+  },
+  {
+    heading: "2. Prepara las secuencias",
+    paragraphs: [
+      "Las secuencias llegan como stems: un archivo de audio por instrumento, todos con la misma duración y el mismo punto de inicio. Da igual si las ha grabado tu equipo, las has comprado o las exportas de tu DAW; LibreTracks abre WAV, AIFF, FLAC, MP3 y otros formatos habituales.",
+      "Arrastra la carpeta de la canción a la biblioteca y LibreTracks crea una pista por archivo, ya alineadas. Si la canción trae su propio click o su guía, márcalos como tales para mandarlos a los oídos.",
+    ],
+    media: { src: "/guide/desktop/library-folder-to-song.mp4", poster: "/guide/desktop/library-folder-to-song.webp", alt: "Una carpeta de secuencias convertida en canción en LibreTracks", width: 1800, height: 1058, type: "video" as const },
+  },
+  {
+    heading: "3. Click y voz guía solo para la banda",
+    paragraphs: [
+      "Con una interfaz de audio de cuatro salidas ya puedes separar: 1-2 para la música que va a la mesa y 3-4 para el click y la guía que van a los in-ears. Con más salidas puedes mandar cada instrumento a su canal de la mesa.",
+      "Si la canción no trae click, LibreTracks lo genera a partir del tempo y el compás. La voz guía anuncia cada sección (intro, verso, coro, puente) y cuenta la entrada, en español o en inglés.",
+    ],
+    media: { src: "/guide/articles/es/track-route.webp", alt: "Asignación de la pista de click a una salida física en LibreTracks", width: 383, height: 408 },
+  },
+  {
+    heading: "4. Toca en directo con las secuencias",
+    paragraphs: [
+      "Pon marcas en las secciones y salta a ellas cuando el director lo pida: repetir el coro, volver al puente o ir directo al final. El modo Vamp repite una sección hasta que decides salir, y el salto puede esperar al final del compás o de la sección para que la banda no pierda el pulso.",
+      "Cada canción guarda su tono. Si quien canta ese día necesita bajar un tono, lo cambias en la canción y eliges qué pistas siguen el cambio; el click y la guía no se desafinan.",
+    ],
+    media: { src: "/guide/articles/es/live-view.webp", alt: "Vista Live de LibreTracks con las marcas de la canción y los saltos", width: 1600, height: 940 },
+  },
+  {
+    heading: "5. Secuencias desde el móvil o la tablet",
+    paragraphs: [
+      "La app de Android e iOS es el mismo programa, no una versión recortada: montas la canción, la ordenas en el setlist y la tocas desde el teléfono o la tablet con un cable a la mesa.",
+      "Si tocas desde el ordenador, el Remote abre el control en el navegador del móvil de cualquier músico de la banda, sin instalar nada, para lanzar canciones, saltar de sección o ajustar su mezcla.",
+    ],
+    checklist: [
+      "Android en Google Play e iOS en el App Store.",
+      "Una sesión hecha en el ordenador se abre igual en el móvil.",
+    ],
+  },
+  {
+    heading: "6. ¿De dónde saco las secuencias?",
+    paragraphs: [
+      "LibreTracks es el reproductor, no una tienda de canciones. Las secuencias las aportas tú: grabadas por tu equipo, compradas a quien tenga los derechos o separadas de tus propias grabaciones.",
+      "En la guía de multitracks gratis explicamos dónde conseguirlas de forma legal y cómo preparar las que ya tienes.",
+    ],
+  },
+];
+---
+
+<GuidePage
+  title="Programa para Secuencias en Vivo Gratis | LibreTracks"
+  description="Programa gratis para tocar con secuencias en vivo: pistas por separado, click y voz guía a los in-ears, saltos, cambio de tono y app para móvil. Sin suscripción."
+  lang="es"
+  eyebrow="Secuencias en vivo"
+  heading="Programa para secuencias en vivo, gratis"
+  intro="Todo lo que necesitas para tocar con secuencias en la iglesia, en un bolo o en el ensayo: cómo prepararlas, cómo mandar el click solo a la banda y cómo moverte por la canción en directo, con un programa gratuito y sin suscripción."
+  hero={{ src: "/guide/articles/es/compact-view.webp", alt: "Setlist de secuencias en la Vista Compacta de LibreTracks", width: 1600, height: 940 }}
+  sections={sections}
+  related={[
+    { href: "/es/download/", label: "Descargar LibreTracks gratis" },
+    { href: "/es/guias/multitracks-gratis/", label: "Dónde conseguir multitracks gratis" },
+    { href: "/es/docs/start/first-song/", label: "Tu primera canción, paso a paso" },
+  ]}
+  nextGuide={{ href: "/es/guias/lanzar-pistas-en-directo/", label: "Cómo lanzar pistas en directo" }}
+/>

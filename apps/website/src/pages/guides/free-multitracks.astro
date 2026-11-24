@@ -1,0 +1,75 @@
+---
+// English pair of /es/guias/multitracks-gratis/. "free multitrack download" and
+// "multitrack free" show up in Search Console with the same intent: people want
+// the audio. We do not host third-party tracks, so this answers where to get
+// them legally and ends at the player.
+import GuidePage from "../../components/GuidePage.astro";
+
+const sections = [
+  {
+    heading: "1. Before you download: what a multitrack is and the rights it carries",
+    paragraphs: [
+      "A multitrack is a song split into stems: drums, bass, keys, guitars, backing vocals, click and guide, each in its own file. To play along live you need the files and a player that sends them separately to the front-of-house desk and to the band's in-ears.",
+      "Free does not mean rights-free. The song has writers and the recording has an owner. Only download from someone who is allowed to share it and, if you perform in public, check which licence covers that performance at your church or venue.",
+    ],
+    checklist: [
+      "Be wary of packs with hundreds of well-known songs for nothing.",
+      "Read the licence: personal use, rehearsal and live performance are different things.",
+      "Keep a note of where each song came from.",
+    ],
+  },
+  {
+    heading: "2. Free, legal multitracks",
+    paragraphs: [
+      "Many worship artists and labels give away the multitracks of a single so churches can play it. Look on the artist's official site, their social profiles or the release page: these usually include click and guide.",
+      "Multitrack stores almost always have sample songs or a free downloads section, and some give you a song when you sign up. It is a good way to try the format before buying.",
+      "For mixing practice or testing a PA there are multitrack libraries under educational licences, such as Cambridge Music Technology's: hundreds of songs in separate stems, free for non-commercial use.",
+    ],
+  },
+  {
+    heading: "3. Make your own multitracks",
+    paragraphs: [
+      "The most reliable source is you. If your band records a rehearsal to a multitrack recorder, every microphone is already a stem. If someone on the team produces in a DAW (Ableton Live, Reaper, Logic, FL Studio, Cubase), export every track from the start of the song with the same length.",
+      "LibreTracks imports Ableton Live (.als) and Reaper (.rpp) projects directly, with their tracks and markers, so there is no need to export by hand.",
+    ],
+    checklist: [
+      "Export every track from bar 1, even if it starts with silence.",
+      "Same sample rate on every file.",
+      "Click and guide on their own tracks, apart from the music.",
+    ],
+    media: { src: "/guide/desktop/library-folder-to-song.mp4", poster: "/guide/desktop/library-folder-to-song.webp", alt: "A folder of stems turned into a song in LibreTracks", width: 1800, height: 1058, type: "video" as const },
+  },
+  {
+    heading: "4. Split a recording you already own into stems",
+    paragraphs: [
+      "If all you have is the stereo mix of your own recording, open-source AI stem separators (Demucs, for example) pull vocals, drums, bass and the rest into separate tracks. The result is not studio quality, but it is enough to drop the lead vocal or reinforce an instrument you are missing.",
+      "Only do this with audio you hold the rights to. Splitting a commercial song does not change who owns the recording.",
+    ],
+  },
+  {
+    heading: "5. Play them live for free",
+    paragraphs: [
+      "With the multitracks in a folder, drag it into LibreTracks and the song is built with one track per file. Add section markers, send click and guide vocals to the in-ears and the music to the desk, and change key if you need to.",
+      "LibreTracks is free and open source, with no subscription and no account, on Windows, macOS, Linux, Android and iOS.",
+    ],
+    media: { src: "/guide/articles/en/live-view.webp", alt: "LibreTracks Live View playing a multitrack with section markers", width: 1600, height: 940 },
+  },
+];
+---
+
+<GuidePage
+  title="Free Multitracks: Where to Download Them Legally | LibreTracks"
+  description="Where to get free, legal multitracks for live performance, how to make your own from your DAW or recordings, and which free player to run them on."
+  lang="en"
+  eyebrow="Free multitracks"
+  heading="Free multitracks: where to get them and how to play them"
+  intro="Searching for free multitracks quickly leads to dubious packs. This guide collects the legal sources that exist, how to make your own from what you already have and how to play them live on a free player."
+  hero={{ src: "/guide/articles/en/compact-view.webp", alt: "Multitracks organised by song in LibreTracks Compact View", width: 1600, height: 940 }}
+  sections={sections}
+  related={[
+    { href: "/download/", label: "Download LibreTracks free" },
+    { href: "/guides/backing-track-software/", label: "Free backing track software" },
+    { href: "/docs/tasks/library/", label: "Bring in audio and build songs" },
+  ]}
+  nextGuide={{ href: "/guides/backing-track-software/", label: "Free backing track software for live shows" }}
+/>

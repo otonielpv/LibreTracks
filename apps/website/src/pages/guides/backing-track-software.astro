@@ -1,0 +1,82 @@
+---
+// English pair of /es/guias/programa-secuencias-en-vivo/. Targets the generic
+// searches Search Console shows at positions 4-12 with no page of their own:
+// "free backing track software", "backing track app free", "free playback
+// software", "best free backing track app for android".
+import GuidePage from "../../components/GuidePage.astro";
+
+const sections = [
+  {
+    heading: "1. What backing track software does",
+    paragraphs: [
+      "Playing with backing tracks means adding pre-recorded parts to the band, locked to a click: pads, strings, backing vocals, percussion or any instrument you do not have on stage. Backing track software plays those stems separately, sends the click and spoken guide only to the musicians and lets you move around the song when the moment calls for it.",
+      "LibreTracks is free, open-source backing track software. There is no subscription, no account and no internet needed once it is installed, on Windows, macOS, Linux, Android and iOS.",
+    ],
+    checklist: [
+      "Every instrument on its own track, with its own level and output.",
+      "Click and guide vocals that never reach the audience.",
+      "Section jumps, loops and key changes during the show.",
+    ],
+    media: { src: "/guide/articles/en/compact-view.webp", alt: "A backing track set arranged by song in LibreTracks Compact View", width: 1600, height: 940 },
+  },
+  {
+    heading: "2. Prepare the tracks",
+    paragraphs: [
+      "Backing tracks arrive as stems: one audio file per instrument, all the same length and starting at the same point. Whether your team recorded them, you bought them or you export them from your DAW, LibreTracks opens WAV, AIFF, FLAC, MP3 and other common formats.",
+      "Drag the song's folder into the library and LibreTracks creates one track per file, already aligned. If the song ships with its own click or guide, mark them as such so they go to the in-ears.",
+    ],
+    media: { src: "/guide/desktop/library-folder-to-song.mp4", poster: "/guide/desktop/library-folder-to-song.webp", alt: "A folder of backing tracks turned into a song in LibreTracks", width: 1800, height: 1058, type: "video" as const },
+  },
+  {
+    heading: "3. Click and guide for the band only",
+    paragraphs: [
+      "An audio interface with four outputs is enough to split them: 1-2 for the music going to the desk and 3-4 for click and guide going to the in-ears. With more outputs you can send each instrument to its own desk channel.",
+      "If the song has no click, LibreTracks generates one from the tempo and time signature. The voice guide announces each section (intro, verse, chorus, bridge) and counts the band in, in English or Spanish.",
+    ],
+    media: { src: "/guide/articles/en/track-route.webp", alt: "Assigning the click track to a hardware output in LibreTracks", width: 383, height: 408 },
+  },
+  {
+    heading: "4. Play live with the tracks",
+    paragraphs: [
+      "Put markers on the sections and jump to them when the leader calls it: repeat the chorus, go back to the bridge or straight to the ending. Vamp loops a section until you decide to move on, and the jump can wait for the end of the bar or the section so the band never loses the pulse.",
+      "Every song keeps its own key. If today's singer needs it a step lower, change it on the song and choose which stems follow; the click and guide stay in tune.",
+    ],
+    media: { src: "/guide/articles/en/live-view.webp", alt: "LibreTracks Live View with the song's markers and jumps", width: 1600, height: 940 },
+  },
+  {
+    heading: "5. A free backing track app for Android and iOS",
+    paragraphs: [
+      "The Android and iOS app is the same program, not a cut-down version: build the song, order it in the setlist and play it from a phone or tablet with a cable to the desk.",
+      "If you play from a computer, the Remote opens the controls in any band member's phone browser, with nothing to install, to start songs, jump sections or adjust their own mix.",
+    ],
+    checklist: [
+      "Android on Google Play and iOS on the App Store.",
+      "A session built on the computer opens the same on the phone.",
+    ],
+  },
+  {
+    heading: "6. Where do the tracks come from?",
+    paragraphs: [
+      "LibreTracks is the player, not a song store. You bring the tracks: recorded by your team, bought from whoever holds the rights or split from your own recordings.",
+      "The free multitracks guide covers where to get them legally and how to prepare the ones you already have.",
+    ],
+  },
+];
+---
+
+<GuidePage
+  title="Free Backing Track Software for Live Shows | LibreTracks"
+  description="Free backing track software and app for live shows: separate stems, click and guide to the in-ears, section jumps, key changes, Android and iOS. No subscription."
+  lang="en"
+  eyebrow="Backing tracks live"
+  heading="Free backing track software for live shows"
+  intro="Everything you need to play with backing tracks at church, at a gig or in rehearsal: how to prepare them, how to send the click only to the band and how to move around the song live, with free software and no subscription."
+  hero={{ src: "/guide/articles/en/compact-view.webp", alt: "A backing track set in LibreTracks Compact View", width: 1600, height: 940 }}
+  sections={sections}
+  related={[
+    { href: "/download/", label: "Download LibreTracks free" },
+    { href: "/guides/free-multitracks/", label: "Where to get free multitracks" },
+    { href: "/docs/start/first-song/", label: "Your first song, step by step" },
+  ]}
+  nextGuide={{ href: "/guides/run-backing-tracks-live/", label: "How to run backing tracks live" }}
+/>
