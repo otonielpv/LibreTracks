@@ -57,7 +57,8 @@ function renderEditor(chart: SongChart | null, mode: "simple" | "advanced" = "si
   return { onSave };
 }
 
-const partButton = (name: RegExp) => within(screen.getByRole("navigation", { name: "simpleLyrics.parts" })).getByRole("button", { name });
+const partButtons = (name: RegExp) => within(screen.getByRole("navigation", { name: "simpleLyrics.parts" })).getAllByRole("button", { name });
+const partButton = (name: RegExp) => partButtons(name)[0];
 const box = () => screen.getByRole("textbox", { name: /simpleLyrics\.textFor/ }) as HTMLTextAreaElement;
 const save = async () => {
   await act(async () => {
@@ -244,5 +245,17 @@ describe("simple lyrics editor", () => {
     fireEvent.click(screen.getByRole("button", { name: "simpleLyrics.chordPut:G" }));
     await save();
     expect((onSave.mock.calls[0][0] as SongChart).text).toBe(["{section: Puente}", "[C] [G]", ""].join("\n"));
+  });
+
+  it("lists every marker in song order; rows of the same name share their lyrics", () => {
+    renderEditor(PC_CHART);
+    const names = within(screen.getByRole("navigation", { name: "simpleLyrics.parts" }))
+      .getAllByRole("button")
+      .map((button) => button.querySelector(".lt-simple-lyrics-part-name")?.textContent);
+    expect(names).toEqual(["Verso 1", "Coro", "Verso 2", "Coro", "Puente", "Coro"]);
+    fireEvent.click(partButtons(/Coro/)[2]);
+    expect(box().value).toBe(["C          G", "Santo eres tú"].join("\n"));
+    expect(screen.getByText(/simpleLyrics\.sharedWith/).textContent).toContain("2. Coro, 4. Coro");
+    expect(screen.queryByRole("button", { name: /simpleLyrics\.(splitHere|join)/ })).toBeNull();
   });
 });

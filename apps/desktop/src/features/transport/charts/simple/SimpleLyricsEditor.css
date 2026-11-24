@@ -81,9 +81,35 @@
   white-space: nowrap;
 }
 
-.lt-simple-lyrics-part-times {
-  color: rgb(229 226 225 / 0.6);
-  font-size: 0.72rem;
+.lt-simple-lyrics-part-position {
+  flex: 0 0 auto;
+  min-width: 1.4rem;
+  color: rgb(229 226 225 / 0.45);
+  font: 700 0.7rem/1 "JetBrains Mono", ui-monospace, monospace;
+}
+
+.lt-simple-lyrics-part.is-selected .lt-simple-lyrics-part-position {
+  color: #57f1db;
+}
+
+.lt-simple-lyrics-part-shared {
+  color: rgb(229 226 225 / 0.5);
+  font-size: 15px;
+}
+
+.lt-simple-lyrics-shared {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  min-width: 0;
+  color: rgb(229 226 225 / 0.7);
+  font: 500 0.75rem/1.3 "Space Grotesk", sans-serif;
+}
+
+.lt-simple-lyrics-shared .material-symbols-outlined {
+  font-size: 15px;
+  color: #57f1db;
 }
 
 .lt-simple-lyrics-part-done {
@@ -115,7 +141,8 @@
 .lt-simple-lyrics-split {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.35rem;
+  align-items: center;
+  gap: 0.35rem 0.6rem;
 }
 
 .lt-simple-lyrics-title {

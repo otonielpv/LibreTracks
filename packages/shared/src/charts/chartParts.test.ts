@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { MarkerKind, SectionMarkerSummary, SongChart } from "../models";
 
 import { analyzeSongSheet, textToSourceLines } from "./chartImport";
-import { addPart, applyPartEdit, chartParts, joinPart, splitPart } from "./chartParts";
+import { addPart, applyPartEdit, chartPartEntries, chartParts, joinPart, splitPart } from "./chartParts";
 import { parseChordPro, parseChordProWithPlaces, serializeChordPro } from "./chordChart";
 import { chartTextHash } from "./importedChart";
 import { canonicalLabel } from "./sectionVocab";
@@ -223,5 +223,37 @@ describe("addPart", () => {
       const { chart } = addPart(null, kind, "es");
       expect(canonicalLabel(chartParts(chart, [])[0].label, "header")?.kind).toBe(kind);
     }
+  });
+});
+
+describe("chartPartEntries", () => {
+  it("one row per marker, in song order, sharing the part of its name", () => {
+    const entries = chartPartEntries(chartParts(PC_CHART, SONG_MARKERS), SONG_MARKERS);
+    expect(entries.map((entry) => [entry.position, entry.label, entry.appearance, entry.times])).toEqual([
+      [1, "Intro", 1, 1],
+      [2, "Verso 1", 1, 1],
+      [3, "Coro", 1, 3],
+      [4, "Verso 2", 1, 1],
+      [5, "Coro", 2, 3],
+      [6, "Puente", 1, 1],
+      [7, "Coro", 3, 3],
+    ]);
+    expect(new Set(entries.filter((entry) => entry.label === "Coro").map((entry) => entry.partKey)).size).toBe(1);
+  });
+
+  it("a split appearance edits its own part", () => {
+    const split = splitPart(PC_CHART, SONG_MARKERS, "m:m3", "m7");
+    const entries = chartPartEntries(chartParts(split, SONG_MARKERS), SONG_MARKERS);
+    const last = entries.find((entry) => entry.key === "m7");
+    expect(last?.partKey).toBe("m:m7");
+    expect(last?.times).toBe(1);
+  });
+
+  it("without markers, one row per part", () => {
+    const chart: SongChart = { text: "{section: Coro}\nSanto\n\n{section: Verso}\nCamino\n", links: [] };
+    expect(chartPartEntries(chartParts(chart, []), []).map((entry) => [entry.key, entry.label])).toEqual([
+      ["s:0", "Coro"],
+      ["s:1", "Verso"],
+    ]);
   });
 });

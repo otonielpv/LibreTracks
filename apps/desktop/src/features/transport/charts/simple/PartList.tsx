@@ -1,13 +1,13 @@
 import { useTranslation } from "react-i18next";
 
 import type { MarkerKind } from "@libretracks/shared/models";
-import type { ChartPart } from "@libretracks/shared/charts/chartParts";
+import type { ChartPartEntry } from "@libretracks/shared/charts/chartParts";
 
 /** The quick buttons of a song without markers, in the order a song goes. */
 export const QUICK_PART_KINDS: MarkerKind[] = ["intro", "verse", "pre_chorus", "chorus", "bridge", "ending"];
 
 type PartListProps = {
-  parts: readonly ChartPart[];
+  entries: readonly ChartPartEntry[];
   selectedKey: string | null;
   onSelect: (key: string) => void;
   /** Songs without markers: add a part of this kind. */
@@ -15,28 +15,37 @@ type PartListProps = {
   quickName: (kind: MarkerKind) => string;
 };
 
-/** The parts of the song, on the side of the simple editor (chips on a phone). */
-export function PartList({ parts, selectedKey, onSelect, onAdd, quickName }: PartListProps) {
+/**
+ * The song's sections, one row per marker in the order they play (as on the
+ * timeline), on the side of the simple editor (chips on a phone). A link
+ * icon marks rows that share their lyrics with others of the same name.
+ */
+export function PartList({ entries, selectedKey, onSelect, onAdd, quickName }: PartListProps) {
   const { t } = useTranslation();
   return (
     <nav className="lt-simple-lyrics-parts" aria-label={t("simpleLyrics.parts")}>
       <ul>
-        {parts.map((part) => (
-          <li key={part.key}>
+        {entries.map((entry) => (
+          <li key={entry.key}>
             <button
               type="button"
-              className={`lt-simple-lyrics-part${part.key === selectedKey ? " is-selected" : ""}${part.sung ? "" : " is-instrumental"}`}
-              aria-pressed={part.key === selectedKey}
-              title={part.sung ? undefined : t("simpleLyrics.instrumental")}
-              onClick={() => onSelect(part.key)}
+              className={`lt-simple-lyrics-part${entry.key === selectedKey ? " is-selected" : ""}${entry.sung ? "" : " is-instrumental"}`}
+              aria-pressed={entry.key === selectedKey}
+              title={entry.sung ? undefined : t("simpleLyrics.instrumental")}
+              onClick={() => onSelect(entry.key)}
             >
-              <span className="lt-simple-lyrics-part-name">{part.label || "…"}</span>
-              {part.times > 1 ? (
-                <span className="lt-simple-lyrics-part-times" title={t("simpleLyrics.timesSung", { count: part.times })}>
-                  ×{part.times}
+              <span className="lt-simple-lyrics-part-position">{String(entry.position).padStart(2, "0")}</span>
+              <span className="lt-simple-lyrics-part-name">{entry.label || "…"}</span>
+              {entry.times > 1 ? (
+                <span
+                  className="material-symbols-outlined lt-simple-lyrics-part-shared"
+                  title={t("simpleLyrics.sharedCount", { count: entry.times })}
+                  aria-label={t("simpleLyrics.sharedCount", { count: entry.times })}
+                >
+                  link
                 </span>
               ) : null}
-              {part.section !== null ? (
+              {entry.section !== null ? (
                 <span className="material-symbols-outlined lt-simple-lyrics-part-done" aria-label={t("simpleLyrics.hasLyrics")}>
                   check
                 </span>

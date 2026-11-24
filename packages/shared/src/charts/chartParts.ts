@@ -351,3 +351,64 @@ export function addPart(
   const index = parseChordPro(text).sections.length - 1;
   return { chart: { ...current, text }, key: `s:${index}` };
 }
+
+/**
+ * One row per section marker of the song, in timeline order, as the simple
+ * editor lists them (decided 2026-11-24: "×5" on one row did not say where
+ * each one goes). Markers with the same name still share their lyrics: the
+ * row edits its part (`partKey`), and `appearance` / `times` say which time
+ * of that part it is. A song without markers lists its parts.
+ */
+export type ChartPartEntry = {
+  /** Stable selection key: the marker's id (or the part's key without markers). */
+  key: string;
+  /** The part it edits (`applyPartEdit`, `splitPart`, `joinPart`). */
+  partKey: string;
+  markerId: string | null;
+  label: string;
+  /** 1-based position in the song. */
+  position: number;
+  /** Which time of its part this is (1-based) out of `times`. */
+  appearance: number;
+  times: number;
+  section: number | null;
+  sung: boolean;
+};
+
+export function chartPartEntries(parts: readonly ChartPart[], markers: readonly SectionMarkerSummary[]): ChartPartEntry[] {
+  const songMarkers = originalMarkers(markers);
+  const byMarker = new Map<string, ChartPart>();
+  for (const part of parts) for (const id of part.markerIds) byMarker.set(id, part);
+  const entries: ChartPartEntry[] = [];
+  for (const marker of songMarkers) {
+    const part = byMarker.get(marker.id);
+    if (!part) continue;
+    entries.push({
+      key: marker.id,
+      partKey: part.key,
+      markerId: marker.id,
+      label: marker.name,
+      position: entries.length + 1,
+      appearance: part.markerIds.indexOf(marker.id) + 1,
+      times: part.markerIds.length,
+      section: part.section,
+      sung: part.sung,
+    });
+  }
+  // Sections no marker shows (or every part, without markers).
+  for (const part of parts) {
+    if (part.markerIds.length > 0) continue;
+    entries.push({
+      key: part.key,
+      partKey: part.key,
+      markerId: null,
+      label: part.label,
+      position: entries.length + 1,
+      appearance: 1,
+      times: 1,
+      section: part.section,
+      sung: part.sung,
+    });
+  }
+  return entries;
+}

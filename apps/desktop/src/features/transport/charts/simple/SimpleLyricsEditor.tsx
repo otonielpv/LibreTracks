@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react"
 import { useTranslation } from "react-i18next";
 
 import type { MarkerKind, SectionMarkerSummary, SongChart } from "@libretracks/shared/models";
-import { addPart, applyPartEdit, chartParts, joinPart, QUICK_PART_NAMES, splitPart } from "@libretracks/shared/charts/chartParts";
+import { addPart, applyPartEdit, chartPartEntries, chartParts, QUICK_PART_NAMES } from "@libretracks/shared/charts/chartParts";
 import { parseChordPro } from "@libretracks/shared/charts/chordChart";
 import { plainToSectionLines, sectionToPlain } from "@libretracks/shared/charts/plainChart";
 
@@ -34,8 +34,13 @@ export function SimpleLyricsEditor({ chart, markers, onChange, onSave, onImportF
   const language: "es" | "en" = i18n?.language?.startsWith("en") ? "en" : "es";
   const parts = useMemo(() => chartParts(chart, markers), [chart, markers]);
   const hasMarkers = useMemo(() => markers.some((marker) => !marker.id.includes("~")), [markers]);
-  const [selectedKey, setSelectedKey] = useState<string | null>(() => parts[0]?.key ?? null);
-  const selected = parts.find((part) => part.key === selectedKey) ?? null;
+  // One row per marker, in song order; rows with the same name share a part.
+  const entries = useMemo(() => chartPartEntries(parts, markers), [parts, markers]);
+  const [selectedKey, setSelectedKey] = useState<string | null>(() => entries[0]?.key ?? null);
+  const entry = entries.find((candidate) => candidate.key === selectedKey) ?? null;
+  const selected = entry ? (parts.find((part) => part.key === entry.partKey) ?? null) : null;
+  /** The other rows that show the same lyrics. */
+  const sharing = entry ? entries.filter((candidate) => candidate.partKey === entry.partKey && candidate.key !== entry.key) : [];
   const [draft, setDraft] = useState<{ key: string | null; text: string }>(() => ({ key: selectedKey, text: selected?.plain ?? "" }));
   const [clearedTimes, setClearedTimes] = useState(false);
   const [pasteOpen, setPasteOpen] = useState(false);
@@ -57,8 +62,8 @@ export function SimpleLyricsEditor({ chart, markers, onChange, onSave, onImportF
     if (replaced || draft.key !== selectedKey) setDraft({ key: selectedKey, text: selected?.plain ?? "" });
   }, [chart?.text, draft.key, selectedKey, selected?.plain]);
   useEffect(() => {
-    if (!parts.some((part) => part.key === selectedKey)) setSelectedKey(parts[0]?.key ?? null);
-  }, [parts, selectedKey]);
+    if (!entries.some((candidate) => candidate.key === selectedKey)) setSelectedKey(entries[0]?.key ?? null);
+  }, [entries, selectedKey]);
 
   const select = (key: string) => {
     setSelectedKey(key);
@@ -74,7 +79,7 @@ export function SimpleLyricsEditor({ chart, markers, onChange, onSave, onImportF
   const type = (text: string) => {
     setDraft({ key: selectedKey, text });
     // An emptied part loses its section: wait until leaving the box.
-    if (selectedKey !== null && text.trim()) commit(selectedKey, text);
+    if (selected && text.trim()) commit(selected.key, text);
   };
 
   const add = (kind: MarkerKind) => {
@@ -83,32 +88,16 @@ export function SimpleLyricsEditor({ chart, markers, onChange, onSave, onImportF
     select(added.key);
   };
 
-  const split = (markerId: string) => {
-    if (!selected) return;
-    const next = splitPart(chart, markers, selected.key, markerId);
-    if (next === chart) return;
-    emit(next);
-    select(`m:${markerId}`);
-  };
-  const joined = selected ? joinPart(chart, markers, selected.key) : chart;
-  const join = () => {
-    if (!selected || joined === chart) return;
-    const first = selected.markerIds[0];
-    emit(joined);
-    const target = chartParts(joined, markers).find((part) => part.markerIds.includes(first));
-    if (target) select(target.key);
-  };
-
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
       event.preventDefault();
       onSave();
       return;
     }
-    if (event.altKey && (event.key === "ArrowUp" || event.key === "ArrowDown") && parts.length > 0) {
+    if (event.altKey && (event.key === "ArrowUp" || event.key === "ArrowDown") && entries.length > 0) {
       event.preventDefault();
-      const at = Math.max(0, parts.findIndex((part) => part.key === selectedKey));
-      const next = parts[Math.min(parts.length - 1, Math.max(0, at + (event.key === "ArrowUp" ? -1 : 1)))];
+      const at = Math.max(0, entries.findIndex((candidate) => candidate.key === selectedKey));
+      const next = entries[Math.min(entries.length - 1, Math.max(0, at + (event.key === "ArrowUp" ? -1 : 1)))];
       select(next.key);
     }
   };
@@ -116,7 +105,7 @@ export function SimpleLyricsEditor({ chart, markers, onChange, onSave, onImportF
   return (
     <div className="lt-simple-lyrics" onKeyDown={onKeyDown}>
       <PartList
-        parts={parts}
+        entries={entries}
         selectedKey={selectedKey}
         onSelect={select}
         onAdd={hasMarkers ? null : add}
@@ -140,23 +129,15 @@ export function SimpleLyricsEditor({ chart, markers, onChange, onSave, onImportF
             ) : null}
         </div>
         <span className="lt-settings-field-label lt-simple-lyrics-title">
-          {selected ? t("simpleLyrics.textFor", { part: selected.label || "…" }) : t("simpleLyrics.choosePart")}
+          {entry ? t("simpleLyrics.textFor", { part: entry.label || "…" }) : t("simpleLyrics.choosePart")}
         </span>
-        {selected && selected.section !== null && selected.times > 1 ? (
-          <div className="lt-simple-lyrics-split">
-            {selected.markerIds.slice(1).map((markerId, index) => (
-              <button key={markerId} type="button" className="lt-chart-editor-button" onClick={() => split(markerId)}>
-                {t("simpleLyrics.split", { number: index + 2 })}
-              </button>
-            ))}
-          </div>
-        ) : null}
-        {selected && joined !== chart ? (
-          <div className="lt-simple-lyrics-split">
-            <button type="button" className="lt-chart-editor-button" onClick={join}>
-              {t("simpleLyrics.join")}
-            </button>
-          </div>
+        {sharing.length > 0 ? (
+          // Same name, same lyrics: other lyrics for one time = another
+          // name for its marker (or Advanced).
+          <p className="lt-simple-lyrics-shared">
+            <span className="material-symbols-outlined" aria-hidden="true">link</span>
+            {t("simpleLyrics.sharedWith", { list: sharing.map((other) => `${other.position}. ${other.label}`).join(", ") })}
+          </p>
         ) : null}
         <div className="lt-chart-editor-modes lt-simple-lyrics-views" role="tablist" aria-label={t("simpleLyrics.viewLabel")}>
           {(["text", "chords"] as const).map((option) => (
@@ -178,10 +159,10 @@ export function SimpleLyricsEditor({ chart, markers, onChange, onSave, onImportF
           disabled={!selected}
           spellCheck={false}
           placeholder={t("simpleLyrics.placeholder")}
-          aria-label={selected ? t("simpleLyrics.textFor", { part: selected.label || "…" }) : t("simpleLyrics.choosePart")}
+          aria-label={entry ? t("simpleLyrics.textFor", { part: entry.label || "…" }) : t("simpleLyrics.choosePart")}
           onChange={(event) => type(event.target.value)}
           onBlur={() => {
-            if (selectedKey !== null && !draft.text.trim()) commit(selectedKey, draft.text);
+            if (selected && !draft.text.trim()) commit(selected.key, draft.text);
           }}
         />
         )}
