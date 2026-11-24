@@ -172,6 +172,7 @@ export const GUEST_COMMAND_ROUTES: Readonly<Record<string, GuestCommandRoute>> =
   commit_track_eqs_change: "edit",
   commit_track_mix_change: "edit",
   create_section_marker: "edit",
+  color_tracks_by_group: "edit",
   create_song_region: "edit",
   create_track: "edit",
   delete_automation_cue: "edit",

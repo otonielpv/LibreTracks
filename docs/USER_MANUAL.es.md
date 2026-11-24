@@ -113,9 +113,10 @@ sueltas**: si sueltas `Way Maker - EG 1.wav`, `Way Maker - Keys.wav`… en una
 canción, cada uno cae en su carpeta (Guitarras, Teclados…) por su nombre.
 
 1. En `Configuración` › `General`, elige `Plantilla para canciones nuevas`.
-   `Banda (incluida)` trae Click, Guía, Batería, Bajo, Guitarras, Teclados,
-   Synth y pads, Voces y Efectos, con los nombres de los multitracks
-   comerciales en español e inglés (EG, AG, Keys, BGV, FX…).
+   `Banda (incluida)` trae Click, Guía, Batería, Percusión y loops, Bajo,
+   Guitarras eléctricas, Guitarras acústicas, Efectos, Pads, Cuerdas,
+   Teclados y Voces, cada grupo con su color y con los nombres de los
+   multitracks comerciales en español e inglés (EG, AG, Keys, BGV, FX…).
 2. Pulsa `+ Nueva canción`: sale con esa estructura. La flecha de al lado
    (`Nueva canción desde plantilla`) deja elegir otra plantilla, o
    `Sin plantilla`, solo para esa canción.

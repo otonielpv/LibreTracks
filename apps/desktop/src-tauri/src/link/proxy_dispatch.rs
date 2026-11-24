@@ -77,6 +77,7 @@ pub fn access(command: &str) -> Option<ProxyAccess> {
         | "commit_track_eqs_change"
         | "commit_track_mix_change"
         | "create_section_marker"
+        | "color_tracks_by_group"
         | "create_song_region"
         | "create_track"
         | "delete_automation_cue"
@@ -252,6 +253,7 @@ pub const PROXIED_COMMANDS: &[&str] = &[
     "commit_track_eqs_change",
     "commit_track_mix_change",
     "create_section_marker",
+    "color_tracks_by_group",
     "create_song_region",
     "create_track",
     "delete_automation_cue",
@@ -784,6 +786,14 @@ pub async fn dispatch(app: &AppHandle, command: &str, args: Value) -> Result<Val
             let app = app.clone();
             tauri::async_runtime::spawn_blocking(move || -> Result<Value, String> {
                 into_value_result(crate::commands::timeline::create_section_marker(arg(&args, "startSeconds")?, arg(&args, "kind")?, arg(&args, "variant")?, arg(&args, "name")?, arg(&args, "categoryOverride")?, app.state()))
+            })
+            .await
+            .map_err(|error| error.to_string())?
+        }
+        "color_tracks_by_group" => {
+            let app = app.clone();
+            tauri::async_runtime::spawn_blocking(move || -> Result<Value, String> {
+                into_value_result(crate::commands::timeline::color_tracks_by_group(arg(&args, "trackIds")?, app.state()))
             })
             .await
             .map_err(|error| error.to_string())?

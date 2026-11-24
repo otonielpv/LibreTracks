@@ -735,6 +735,7 @@ pub fn run() {
             commands::eq_presets::delete_eq_preset,
             commands::timeline::update_track,
             commands::timeline::update_track_color,
+            commands::timeline::color_tracks_by_group,
             commands::timeline::update_track_transpose_enabled,
             commands::timeline::update_track_mono_downmix,
             commands::timeline::update_track_channel_mode,

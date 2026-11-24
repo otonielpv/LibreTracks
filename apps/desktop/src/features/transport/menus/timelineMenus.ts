@@ -238,10 +238,31 @@ export type TimelineMenuDeps = {
     clips: ClipSummary[],
     color: string | null,
   ) => Promise<unknown>;
+  /** Color por grupo (guía, batería, guitarras…); `[]` = todas. Devuelve si
+   * alguna pista cambió. */
+  handleColorTracksByGroup: (trackIds: string[]) => Promise<boolean>;
   audioRoutingOptions: Array<{ value: string; label: string }>;
 };
 
 export function createTimelineMenus(getDeps: () => TimelineMenuDeps) {
+  /** «Colorear por grupo»: el backend reconoce cada pista por su nombre. */
+  function colorByGroupAction(label: string, trackIds: string[]): ContextMenuAction {
+    const d = getDeps();
+    return {
+      label,
+      onSelect: async () => {
+        const changed = await d.handleColorTracksByGroup(trackIds);
+        d.setStatus(
+          d.t(
+            changed
+              ? "transport.status.tracksColoredByGroup"
+              : "transport.status.noTrackGroupRecognized",
+          ),
+        );
+      },
+    };
+  }
+
   function openMenu(
     event: ReactMouseEvent,
     title: string,
@@ -1039,6 +1060,9 @@ export function createTimelineMenus(getDeps: () => TimelineMenuDeps) {
               d.handleSetTrackColor(track, color).then(() => undefined),
             ),
         },
+        ...(track.kind === "folder"
+          ? []
+          : [colorByGroupAction(t("transport.menu.colorByGroup"), [track.id])]),
         // Las palabras con las que una plantilla manda stems aquí al soltarlos.
         ...(FEATURE_FLAGS.songTemplates ? [matchAliasesAction(track, d)] : []),
         // Modo de canal (estereo, mono, solo L, solo R): solo pistas de
@@ -1179,6 +1203,10 @@ export function createTimelineMenus(getDeps: () => TimelineMenuDeps) {
               (color) => d.handleSetTrackColors(tracks, color).then(() => undefined),
             ),
         },
+        colorByGroupAction(
+          t("transport.menu.colorByGroup"),
+          tracks.map((track) => track.id),
+        ),
         ...eqActions,
       ]),
       // Meter varias pistas en una carpeta de una vez. Arrastrando habia que
@@ -1260,6 +1288,10 @@ export function createTimelineMenus(getDeps: () => TimelineMenuDeps) {
         label: t("transport.automation.addTrack"),
         onSelect: () => handleAddAutomationTrack(lastTrackId),
       });
+    }
+
+    if ((d.songRef.current?.tracks.length ?? 0) > 0) {
+      actions.push(colorByGroupAction(t("transport.menu.colorAllByGroup"), []));
     }
 
     return actions;

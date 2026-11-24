@@ -1341,6 +1341,23 @@ pub fn update_track_color(
         .map_err(|error| error.to_string())
 }
 
+/// Colorea por grupo (guía, batería, guitarras…) las pistas dadas, o todas si
+/// la lista viene vacía. Ver `DesktopSession::color_tracks_by_group`.
+#[tauri::command(async)]
+pub fn color_tracks_by_group(
+    track_ids: Vec<String>,
+    state: State<'_, DesktopState>,
+) -> Result<TransportSnapshot, String> {
+    let mut session = state
+        .session
+        .lock()
+        .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+
+    session
+        .color_tracks_by_group(&track_ids, &state.audio)
+        .map_err(|error| error.to_string())
+}
+
 #[tauri::command(async)]
 pub fn update_track_collapsed(
     track_id: String,

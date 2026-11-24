@@ -688,7 +688,7 @@ const es = {
       prerenderedPitchHint: "Al cambiar el tono o el tempo con warp, eliges el valor y pulsas Aplicar; el audio se prepara en segundo plano y mientras tanto sigue sonando el anterior. Gasta mucha menos CPU al reproducir y evita cortes en equipos de gama baja. Usa hasta 8 GB de disco (alrededor de 1 GB por canción transpuesta).",
       prerenderedPitchConfirm: "El cambio de tono preparado guarda en disco una copia del audio de cada canción con el tono o el tempo cambiados: alrededor de 1 GB por canción de 5 minutos con 20 pistas, y hasta 8 GB en total (lo más antiguo se borra solo). Se libera desde «Borrar caché». ¿Activarlo?",
       autoColorNewTracksHint:
-        "Cada pista nueva toma un color de la paleta, recorriéndola en orden, para distinguirlas de un vistazo. Desactívalo si prefieres colorearlas a mano. No repinta las pistas que ya tienes.",
+        "Cada pista nueva toma el color de su grupo según su nombre (click y guía, batería, bajo, guitarras eléctricas, acústicas, teclados, voces…); las que no se reconocen recorren la paleta. Desactívalo si prefieres colorearlas a mano. No repinta las pistas que ya tienes: para eso, clic derecho › Colorear por grupo.",
       songTrackLayout: "Pistas de cada canción",
       songTrackLayoutShared: "Compartidas entre canciones",
       songTrackLayoutSongFolder: "Una carpeta por canción",
@@ -1296,6 +1296,8 @@ const es = {
         rightName: "{{name}} Der",
       },
       selectColor: "Seleccionar color…",
+      colorByGroup: "Colorear por grupo",
+      colorAllByGroup: "Colorear todas las pistas por grupo",
       colorOfClips: "Color de {{count}} clips",
       colorOf: "Color: {{name}}",
       colorOfTracks_one: "Color: {{count}} pista",
@@ -1707,6 +1709,8 @@ const es = {
       referenceImportedAudioUpdated:
         "Comportamiento al importar audio actualizado.",
       autoColorNewTracksUpdated: "Colores automáticos de pista actualizados.",
+      tracksColoredByGroup: "Pistas coloreadas por grupo.",
+      noTrackGroupRecognized: "Ninguna pista cambió: o ya tenían el color de su grupo o su nombre no es de ningún grupo.",
       autoWarpUpdated: "Warp automático actualizado.",
       prerenderedPitchUpdated: "Cambio de tono preparado actualizado.",
       autoSaveUpdated: "Autoguardado actualizado.",

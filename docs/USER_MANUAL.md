@@ -113,9 +113,10 @@ sessions, it creates **songs** and **organises the audio you drop**: drop
 in its folder (Guitars, Keys…) by its name.
 
 1. In `Settings` › `General`, pick `Template for new songs`. `Band (built in)`
-   has Click, Guide, Drums, Bass, Guitars, Keys, Synths & pads, Vocals and
-   FX, with the names commercial multitracks use in English and Spanish (EG,
-   AG, Keys, BGV, FX…).
+   has Click, Guide, Drums, Percussion & loops, Bass, Electric guitars,
+   Acoustic guitars, FX, Pads, Strings, Keys and Vocals, each group with its
+   own colour and the names commercial multitracks use in English and Spanish
+   (EG, AG, Keys, BGV, FX…).
 2. Click `+ New song`: it comes with that layout. The arrow next to it
    (`New song from template`) lets you pick another template, or
    `No template`, for that song only.

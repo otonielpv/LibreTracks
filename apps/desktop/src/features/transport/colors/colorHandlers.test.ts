@@ -38,6 +38,8 @@ function setup(overrides: Partial<ColorHandlerDeps> = {}) {
     clipDisplayName: (c) => c.id,
     updateTrackColor: vi.fn(async () => snapshot(7)),
     updateClipColor: vi.fn(async () => snapshot(9)),
+    colorTracksByGroup: vi.fn(async () => snapshot(4)),
+    getProjectRevision: () => 3,
     ...overrides,
   };
 
@@ -50,6 +52,22 @@ function setup(overrides: Partial<ColorHandlerDeps> = {}) {
 }
 
 describe("createColorHandlers", () => {
+  it("colour by group asks the backend and reports whether anything changed", async () => {
+    const { handlers, deps, optimisticallyAppliedRevisionsRef } = setup();
+    await expect(handlers.handleColorTracksByGroup(["a", "b"])).resolves.toBe(true);
+    expect(deps.colorTracksByGroup).toHaveBeenCalledWith(["a", "b"]);
+    expect(deps.applyPlaybackSnapshot).toHaveBeenCalled();
+    // Sin parche optimista: el color lo decide el backend y la revisión nueva
+    // tiene que recargar la canción.
+    expect(optimisticallyAppliedRevisionsRef.current.size).toBe(0);
+    expect(deps.setSong).not.toHaveBeenCalled();
+  });
+
+  it("colour by group reports no change when the revision stays put", async () => {
+    const { handlers } = setup({ colorTracksByGroup: vi.fn(async () => snapshot(3)) });
+    await expect(handlers.handleColorTracksByGroup([])).resolves.toBe(false);
+  });
+
   it("track colour optimistically patches the song and records the revision", async () => {
     const { handlers, deps, optimisticallyAppliedRevisionsRef, getSongPatch } =
       setup();

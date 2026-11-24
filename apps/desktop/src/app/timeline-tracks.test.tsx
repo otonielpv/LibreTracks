@@ -333,6 +333,8 @@ describe("App / timeline-tracks", () => {
     // Agrupado por categorias (ab332492): color, carpetas y, al final, borrar.
     expect(buttons.map((button) => button.textContent)).toEqual([
       expect.stringContaining("Select colour"),
+      // Cada una con el color de su grupo (guía, batería, guitarras…).
+      expect.stringContaining("Colour by group"),
       // Copiar el EQ de la pista del clic derecho (plan track-eq-2): Rhythm es
       // una carpeta y las carpetas también llevan EQ.
       expect.stringContaining("Copy EQ from Keys"),

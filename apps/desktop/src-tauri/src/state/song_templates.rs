@@ -33,7 +33,7 @@ use super::song_edit::{
     ensure_region_covers_clip_for_file, file_stem_for_auto_track, normalize_timeline_start_seconds,
     ui_locale,
 };
-use super::track_colors::auto_color_for_new_track;
+use super::track_colors::{auto_color_for_new_track, TRACK_COLOR_GROUPS};
 use super::track_tree::insert_track;
 use super::{strip_song_to_template, timestamp_suffix};
 use crate::audio::engine::AudioController;
@@ -55,150 +55,18 @@ pub(crate) const NO_TEMPLATE: &str = "none";
 /// cada equipo, y una plantilla que diera por hecho la 3-4 sonaría por la PA de
 /// alguien. El usuario cambia el routing y guarda su propia plantilla.
 ///
-/// Las carpetas llevan color para que sus hijas lo hereden al crearse.
+/// Las carpetas llevan color para que sus hijas lo hereden al crearse. Los
+/// grupos, sus colores y sus alias son `TRACK_COLOR_GROUPS`, los mismos con
+/// los que se colorea una pista por su nombre.
 pub(crate) fn builtin_band_template(locale: Option<&str>) -> Vec<Track> {
     let spanish = locale == Some("es");
-    let name = |es: &str, en: &str| if spanish { es } else { en }.to_string();
-    let entries: [(&str, String, TrackKind, &str, &[&str]); 9] = [
-        (
-            "click",
-            "Click".to_string(),
-            TrackKind::Audio,
-            "#9C73E6",
-            &["click", "clic", "metronome", "metronomo", "met"],
-        ),
-        (
-            "guide",
-            name("Guía", "Guide"),
-            TrackKind::Audio,
-            "#C96FD6",
-            &["guide", "guia", "cues", "cue", "voice guide"],
-        ),
-        (
-            "drums",
-            name("Batería", "Drums"),
-            TrackKind::Folder,
-            "#E35D5B",
-            &[
-                "drums",
-                "drum",
-                "bateria",
-                "kick",
-                "bombo",
-                "snare",
-                "caja",
-                "hi hat",
-                "toms",
-                "tom",
-                "overheads",
-                "oh",
-                "room",
-                "cymbals",
-                "perc",
-                "percussion",
-                "percusion",
-                "loop",
-                "loops",
-            ],
-        ),
-        (
-            "bass",
-            name("Bajo", "Bass"),
-            TrackKind::Folder,
-            "#EE8A3C",
-            &["bass", "bajo", "sub", "synth bass", "bass synth"],
-        ),
-        (
-            "guitars",
-            name("Guitarras", "Guitars"),
-            TrackKind::Folder,
-            "#E0A83A",
-            &[
-                "eg",
-                "ag",
-                "gtr",
-                "guitar",
-                "guitarra",
-                "electric",
-                "electrica",
-                "acoustic",
-                "acustica",
-                "electric guitar",
-                "acoustic guitar",
-                "distor",
-                "distorsion",
-                "steel",
-                "lap steel",
-            ],
-        ),
-        (
-            "keys",
-            name("Teclados", "Keys"),
-            TrackKind::Folder,
-            "#57B66C",
-            &[
-                "keys",
-                "teclas",
-                "teclados",
-                "teclado",
-                "piano",
-                "rhodes",
-                "wurli",
-                "organ",
-                "organo",
-                "b3",
-                "electric piano",
-                "acoustic piano",
-            ],
-        ),
-        (
-            "synths",
-            name("Synth y pads", "Synths & pads"),
-            TrackKind::Folder,
-            "#4FB8E6",
-            &[
-                "synth",
-                "synths",
-                "sintetizador",
-                "pad",
-                "pads",
-                "arp",
-                "strings",
-                "cuerdas",
-                "orchestra",
-                "orquesta",
-                // Más palabras que «loop» (Batería, que va antes): sin esto el
-                // empate se lo lleva la batería.
-                "synth loop",
-            ],
-        ),
-        (
-            "vocals",
-            name("Voces", "Vocals"),
-            TrackKind::Folder,
-            "#5C8CE6",
-            &[
-                "vox", "voz", "voces", "vocals", "vocal", "bgv", "bgvs", "coro", "coros", "choir",
-                "chorus", "lead", "soprano", "alto", "tenor",
-            ],
-        ),
-        (
-            "fx",
-            name("Efectos", "FX"),
-            TrackKind::Folder,
-            "#2FA98A",
-            &[
-                "fx", "sfx", "efectos", "sweep", "riser", "impact", "noise", "ambient",
-            ],
-        ),
-    ];
-    entries
-        .into_iter()
-        .map(|(id, name, kind, color, aliases)| Track {
+    TRACK_COLOR_GROUPS
+        .iter()
+        .map(|group| Track {
             eq: None,
-            id: format!("builtin_{id}"),
-            name,
-            kind,
+            id: format!("builtin_{}", group.id),
+            name: if spanish { group.name_es } else { group.name_en }.to_string(),
+            kind: group.kind,
             parent_track_id: None,
             volume: 1.0,
             pan: 0.0,
@@ -206,17 +74,17 @@ pub(crate) fn builtin_band_template(locale: Option<&str>) -> Vec<Track> {
             solo: false,
             // Transposing a warped song must not detune the click or the
             // spoken guide.
-            transpose_enabled: !matches!(id, "click" | "guide"),
+            transpose_enabled: !matches!(group.id, "click" | "guide"),
             audio_to: "master".to_string(),
             channel_mode: Default::default(),
-            color: Some(color.to_string()),
+            color: Some(group.color.to_string()),
             auto_created: false,
             midi_port: None,
             midi_channel: 1,
             midi_enabled: true,
             collapsed: false,
             height_offset: None,
-            match_aliases: aliases.iter().map(|alias| alias.to_string()).collect(),
+            match_aliases: group.aliases.iter().map(|alias| alias.to_string()).collect(),
             song_region_id: None,
         })
         .collect()
@@ -497,7 +365,7 @@ fn copy_template_track(
     let color = template_track
         .color
         .clone()
-        .or_else(|| auto_color_for_new_track(&song.tracks, template_track.kind, auto_color));
+        .or_else(|| auto_color_for_new_track(&song.tracks, template_track.kind, &template_track.name, auto_color));
     Track {
         id,
         parent_track_id,
@@ -1381,7 +1249,7 @@ fn lane_track(
     auto_created: bool,
 ) -> Track {
     let color =
-        color.or_else(|| auto_color_for_new_track(&song.tracks, TrackKind::Audio, auto_color));
+        color.or_else(|| auto_color_for_new_track(&song.tracks, TrackKind::Audio, name, auto_color));
     Track {
         eq: None,
         id,
@@ -1835,9 +1703,9 @@ mod tests {
         assert_eq!(song.regions.len(), 1, "the drop created its song");
         assert_eq!(track_of(&song, &placements[0]).name, "Click");
         assert_eq!(track_of(&song, &placements[1]).name, "Guía");
-        // Both guitars are children of Guitarras, each on its own lane named
-        // without the song's prefix, coloured like the folder.
-        let guitars = song.tracks.iter().find(|t| t.name == "Guitarras").unwrap();
+        // Both guitars are children of Guitarras eléctricas, each on its own
+        // lane named without the song's prefix, coloured like the folder.
+        let guitars = song.tracks.iter().find(|t| t.name == "Guitarras eléctricas").unwrap();
         for (placement, lane) in [(&placements[2], "EG 1"), (&placements[3], "EG 2")] {
             let track = track_of(&song, placement);
             assert_eq!(track.name, lane);
@@ -2043,12 +1911,13 @@ mod tests {
             "Voces",
             "Voces",
             "Voces",
-            "Guitarras",
-            "Guitarras",
-            "Guitarras",
-            "Synth y pads",
-            // Un loop a secas sigue siendo de la batería.
-            "Batería",
+            "Guitarras eléctricas",
+            "Guitarras eléctricas",
+            "Guitarras eléctricas",
+            // «Synth Loop» es un loop, no un teclado; y un loop a secas tampoco
+            // es de la batería.
+            "Percusión y loops",
+            "Percusión y loops",
         ];
         for (index, group) in expected.iter().enumerate() {
             assert_eq!(
@@ -2069,7 +1938,10 @@ mod tests {
         let mut click = builtin_band_template(Some("es"))[0].clone();
         click.id = "own_click".into();
         click.match_aliases = vec!["click".into()];
-        let mut keys = builtin_band_template(Some("es"))[5].clone();
+        let mut keys = builtin_band_template(Some("es"))
+            .into_iter()
+            .find(|t| t.id == "builtin_keys")
+            .unwrap();
         keys.id = "own_keys".into();
         keys.name = "Pianos".into();
         keys.match_aliases = vec!["keys".into()];
@@ -2087,7 +1959,7 @@ mod tests {
         )
         .expect("organise");
 
-        assert!(song.tracks.iter().all(|t| t.name != "Guitarras" && t.name != "Teclados"));
+        assert!(song.tracks.iter().all(|t| t.name != "Guitarras eléctricas" && t.name != "Teclados"));
         assert_eq!(track_of(&song, &placements[0]).id, "own_click");
         assert_eq!(
             track_of(&song, &placements[1]).parent_track_id.as_deref(),

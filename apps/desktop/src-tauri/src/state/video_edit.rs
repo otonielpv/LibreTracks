@@ -64,6 +64,7 @@ fn new_video_track(song: &Song, name: &str, auto_color: bool) -> libretracks_cor
         color: super::track_colors::auto_color_for_new_track(
             &song.tracks,
             TrackKind::Video,
+            name,
             auto_color,
         ),
         auto_created: false,

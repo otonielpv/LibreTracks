@@ -30,6 +30,9 @@ export type ColorHandlerDeps = {
     clipId: string,
     color: string | null,
   ) => Promise<TransportSnapshot>;
+  colorTracksByGroup: (trackIds: string[]) => Promise<TransportSnapshot>;
+  /** Revisión de la canción cargada ahora mismo (por ref, no por estado). */
+  getProjectRevision: () => number | null;
 };
 
 export function createColorHandlers(deps: ColorHandlerDeps) {
@@ -42,6 +45,8 @@ export function createColorHandlers(deps: ColorHandlerDeps) {
     clipDisplayName,
     updateTrackColor,
     updateClipColor,
+    colorTracksByGroup,
+    getProjectRevision,
   } = deps;
 
   /** Apply a finished snapshot: mark its revision optimistic + publish it. */
@@ -188,7 +193,25 @@ export function createColorHandlers(deps: ColorHandlerDeps) {
     });
   };
 
+  /**
+   * Colorea por grupo (guía, batería, guitarras…) las pistas dadas, o todas si
+   * la lista va vacía. El backend decide el color de cada una por su nombre,
+   * así que no hay parche optimista: la revisión nueva recarga la canción.
+   * Devuelve si cambió algo (la revisión solo avanza si alguna se reconoció).
+   */
+  const handleColorTracksByGroup = async (trackIds: string[]) => {
+    let changed = false;
+    await runAction(async () => {
+      const previousRevision = getProjectRevision();
+      const nextSnapshot = await colorTracksByGroup(trackIds);
+      changed = previousRevision !== nextSnapshot.projectRevision;
+      applyPlaybackSnapshot(nextSnapshot);
+    });
+    return changed;
+  };
+
   return {
+    handleColorTracksByGroup,
     handleSetTrackColor,
     handleSetTrackColors,
     handleSetClipColor,

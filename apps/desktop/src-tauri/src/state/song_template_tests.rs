@@ -136,7 +136,7 @@ fn new_song_is_laid_out_from_the_default_template() {
         .create_empty_song(None, None, &audio)
         .expect("first song");
     let after_first = loaded(&session).tracks.len();
-    assert_eq!(after_first, 9, "the band template's nine targets");
+    assert_eq!(after_first, 12, "the band template's twelve targets");
     assert!(loaded(&session).tracks.iter().any(|t| t.name == "Batería"));
 
     // Shared: the second song adds nothing.
@@ -233,11 +233,11 @@ fn compact_drop_with_a_template_organises_the_stems_in_one_undo_step() {
     assert_eq!(track_name_of_clip(&song, "EG 1.wav"), "EG 1");
     assert_eq!(
         parent_name_of_clip(&song, "EG 1.wav").as_deref(),
-        Some("Guitarras")
+        Some("Guitarras eléctricas")
     );
     assert_eq!(
         parent_name_of_clip(&song, "EG 2.wav").as_deref(),
-        Some("Guitarras")
+        Some("Guitarras eléctricas")
     );
     assert_eq!(
         parent_name_of_clip(&song, "Keys.wav").as_deref(),
@@ -703,7 +703,7 @@ fn saving_a_song_folder_session_as_template_keeps_one_clean_band() {
         .filter(|t| t.parent_track_id.as_deref() == Some(folder_id.as_str()))
         .map(|t| t.name.as_str())
         .collect();
-    assert!(children.contains(&"Guitarras"), "{children:?}");
+    assert!(children.contains(&"Guitarras eléctricas"), "{children:?}");
     assert!(song
         .tracks
         .iter()
@@ -931,7 +931,7 @@ fn an_imported_song_is_organised_by_the_default_template_in_shared_mode() {
     for id in ["pkg_eg1", "pkg_eg2"] {
         let eg = track_of_clip(&song, &format!("clip_{id}"));
         assert_eq!(eg.id, id);
-        assert_eq!(parent_name(&song, eg), Some("Guitarras"));
+        assert_eq!(parent_name(&song, eg), Some("Guitarras eléctricas"));
         assert_eq!(eg.audio_to, "inherit");
     }
     // Lo que no tiene regla se queda como vino.
@@ -939,7 +939,7 @@ fn an_imported_song_is_organised_by_the_default_template_in_shared_mode() {
     assert_eq!(banjo.id, "pkg_banjo");
     assert_eq!(banjo.parent_track_id, None);
     assert_eq!(
-        song.tracks.iter().filter(|t| t.name == "Guitarras").count(),
+        song.tracks.iter().filter(|t| t.name == "Guitarras eléctricas").count(),
         1
     );
     assert_tree_in_order(&song);
@@ -972,8 +972,8 @@ fn an_imported_song_in_song_folder_mode_gets_the_template_inside_its_folder() {
     let song_folder = folders[0].id.clone();
 
     let eg = track_of_clip(&song, "clip_pkg_eg1");
-    assert_eq!(parent_name(&song, eg), Some("Guitarras"));
-    let guitars = song.tracks.iter().find(|t| t.name == "Guitarras").unwrap();
+    assert_eq!(parent_name(&song, eg), Some("Guitarras eléctricas"));
+    let guitars = song.tracks.iter().find(|t| t.name == "Guitarras eléctricas").unwrap();
     assert_eq!(guitars.parent_track_id.as_deref(), Some(song_folder.as_str()));
     assert_eq!(track_of_clip(&song, "clip_pkg_click").name, "Click");
     let banjo = track_of_clip(&song, "clip_pkg_banjo");
@@ -1049,7 +1049,7 @@ fn a_reaper_import_follows_the_song_folder_layout() {
     assert_eq!(roots[0].name, "Way Maker");
     assert_eq!(
         parent_name(&song, track_of_clip(&song, "clip_pkg_eg2")),
-        Some("Guitarras")
+        Some("Guitarras eléctricas")
     );
     assert_eq!(
         parent_name(&song, track_of_clip(&song, "clip_pkg_banjo")),

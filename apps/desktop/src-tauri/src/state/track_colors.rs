@@ -5,11 +5,177 @@
 //! único para todas (`DEFAULT_TRACK_ACCENT` en el frontend), así que una sesión
 //! recién importada era una pared de lanes idénticas.
 //!
-//! El reparto vive aquí, en el estado, y no en cada llamante: los tres sitios
-//! que crean pistas (`create_track`, el camino de pistas auto-creadas al soltar
-//! audio y `create_audio_tracks_with_clips`) piden el color a la misma función.
+//! El reparto vive aquí, en el estado, y no en cada llamante: todos los sitios
+//! que crean pistas piden el color a la misma función.
+//!
+//! Primero se mira el nombre: una pista que se reconoce como de una familia
+//! (guía, batería, guitarra eléctrica…) toma el color de su grupo, para que
+//! todas las guitarras se lean juntas. Solo lo que no se reconoce recorre la
+//! paleta en orden. Los grupos son [`TRACK_COLOR_GROUPS`], la misma tabla de la
+//! que sale la plantilla de serie «Banda».
 
+use libretracks_core::track_matching::match_stems;
 use libretracks_core::{Track, TrackKind};
+
+/// Una familia de instrumentos: su color y los nombres con los que se reconoce.
+///
+/// Es la tabla que comparten el color por grupo y la plantilla de serie
+/// (`song_templates::builtin_band_template`), así que una pista se colorea
+/// igual que la carpeta de la plantilla donde caería su stem.
+pub(crate) struct TrackColorGroup {
+    pub id: &'static str,
+    pub name_es: &'static str,
+    pub name_en: &'static str,
+    /// Lo que la plantilla crea para este grupo: Click y Guía son pistas, el
+    /// resto carpetas.
+    pub kind: TrackKind,
+    pub color: &'static str,
+    /// Alias para `track_matching`: palabras enteras; gana el de más palabras
+    /// y, a igualdad, el grupo que va antes en la tabla.
+    pub aliases: &'static [&'static str],
+}
+
+/// Los grupos, en orden de prioridad para los empates de `track_matching`.
+///
+/// El orden importa: Guía antes que Voces («Voz Guía» es la guía), guitarras
+/// antes que Voces («Lead Guitar»), Efectos y Pads antes que Teclados («Synth
+/// Pad», «Ambient»), y la eléctrica antes que la acústica para que «Gtr» suelto
+/// sea eléctrica. Los colores salen de [`AUTO_TRACK_COLORS`].
+pub(crate) const TRACK_COLOR_GROUPS: [TrackColorGroup; 12] = [
+    TrackColorGroup {
+        id: "click",
+        name_es: "Click",
+        name_en: "Click",
+        kind: TrackKind::Audio,
+        color: "#E35D5B", // Rojo
+        aliases: &["click", "clic", "metronome", "metronomo", "met", "click track"],
+    },
+    TrackColorGroup {
+        id: "guide",
+        name_es: "Guía",
+        name_en: "Guide",
+        kind: TrackKind::Audio,
+        color: "#E35D5B", // Rojo: va con el click
+        aliases: &["guide", "guia", "cues", "cue", "voice guide", "voz guia"],
+    },
+    TrackColorGroup {
+        id: "drums",
+        name_es: "Batería",
+        name_en: "Drums",
+        kind: TrackKind::Folder,
+        color: "#5C8CE6", // Azul
+        aliases: &[
+            "drums", "drum", "bateria", "kick", "bombo", "snare", "caja", "hi hat", "hihat",
+            "toms", "tom", "overheads", "oh", "room", "cymbals", "platos",
+        ],
+    },
+    TrackColorGroup {
+        id: "percussion",
+        name_es: "Percusión y loops",
+        name_en: "Percussion & loops",
+        kind: TrackKind::Folder,
+        color: "#4FB8E6", // Celeste
+        aliases: &[
+            "perc", "percussion", "percusion", "pandero", "pandereta", "tambourine", "shaker",
+            "conga", "bongo", "cajon", "loop", "loops", "drum loop", "synth loop",
+        ],
+    },
+    TrackColorGroup {
+        id: "bass",
+        name_es: "Bajo",
+        name_en: "Bass",
+        kind: TrackKind::Folder,
+        color: "#9C73E6", // Violeta
+        aliases: &["bass", "bajo", "sub", "synth bass", "bass synth"],
+    },
+    TrackColorGroup {
+        id: "electric_guitars",
+        name_es: "Guitarras eléctricas",
+        name_en: "Electric guitars",
+        kind: TrackKind::Folder,
+        color: "#EE8A3C", // Naranja
+        aliases: &[
+            "eg", "ge", "gtr", "guitar", "guitarra", "electric", "electrica", "electric guitar",
+            "guitarra electrica", "distor", "distorsion", "distortion", "steel", "lap steel",
+        ],
+    },
+    TrackColorGroup {
+        id: "acoustic_guitars",
+        name_es: "Guitarras acústicas",
+        name_en: "Acoustic guitars",
+        kind: TrackKind::Folder,
+        color: "#E0A83A", // Ámbar
+        // `gtr` también aquí para que `AGtr` se lea como a(coustic) + gtr; un
+        // «Gtr» suelto empata y se lo queda la eléctrica, que va antes.
+        aliases: &[
+            "ag", "ga", "gtr", "acoustic", "acustica", "acoustic guitar", "guitarra acustica",
+            "nylon",
+        ],
+    },
+    TrackColorGroup {
+        id: "fx",
+        name_es: "Efectos",
+        name_en: "FX",
+        kind: TrackKind::Folder,
+        color: "#6F6FE0", // Índigo
+        aliases: &[
+            "fx", "sfx", "efectos", "sweep", "riser", "impact", "noise", "synth fx", "voz fx",
+            "vocal fx", "vox fx",
+        ],
+    },
+    TrackColorGroup {
+        id: "pads",
+        name_es: "Pads",
+        name_en: "Pads",
+        kind: TrackKind::Folder,
+        color: "#2FA98A", // Esmeralda
+        aliases: &["pad", "pads", "ambient", "ambient pad", "synth pad", "warm pad"],
+    },
+    TrackColorGroup {
+        id: "strings",
+        name_es: "Cuerdas",
+        name_en: "Strings",
+        kind: TrackKind::Folder,
+        color: "#3CDDC7", // Cian
+        aliases: &[
+            "strings", "cuerdas", "violin", "viola", "cello", "orchestra", "orquesta", "brass",
+            "metales", "horns", "sax", "trumpet", "trompeta",
+        ],
+    },
+    TrackColorGroup {
+        id: "keys",
+        name_es: "Teclados",
+        name_en: "Keys",
+        kind: TrackKind::Folder,
+        color: "#57B66C", // Verde
+        aliases: &[
+            "keys", "teclas", "teclados", "teclado", "piano", "rhodes", "wurli", "organ",
+            "organo", "b3", "electric piano", "acoustic piano", "synth", "synths",
+            "sintetizador", "arp",
+        ],
+    },
+    TrackColorGroup {
+        id: "vocals",
+        name_es: "Voces",
+        name_en: "Vocals",
+        kind: TrackKind::Folder,
+        color: "#DF6FA8", // Rosa
+        aliases: &[
+            "vox", "voz", "voces", "vocals", "vocal", "bgv", "bgvs", "coro", "coros", "choir",
+            "chorus", "lead", "soprano", "alto", "tenor",
+        ],
+    },
+];
+
+/// El grupo al que pertenece una pista por su nombre, si se reconoce.
+pub(crate) fn color_group_for_name(name: &str) -> Option<&'static TrackColorGroup> {
+    let targets: Vec<&[&str]> = TRACK_COLOR_GROUPS.iter().map(|group| group.aliases).collect();
+    match_stems(&[name], None, &targets)
+        .into_iter()
+        .next()
+        .flatten()
+        .map(|index| &TRACK_COLOR_GROUPS[index])
+}
 
 /// Paleta de colores automáticos.
 ///
@@ -61,20 +227,26 @@ fn colorable_track_count(tracks: &[Track]) -> usize {
         .count()
 }
 
-/// Color para una pista que se va a crear ahora mismo en `tracks`.
+/// Color para una pista llamada `name` que se va a crear ahora mismo en
+/// `tracks`.
 ///
-/// Devuelve `None` —es decir, el gris de siempre— cuando el ajuste está
+/// Si el nombre es de un grupo, el color del grupo; si no, el siguiente de la
+/// paleta. Devuelve `None` —es decir, el gris de siempre— cuando el ajuste está
 /// apagado o cuando lo que se crea es una carpeta. Nunca repinta nada: sólo
 /// decide el color de la pista que aún no existe.
 pub(crate) fn auto_color_for_new_track(
     tracks: &[Track],
     kind: TrackKind,
+    name: &str,
     enabled: bool,
 ) -> Option<String> {
     if !enabled || kind == TrackKind::Folder {
         return None;
     }
-    Some(auto_track_color_at(colorable_track_count(tracks)).to_string())
+    let color = color_group_for_name(name)
+        .map(|group| group.color)
+        .unwrap_or_else(|| auto_track_color_at(colorable_track_count(tracks)));
+    Some(color.to_string())
 }
 
 #[cfg(test)]
@@ -130,7 +302,7 @@ mod tests {
         let mut tracks: Vec<Track> = Vec::new();
         let mut assigned: Vec<String> = Vec::new();
         for index in 0..AUTO_TRACK_COLORS.len() {
-            let color = auto_color_for_new_track(&tracks, TrackKind::Audio, true)
+            let color = auto_color_for_new_track(&tracks, TrackKind::Audio, "Coalo", true)
                 .expect("el ajuste está activo y no es carpeta");
             assigned.push(color.clone());
             let mut next = track(&format!("t{index}"), TrackKind::Audio);
@@ -146,12 +318,12 @@ mod tests {
         let tracks = vec![track("a", TrackKind::Audio), track("f", TrackKind::Folder)];
         // La carpeta no cuenta: la siguiente pista es la número 1, no la 2.
         assert_eq!(
-            auto_color_for_new_track(&tracks, TrackKind::Audio, true).as_deref(),
+            auto_color_for_new_track(&tracks, TrackKind::Audio, "Coalo", true).as_deref(),
             Some(AUTO_TRACK_COLORS[1]),
         );
         // Y una carpeta nueva no se colorea.
         assert_eq!(
-            auto_color_for_new_track(&tracks, TrackKind::Folder, true),
+            auto_color_for_new_track(&tracks, TrackKind::Folder, "Coalo", true),
             None
         );
     }
@@ -159,7 +331,7 @@ mod tests {
     #[test]
     fn disabled_setting_keeps_the_historical_grey() {
         assert_eq!(
-            auto_color_for_new_track(&[], TrackKind::Audio, false),
+            auto_color_for_new_track(&[], TrackKind::Audio, "Coalo", false),
             None
         );
     }
@@ -168,8 +340,122 @@ mod tests {
     fn midi_tracks_take_part_like_audio_ones() {
         let tracks = vec![track("a", TrackKind::Audio)];
         assert_eq!(
-            auto_color_for_new_track(&tracks, TrackKind::Midi, true).as_deref(),
+            auto_color_for_new_track(&tracks, TrackKind::Midi, "Coalo", true).as_deref(),
             Some(AUTO_TRACK_COLORS[1]),
         );
+    }
+
+    fn group_id(name: &str) -> Option<&'static str> {
+        color_group_for_name(name).map(|group| group.id)
+    }
+
+    /// Los nombres reales de las sesiones de prueba `TestLetras2` y
+    /// `TestMultiplesAnalisis`, cada uno con el grupo que le toca.
+    #[test]
+    fn real_session_track_names_land_in_their_group() {
+        let cases: &[(&str, &str)] = &[
+            ("Click", "click"),
+            ("Clic 138bpm", "click"),
+            ("Click Track", "click"),
+            ("Click 02", "click"),
+            ("Al Estar Ante Ti Click 12 2", "click"),
+            ("Guía", "guide"),
+            ("Guias", "guide"),
+            ("Guide", "guide"),
+            ("Guia 01", "guide"),
+            ("Cues 1", "guide"),
+            ("Al Estar Ante Ti Voz Guia 11 10", "guide"),
+            ("Drums", "drums"),
+            ("Drums Live", "drums"),
+            ("DRUMS_1", "drums"),
+            ("Bateria", "drums"),
+            ("Perc", "percussion"),
+            ("Perc Live", "percussion"),
+            ("Al Estar Ante Ti Pandero 1 8", "percussion"),
+            ("Loop", "percussion"),
+            ("LOOP_1", "percussion"),
+            ("Synth Loop", "percussion"),
+            ("Bass", "bass"),
+            ("BASS_1", "bass"),
+            ("Bajo", "bass"),
+            ("Al Estar Ante Ti Bajo 3 1", "bass"),
+            ("Synth Bass", "bass"),
+            ("Eg 1", "electric_guitars"),
+            ("Ge 4", "electric_guitars"),
+            ("EGTR 1_1", "electric_guitars"),
+            ("EGTR_6", "electric_guitars"),
+            ("Egtr", "electric_guitars"),
+            ("Distorsion 12", "electric_guitars"),
+            ("Distor 1 06", "electric_guitars"),
+            ("Lap Steel", "electric_guitars"),
+            ("Al Estar Ante Ti Guitar Electric 7 5", "electric_guitars"),
+            ("Al Estar Ante Ti Guistar Distortion 10 4", "electric_guitars"),
+            ("Al Estar Ante Ti Over Guitar 9 7", "electric_guitars"),
+            ("Gtr", "electric_guitars"),
+            ("Ag", "acoustic_guitars"),
+            ("Ag 2", "acoustic_guitars"),
+            ("Ga", "acoustic_guitars"),
+            ("Acustica", "acoustic_guitars"),
+            ("Acustica 1 01", "acoustic_guitars"),
+            ("AGtr", "acoustic_guitars"),
+            ("Acoustic Guitar", "acoustic_guitars"),
+            ("Keys 1", "keys"),
+            ("Key", "keys"),
+            ("Piano 2", "keys"),
+            ("Organ", "keys"),
+            ("Al Estar Ante Ti Organo 4 6", "keys"),
+            ("Synth 3", "keys"),
+            ("Pad", "pads"),
+            ("PAD_1", "pads"),
+            ("Al Estar Ante Ti Warm Pad 5 11", "pads"),
+            ("Synth Pad", "pads"),
+            ("Strings", "strings"),
+            ("Cuerdas", "strings"),
+            ("Bgvs", "vocals"),
+            ("Choir 2", "vocals"),
+            ("Chorus 04", "vocals"),
+            ("Alto", "vocals"),
+            ("Tenor", "vocals"),
+            ("Fx", "fx"),
+            ("Synth Fx", "fx"),
+            ("Voz Fx", "fx"),
+        ];
+        let wrong: Vec<String> = cases
+            .iter()
+            .filter(|(name, expected)| group_id(name) != Some(*expected))
+            .map(|(name, expected)| format!("{name}: {:?} (esperado {expected})", group_id(name)))
+            .collect();
+        assert!(wrong.is_empty(), "mal clasificadas:\n{}", wrong.join("\n"));
+    }
+
+    #[test]
+    fn unknown_names_and_word_fragments_stay_out() {
+        assert_eq!(group_id("Coalo 01"), None);
+        assert_eq!(group_id("Audio 3"), None);
+        // `ag` y `ge` solo como palabra entera.
+        assert_eq!(group_id("Stage"), None);
+    }
+
+    #[test]
+    fn a_recognised_name_takes_its_group_color_not_the_rotation() {
+        let tracks = vec![track("a", TrackKind::Audio), track("b", TrackKind::Audio)];
+        assert_eq!(
+            auto_color_for_new_track(&tracks, TrackKind::Audio, "EG 2", true).as_deref(),
+            Some("#EE8A3C"),
+        );
+        // El ajuste apagado manda también sobre el grupo.
+        assert_eq!(auto_color_for_new_track(&tracks, TrackKind::Audio, "EG 2", false), None);
+    }
+
+    #[test]
+    fn group_colors_come_from_the_palette() {
+        for group in &TRACK_COLOR_GROUPS {
+            assert!(
+                AUTO_TRACK_COLORS.contains(&group.color),
+                "{} usa {} fuera de la paleta",
+                group.id,
+                group.color
+            );
+        }
     }
 }

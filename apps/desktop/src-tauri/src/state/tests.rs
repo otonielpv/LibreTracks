@@ -2154,7 +2154,7 @@ fn a_batch_of_new_tracks_comes_out_in_different_colours() {
             let name = format!("loop-{index}.wav");
             write_silent_test_wav(&song_dir.join("audio").join(&name), 3);
             CreateAudioTrackWithClipRequest {
-                track_name: format!("Loop {index}"),
+                track_name: format!("Stem {index}"),
                 file_path: format!("audio/{name}"),
                 timeline_start_seconds: 0.0,
             }
@@ -2172,7 +2172,7 @@ fn a_batch_of_new_tracks_comes_out_in_different_colours() {
     let colours: Vec<String> = song_view
         .tracks
         .iter()
-        .filter(|track| track.name.starts_with("Loop "))
+        .filter(|track| track.name.starts_with("Stem "))
         .map(|track| {
             track
                 .color
@@ -7053,4 +7053,61 @@ fn duplicating_clips_onto_another_track() {
     assert!(session
         .duplicate_clips_to_tracks(&[("clip_1".into(), 8.0, Some("folder_1".into()))], &audio)
         .is_err());
+}
+
+#[test]
+fn color_tracks_by_group_paints_known_names_in_one_undo_step() {
+    let mut song = demo_song();
+    let base = song.tracks[0].clone();
+    let with = |id: &str, name: &str, kind: TrackKind, color: Option<&str>| Track {
+        id: id.into(),
+        name: name.into(),
+        kind,
+        color: color.map(str::to_string),
+        ..base.clone()
+    };
+    song.tracks = vec![
+        with("track_1", "EG 1", TrackKind::Audio, Some("#E35D5B")),
+        with("t_ag", "AG", TrackKind::Audio, None),
+        with("t_odd", "Coalo 01", TrackKind::Audio, Some("#123456")),
+        with("t_dir", "Guitarras", TrackKind::Folder, Some("#654321")),
+        with("t_click", "Click", TrackKind::Audio, None),
+    ];
+    let mut session = session_with_song_dir("color-by-group", song);
+    let audio = crate::audio::engine::AudioController::default();
+    let colour = |session: &DesktopSession, id: &str| {
+        session.engine.song().unwrap().tracks.iter().find(|t| t.id == id).unwrap().color.clone()
+    };
+
+    // Solo la selección: el click no se toca.
+    let undo_depth = session.undo_stack.len();
+    let revision = session.project_revision;
+    session
+        .color_tracks_by_group(&["track_1".into(), "t_ag".into(), "t_odd".into(), "t_dir".into()], &audio)
+        .expect("color by group");
+    assert_eq!(colour(&session, "track_1").as_deref(), Some("#EE8A3C"));
+    assert_eq!(colour(&session, "t_ag").as_deref(), Some("#E0A83A"));
+    // Lo que no se reconoce y las carpetas se quedan como estaban.
+    assert_eq!(colour(&session, "t_odd").as_deref(), Some("#123456"));
+    assert_eq!(colour(&session, "t_dir").as_deref(), Some("#654321"));
+    assert_eq!(colour(&session, "t_click"), None);
+    assert_eq!(session.undo_stack.len(), undo_depth + 1, "una sola entrada de deshacer");
+    assert_eq!(session.project_revision, revision + 1);
+
+    // Repetirlo no cambia nada: ni historial ni revisión.
+    session
+        .color_tracks_by_group(&["track_1".into(), "t_ag".into()], &audio)
+        .expect("no-op");
+    assert_eq!(session.undo_stack.len(), undo_depth + 1);
+    assert_eq!(session.project_revision, revision + 1);
+
+    // Lista vacía = todas: ahora le toca al click.
+    session.color_tracks_by_group(&[], &audio).expect("all tracks");
+    assert_eq!(colour(&session, "t_click").as_deref(), Some("#E35D5B"));
+
+    // Deshacer devuelve los colores de antes.
+    session.undo_action(&audio).expect("undo all");
+    session.undo_action(&audio).expect("undo selection");
+    assert_eq!(colour(&session, "track_1").as_deref(), Some("#E35D5B"));
+    assert_eq!(colour(&session, "t_ag"), None);
 }

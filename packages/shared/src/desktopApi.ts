@@ -3014,6 +3014,15 @@ export async function updateTrackColor(args: {
   return invokeCommand<TransportSnapshot>("update_track_color", args);
 }
 
+/** Colorea por grupo (guía, batería, guitarras…) las pistas dadas, o todas si
+ * la lista va vacía. Una entrada de deshacer; si ninguna se reconoce, la
+ * revisión del snapshot no cambia. */
+export async function colorTracksByGroup(
+  trackIds: string[],
+): Promise<TransportSnapshot> {
+  return invokeCommand<TransportSnapshot>("color_tracks_by_group", { trackIds });
+}
+
 /** Persist a folder track's collapsed state. View-only: never reaches the
  * engine and deliberately isn't undoable. */
 export async function updateTrackCollapsed(args: {

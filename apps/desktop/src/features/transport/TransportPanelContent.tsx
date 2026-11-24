@@ -95,6 +95,7 @@ import {
   splitSongRegion,
   stopTransport,
   updateClipColor,
+  colorTracksByGroup,
   updateAudioSettings,
   updateSectionMarker,
   updateLiveRegionMasterGain,
@@ -2104,6 +2105,7 @@ export function TransportPanelContent() {
   // Track/clip colour handlers (optimistic song patch + snapshot publish).
   // See ./colors/colorHandlers.
   const {
+    handleColorTracksByGroup,
     handleSetTrackColor,
     handleSetTrackColors,
     handleSetClipColors,
@@ -2118,6 +2120,8 @@ export function TransportPanelContent() {
         clipDisplayName,
         updateTrackColor,
         updateClipColor,
+        colorTracksByGroup,
+        getProjectRevision: () => songRef.current?.projectRevision ?? null,
       }),
     [runAction, setSong, applyPlaybackSnapshot, setStatus],
   );
@@ -4861,6 +4865,7 @@ export function TransportPanelContent() {
       resetTrackRowHeight: resetRowHeight,
       handleSetTrackColor,
       handleSetTrackColors,
+      handleColorTracksByGroup,
       handleSetClipColors,
       audioRoutingOptions,
     };

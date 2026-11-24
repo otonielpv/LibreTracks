@@ -80,23 +80,25 @@ fn expected_builtin_group(stem: &str) -> &'static [&'static str] {
     match s {
         s if s.starts_with("click") => &["Click"],
         s if s.starts_with("guide") || s.starts_with("guia") || s.starts_with("cues") => &["Guía"],
-        s if s.starts_with("drums") || s.starts_with("perc") || s.starts_with("loop") => &["Batería"],
+        s if s.starts_with("drums") => &["Batería"],
+        s if s.starts_with("perc") || s.starts_with("loop") || s == "synth loop" => {
+            &["Percusión y loops"]
+        }
         s if s.starts_with("bass") || s == "synth bass" => &["Bajo"],
-        s if s.starts_with("acustica")
-            || s.starts_with("egtr")
+        s if s.starts_with("egtr")
             || s.starts_with("eg ")
-            || s.starts_with("ag")
             || s.starts_with("distor")
             || s == "lap steel" =>
         {
-            &["Guitarras"]
+            &["Guitarras eléctricas"]
         }
-        s if s.starts_with("key") || s == "piano" || s == "organ" => &["Teclados"],
-        s if s.starts_with("pad") || s == "strings" || s == "synth 1" || s == "synth loop" => {
-            &["Synth y pads"]
+        s if s.starts_with("acustica") || s.starts_with("ag") => &["Guitarras acústicas"],
+        s if s.starts_with("key") || s == "piano" || s == "organ" || s == "synth 1" => {
+            &["Teclados"]
         }
-        "synth fx" => &["Synth y pads", "Efectos"],
-        "voz fx" => &["Voces", "Efectos"],
+        s if s.starts_with("pad") => &["Pads"],
+        "strings" => &["Cuerdas"],
+        "synth fx" | "voz fx" => &["Efectos"],
         s if s.starts_with("bgvs")
             || s.starts_with("choir")
             || s.starts_with("chorus")
@@ -650,7 +652,7 @@ fn check_invariants(
 
     // Copias de la plantilla: una por canción (o una en total si se comparte).
     if template != Template::None {
-        let marker = "Guitarras";
+        let marker = if template == Template::Builtin { "Guitarras eléctricas" } else { "Guitarras" };
         let copies = song.tracks.iter().filter(|t| t.kind == TrackKind::Folder && t.name == marker).count();
         let expected = if layout == SongImportTrackMode::MergeIntoExisting { 1 } else { SETLIST.len() };
         if copies != expected {

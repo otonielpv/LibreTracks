@@ -14,7 +14,7 @@ use crate::models::TransportSnapshot;
 use super::song_templates::{
     organise_stem_drop, StemPlacement, TemplateDropSummary, TrackIdAllocator,
 };
-use super::track_colors::auto_color_for_new_track;
+use super::track_colors::{auto_color_for_new_track, color_group_for_name};
 use super::{
     append_clip_to_song, apply_clip_moves_with_region_reshape, delete_track_and_repair_hierarchy,
     ensure_region_covers_clip, file_stem_for_auto_track, insert_track,
@@ -618,7 +618,7 @@ impl DesktopSession {
             // El color se pide dentro del bucle a propósito: `song.tracks` ya
             // lleva las pistas de las vueltas anteriores, así que un lote de
             // diez sale con diez colores, no diez veces el mismo.
-            let color = auto_color_for_new_track(&song.tracks, TrackKind::Audio, auto_color);
+            let color = auto_color_for_new_track(&song.tracks, TrackKind::Audio, &track_name, auto_color);
             song.tracks.push(libretracks_core::Track {
                 eq: None,
                 id: track_id.clone(),
@@ -719,7 +719,7 @@ impl DesktopSession {
             );
             // Dentro del bucle, igual que arriba: soltar un multitrack entero
             // en la línea de tiempo tiene que dar una pista de cada color.
-            let color = auto_color_for_new_track(&song.tracks, TrackKind::Audio, auto_color);
+            let color = auto_color_for_new_track(&song.tracks, TrackKind::Audio, trimmed_name, auto_color);
             song.tracks.push(Track {
                 eq: None,
                 id: track_id.clone(),
@@ -788,7 +788,7 @@ impl DesktopSession {
                     song_region_id,
                 } => {
                     let color =
-                        auto_color_for_new_track(&song.tracks, TrackKind::Audio, auto_color);
+                        auto_color_for_new_track(&song.tracks, TrackKind::Audio, &names[index], auto_color);
                     let track = Track {
                         eq: None,
                         id: ids.allocate(),
@@ -937,6 +937,53 @@ impl DesktopSession {
             .find(|track| track.id == track_id)
             .ok_or_else(|| DesktopError::TrackNotFound(track_id.to_string()))?;
         track.color = color;
+
+        self.perf_metrics.song_save_millis = 0;
+        self.project_revision = self.project_revision.saturating_add(1);
+        audio.record_commit_model_only();
+        Ok(self.snapshot())
+    }
+
+    /// Colorea cada pista con el color de su grupo (guía, batería, guitarras…),
+    /// reconocido por su nombre. `track_ids` vacío = todas las pistas.
+    ///
+    /// Las carpetas y las pistas cuyo nombre no es de ningún grupo se quedan
+    /// como están. Una sola entrada de historial; si nada cambia, ninguna, y la
+    /// revisión no se mueve (el frontend lo usa para decir «nada reconocido»).
+    pub fn color_tracks_by_group(
+        &mut self,
+        track_ids: &[String],
+        audio: &AudioController,
+    ) -> Result<TransportSnapshot, DesktopError> {
+        let wanted: std::collections::HashSet<&str> =
+            track_ids.iter().map(String::as_str).collect();
+        let changes: Vec<(usize, &'static str)> = self
+            .engine
+            .song()
+            .map(|song| {
+                song.tracks
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, track)| wanted.is_empty() || wanted.contains(track.id.as_str()))
+                    .filter(|(_, track)| track.kind != TrackKind::Folder)
+                    .filter_map(|(index, track)| {
+                        let color = color_group_for_name(&track.name)?.color;
+                        (track.color.as_deref() != Some(color)).then_some((index, color))
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+        if changes.is_empty() {
+            return Ok(self.snapshot());
+        }
+
+        self.sync_position(audio)?;
+        self.push_history_entry();
+        self.redo_stack.clear();
+        let tracks = &mut self.engine.song_mut()?.tracks;
+        for (index, color) in changes {
+            tracks[index].color = Some(color.to_string());
+        }
 
         self.perf_metrics.song_save_millis = 0;
         self.project_revision = self.project_revision.saturating_add(1);
@@ -1364,7 +1411,7 @@ pub(super) fn new_track(
         "master".to_string()
     };
 
-    let color = auto_color_for_new_track(&song.tracks, kind, auto_color_enabled(audio));
+    let color = auto_color_for_new_track(&song.tracks, kind, name, auto_color_enabled(audio));
 
     Track {
         eq: None,
