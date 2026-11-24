@@ -335,6 +335,8 @@ export function addPart(
   chart: SongChart | null,
   kind: MarkerKind,
   fallbackLanguage: "es" | "en" = "es",
+  /** A name already written (a pasted block's header) instead of a quick one. */
+  givenLabel?: string,
 ): { chart: SongChart; key: string } {
   const doc = chart ? parseChordPro(chart.text) : null;
   const language = sheetLanguage(doc, fallbackLanguage);
@@ -343,7 +345,7 @@ export function addPart(
     const header = parseSectionHeader(section.label);
     return header && chartKind(header.kind ?? "custom") === chartKind(kind);
   }).length;
-  const label = same === 0 ? base : `${base} ${same + 1}`;
+  const label = givenLabel?.trim() || (same === 0 ? base : `${base} ${same + 1}`);
   const current: SongChart = chart ?? { text: "", links: [] };
   const text = appendSection(current.text, label, []);
   const index = parseChordPro(text).sections.length - 1;

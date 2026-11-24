@@ -28,6 +28,7 @@
     "./charts/chartTimes": "./src/charts/chartTimes.ts",
     "./charts/plainChart": "./src/charts/plainChart.ts",
     "./charts/chartParts": "./src/charts/chartParts.ts",
+    "./charts/pasteSong": "./src/charts/pasteSong.ts",
     "./eq/TrackEqEditor": "./src/eq/TrackEqEditor.tsx",
     "./eq/eqResponse": "./src/eq/eqResponse.ts",
     "./eq/trackEqModel": "./src/eq/trackEqModel.ts",
