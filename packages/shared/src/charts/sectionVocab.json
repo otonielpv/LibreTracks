@@ -179,6 +179,7 @@
   "numberWords": [
     ["uno", 1],
     ["una", 1],
+    ["un", 1],
     ["one", 1],
     ["dos", 2],
     ["two", 2],

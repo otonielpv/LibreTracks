@@ -178,6 +178,9 @@ pub const MAX_COUNT: u32 = 7;
 pub const NUMBER_WORDS: &[(&str, u32)] = &[
     ("uno", 1),
     ("una", 1),
+    // Whisper writes a short "uno" said on its own as "Un." ("Al estar ante
+    // ti": "Coro." … "Un." "Dos." "Tres." "Cuatro." lost the count-in).
+    ("un", 1),
     ("one", 1),
     ("dos", 2),
     ("two", 2),
