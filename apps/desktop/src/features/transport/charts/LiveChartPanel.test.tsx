@@ -502,10 +502,10 @@ describe("LiveChartPanel", () => {
     expect(screen.getByRole("dialog", { name: "liveChart.editorTitle" })).toBeTruthy();
   });
 
-  it("offers import and typing when the song has no lyrics", () => {
+  it("offers import and writing when the song has no lyrics", () => {
     renderPanel(region(null), { current: 0 });
     expect(screen.getByRole("button", { name: "liveChart.importFile" })).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "liveChart.pasteText" }));
+    fireEvent.click(screen.getByRole("button", { name: "simpleLyrics.write" }));
     expect(screen.getByRole("dialog")).toBeTruthy();
   });
 
@@ -545,7 +545,8 @@ describe("LiveChartPanel", () => {
       />
     );
     const view = render(panel("short"));
-    fireEvent.click(screen.getByRole("button", { name: "liveChart.pasteText" }));
+    fireEvent.click(screen.getByRole("button", { name: "simpleLyrics.write" }));
+    fireEvent.click(screen.getByRole("tab", { name: "simpleLyrics.advanced" }));
     const textarea = screen.getByRole("textbox", { name: "liveChart.textLabel" });
     fireEvent.change(textarea, { target: { value: "[G]Hola" } });
     view.rerender(panel("medium"));

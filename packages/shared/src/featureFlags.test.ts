@@ -29,7 +29,7 @@ describe("feature flags", () => {
     expect(FEATURE_FLAGS.chartSources).toBe(true);
   });
 
-  it("the simple lyrics editor stays hidden until it is validated", () => {
-    expect(FEATURE_FLAGS.simpleLyricsEditor).toBe(false);
+  it("the simple lyrics editor is on", () => {
+    expect(FEATURE_FLAGS.simpleLyricsEditor).toBe(true);
   });
 });

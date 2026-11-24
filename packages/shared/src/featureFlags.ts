@@ -31,7 +31,7 @@ export const FEATURE_FLAGS = {
   chartSources: true,
   /** Simple lyrics editor: parts of the song on one side, lyrics written
    * "like on paper" (chords over the words), paste the whole song. Plan in
-   * docs/plans/simple-lyrics-editor. Off until validated (step 09); the
-   * configurable lyrics follow is not behind it. */
-  simpleLyricsEditor: false,
+   * docs/plans/simple-lyrics-editor. On since 2026-11-24 (decided by the
+   * owner after testing it on desktop and phone). */
+  simpleLyricsEditor: true,
 } as const;
