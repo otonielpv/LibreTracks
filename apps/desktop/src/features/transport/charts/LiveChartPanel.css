@@ -443,7 +443,7 @@
 
 .lt-chart-editor-body {
   display: grid;
-  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
   align-items: start;
   gap: 1rem;
   min-height: 0;
@@ -541,11 +541,26 @@
 
 /* Fixed columns on every row: with an "auto" last column, a marker without
    lyrics (no times badge) got a wider, shifted select than the rest. */
-.lt-chart-editor-links li {
+.lt-chart-editor-links li,
+.lt-chart-editor-links-head {
   display: grid;
-  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.3fr) 12.5rem;
+  grid-template-columns: minmax(5rem, 0.9fr) minmax(7rem, 1.3fr) 10.5rem;
   align-items: center;
   gap: 0.45rem;
+}
+
+/* Column names: the song's markers, the sheet's sections, passes and times. */
+.lt-chart-editor-links-head {
+  padding-bottom: 0.3rem;
+  border-bottom: 1px solid rgb(255 255 255 / 0.06);
+  color: #bacac5;
+  font: 600 10px/1.3 "Space Grotesk", sans-serif;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.lt-chart-editor-links-head span {
+  min-width: 0;
 }
 
 .lt-chart-editor-times {
@@ -836,6 +851,10 @@
     grid-template-columns: minmax(0, 1fr) auto;
     row-gap: 0.25rem;
   }
+
+  .lt-chart-editor-links-head {
+    display: none;
+  }
   .lt-chart-editor-links li .lt-chart-editor-marker {
     grid-column: 1 / -1;
   }
@@ -859,6 +878,12 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* "Even spread" wraps instead of being cut when the column is narrow. */
+.lt-chart-editor-extra .lt-chart-editor-times.is-auto {
+  white-space: normal;
+  line-height: 1.15;
 }
 
 .lt-chart-editor-links select.lt-chart-editor-passes {

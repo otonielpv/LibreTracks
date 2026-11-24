@@ -455,6 +455,12 @@ export function ChartEditorModal({
             {originals.length === 0 ? (
               <p className="lt-chart-editor-hint">{t("liveChart.noMarkers")}</p>
             ) : (
+              <>
+              <div className="lt-chart-editor-links-head" aria-hidden="true">
+                <span>{t("liveChart.columnMarker")}</span>
+                <span>{t("liveChart.columnSection")}</span>
+                <span>{t("liveChart.columnTimes")}</span>
+              </div>
               <ul>
                 {originals.map((marker) => {
                   const link = chartLinkFor(liveLinks, marker.id);
@@ -508,6 +514,7 @@ export function ChartEditorModal({
                   );
                 })}
               </ul>
+              </>
             )}
           </div>
           </>
