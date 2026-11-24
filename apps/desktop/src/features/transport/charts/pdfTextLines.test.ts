@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { analyzeSongSheet } from "@libretracks/shared/charts/chartImport";
+import { normalizeChartLine, plainToSectionLines, sectionToPlain } from "@libretracks/shared/charts/plainChart";
 import { findColumnGutters, pdfTextToSourceLines, usesDotSpaces, type PdfPageText, type PdfTextItem } from "./pdfTextLines";
 
 /** One item per string, 6 pt per character, 12 pt text. */
@@ -104,5 +105,14 @@ describe("PDF text", () => {
       kind: "lyrics",
       segments: [{ chord: null, text: "Holy is the Lord." }],
     });
+  });
+
+  it("every section read from a PDF survives the simple editor's round trip", () => {
+    const pages = [twoColumnPage()];
+    const doc = analyzeSongSheet(pdfTextToSourceLines(pages));
+    expect(doc.sections.length).toBeGreaterThan(0);
+    for (const section of doc.sections) {
+      expect(plainToSectionLines(sectionToPlain(section)).map(normalizeChartLine)).toEqual(section.lines.map(normalizeChartLine));
+    }
   });
 });
