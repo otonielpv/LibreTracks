@@ -151,27 +151,31 @@ export function proposePasteAssignment(
   }
 
   // No headers: the block that comes back is the chorus (every chorus of the
-  // song); the others go in order to the sung names that follow, each one to
-  // every section with that name.
+  // song). The other blocks go in order, one per sung section ("Verso",
+  // "Verso" get the first and second verse); once they run out, a section
+  // named like one already filled gets the same lyrics (the bridges left
+  // copy the first bridge).
   const blockWords = blocks.map((entry) => words(entry.lines));
   const repeated = blocks.map((_, index) => blockWords.some((other, at) => at !== index && similar(blockWords[index], other)));
   const choruses = songParts.filter((part) => part.kind === "chorus");
-  const names: string[] = [];
-  for (const part of songParts) {
-    if (!part.sung || part.kind === "chorus") continue;
-    const key = nameKey(part);
-    if (!names.includes(key)) names.push(key);
-  }
-  let next = 0;
+  const others = songParts.filter((part) => part.sung && part.kind !== "chorus");
+  const plain = blocks.map((_, index) => index).filter((index) => !(repeated[index] && choruses.length > 0));
+  const targets = new Map<number, string[]>();
+  const blockOfName = new Map<string, number>();
+  others.forEach((part, at) => {
+    const name = nameKey(part);
+    const index = at < plain.length ? plain[at] : blockOfName.get(name);
+    if (index === undefined) return;
+    if (!blockOfName.has(name) || at < plain.length) blockOfName.set(name, index);
+    targets.set(index, [...(targets.get(index) ?? []), part.key]);
+  });
   return blocks.map((_, index) => {
-    // Every time it is pasted it points at the choruses; the first one wins.
+    // Every time the chorus is pasted it points at the choruses; the first wins.
     if (repeated[index] && choruses.length > 0) {
       return { block: index, partKeys: choruses.map((part) => part.key), confidence: "medium" };
     }
-    const name = names[next];
-    if (!name) return { block: index, partKeys: [], confidence: "low" };
-    next += 1;
-    return { block: index, partKeys: songParts.filter((part) => part.sung && nameKey(part) === name).map((part) => part.key), confidence: "medium" };
+    const partKeys = targets.get(index) ?? [];
+    return { block: index, partKeys, confidence: partKeys.length > 0 ? "medium" : "low" };
   });
 }
 

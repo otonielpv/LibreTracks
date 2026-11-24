@@ -145,4 +145,39 @@ describe("pasting a whole song", () => {
     const { chart } = applyPaste(null, [], blocks, assignments);
     expect(chartParts(chart, []).map((part) => part.label)).toEqual(["Verso 1", "Coro", "Verso 2", "Coro", "Puente"]);
   });
+
+  describe("two different verses for two markers both called Verso", () => {
+    const markers = [
+      marker("v1", "Verso", 0, "verse"),
+      marker("c1", "Coro", 10, "chorus"),
+      marker("v2", "Verso", 20, "verse"),
+      marker("c2", "Coro", 30, "chorus"),
+      marker("p1", "Puente", 40, "bridge"),
+      marker("p2", "Puente", 50, "bridge"),
+    ];
+    const expected = [
+      ["Verso", "Primer verso"],
+      ["Coro", "El coro"],
+      ["Verso", "Segundo verso"],
+      ["Coro", "El coro"],
+      ["Puente", "El puente"],
+      ["Puente", "El puente"],
+    ];
+    const pasted = (text: string) => {
+      const blocks = splitPastedSong(text);
+      return applyPaste(null, markers, blocks, proposePasteAssignment(blocks, chartParts(null, markers), markers)).chart;
+    };
+
+    it("with headers the first goes to the first verse and the second to the second", () => {
+      const chart = pasted(["VERSO", "Primer verso", "", "CORO", "El coro", "", "VERSO", "Segundo verso", "", "PUENTE", "El puente"].join("
+"));
+      expect(plainByLabel(chart, markers)).toEqual(expected);
+    });
+
+    it("without headers too; the bridges left copy the first one", () => {
+      const chart = pasted(["Primer verso", "", "El coro", "", "Segundo verso", "", "El coro", "", "El puente"].join("
+"));
+      expect(plainByLabel(chart, markers)).toEqual(expected);
+    });
+  });
 });
