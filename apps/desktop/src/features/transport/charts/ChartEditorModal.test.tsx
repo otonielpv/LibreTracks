@@ -108,6 +108,15 @@ describe("ChartEditorModal line times in the text", () => {
     expect(saved).toEqual(chart);
   });
 
+  it("marks a section's times as recorded as soon as one is typed, and resets them without saving", () => {
+    const { textarea } = renderEditor();
+    expect(screen.queryByText("liveChart.recordedTimes")).toBeNull();
+    fireEvent.change(textarea, { target: { value: textarea.value.replace("[0:05.0] dos", "[0:07.5] dos") } });
+    fireEvent.click(screen.getByText("liveChart.recordedTimes"));
+    expect(textarea.value).toContain("[0:05.0] dos");
+    expect(screen.queryByText("liveChart.recordedTimes")).toBeNull();
+  });
+
   it("links a chart typed from scratch on save, and keeps the times typed in it", async () => {
     const { onSave, textarea } = renderEditor({ text: "", links: [] });
     fireEvent.change(textarea, {

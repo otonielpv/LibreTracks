@@ -249,6 +249,14 @@ export function ChartEditorModal({
   };
 
   const validLinks = links.filter((link) => link.section < doc.sections.length);
+  /** The links as the text has them now: times typed or pasted count as
+   * recorded right away, without saving and reopening. */
+  const liveLinks = useMemo(
+    () => applyChartTimes(doc, validLinks, timing, taken.times),
+    // validLinks is derived from links and doc on every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [doc, links, timing, taken.times],
+  );
   /** What gets saved: a chart typed from scratch has no links yet, and the
    * times written in it need markers to belong to. */
   const linksToSave = () => {
@@ -394,7 +402,7 @@ export function ChartEditorModal({
             ) : (
               <ul>
                 {originals.map((marker) => {
-                  const link = chartLinkFor(validLinks, marker.id);
+                  const link = chartLinkFor(liveLinks, marker.id);
                   const recorded = (link?.lineBeats?.length ?? 0) > 1;
                   return (
                     <li key={marker.id}>
