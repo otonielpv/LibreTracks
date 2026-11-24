@@ -15,7 +15,7 @@
 
 use std::net::{IpAddr, Ipv4Addr, SocketAddr, UdpSocket};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use crate::beacon::{decode, encode, BeaconTracker};
@@ -25,6 +25,8 @@ use crate::net::local_ip;
 pub const PROBE_PORT: u16 = 3048;
 pub const PROBE_REQUEST: &[u8] = b"lt-link-probe-1";
 pub const SWEEP_INTERVAL_MS: u64 = 2_000;
+/// How long the responder blocks on a receive; bounds how long dropping it waits.
+const RECV_TIMEOUT_MS: u64 = 200;
 
 /// Every other address of `ip`'s /24 (1–254), the usual home and venue LAN.
 pub fn sweep_targets(ip: Ipv4Addr) -> Vec<Ipv4Addr> {
@@ -40,40 +42,80 @@ pub fn probe_key(host_id: &str) -> String {
 }
 
 /// Host side: answers probes with the advertisement, until dropped.
+///
+/// One socket for the life of the advertising: a re-advertise (the
+/// redundancy main's own server handing over to a network session, a port
+/// change) swaps the reply with [`ProbeResponder::update`] instead of
+/// binding again. Binding a second responder while the first still holds
+/// the port fails, and the old reply (wrong port, `guests=0`) stayed on the
+/// air: an iPhone, which only finds hosts through this probe, left the host
+/// out of its list (2026-11-24).
 pub struct ProbeResponder {
     stop: Arc<AtomicBool>,
+    reply: Arc<Mutex<Vec<u8>>>,
+    thread: Option<std::thread::JoinHandle<()>>,
 }
 
 impl ProbeResponder {
     pub fn start(ad: &Advertisement) -> Result<Self, String> {
-        let socket = UdpSocket::bind(SocketAddr::from((Ipv4Addr::UNSPECIFIED, PROBE_PORT)))
-            .map_err(|error| format!("probe port {PROBE_PORT}: {error}"))?;
+        Self::start_on(ad, SocketAddr::from((Ipv4Addr::UNSPECIFIED, PROBE_PORT))).map(|(responder, _)| responder)
+    }
+
+    /// `start` on any address; returns where it bound (tests use port 0).
+    fn start_on(ad: &Advertisement, address: SocketAddr) -> Result<(Self, SocketAddr), String> {
+        let socket = UdpSocket::bind(address)
+            .map_err(|error| format!("probe port {}: {error}", address.port()))?;
+        let bound = socket.local_addr().map_err(|error| error.to_string())?;
         socket
-            .set_read_timeout(Some(Duration::from_millis(500)))
+            .set_read_timeout(Some(Duration::from_millis(RECV_TIMEOUT_MS)))
             .map_err(|error| error.to_string())?;
-        let reply = encode(ad);
+        let reply = Arc::new(Mutex::new(encode(ad)));
         let stop = Arc::new(AtomicBool::new(false));
         let stop_thread = stop.clone();
-        std::thread::Builder::new()
+        let reply_thread = reply.clone();
+        let thread = std::thread::Builder::new()
             .name("lt-link-probe-rx".into())
             .spawn(move || {
                 let mut buffer = [0u8; 64];
                 while !stop_thread.load(Ordering::Relaxed) {
                     if let Ok((size, from)) = socket.recv_from(&mut buffer) {
                         if &buffer[..size] == PROBE_REQUEST {
+                            let reply = reply_thread
+                                .lock()
+                                .map(|reply| reply.clone())
+                                .unwrap_or_default();
                             let _ = socket.send_to(&reply, from);
                         }
                     }
                 }
             })
             .map_err(|error| error.to_string())?;
-        Ok(Self { stop })
+        Ok((
+            Self {
+                stop,
+                reply,
+                thread: Some(thread),
+            },
+            bound,
+        ))
+    }
+
+    /// Answer with `ad` from now on, on the same socket.
+    pub fn update(&self, ad: &Advertisement) {
+        if let Ok(mut reply) = self.reply.lock() {
+            *reply = encode(ad);
+        }
     }
 }
 
 impl Drop for ProbeResponder {
+    /// Waits for the thread (at most one receive timeout) so the port is free
+    /// when this returns: a stop followed by a new advertise can bind again.
     fn drop(&mut self) {
         self.stop.store(true, Ordering::Relaxed);
+        if let Some(thread) = self.thread.take() {
+            let _ = thread.join();
+        }
     }
 }
 
@@ -214,5 +256,47 @@ mod tests {
             }
             other => panic!("unexpected {other:?}"),
         }
+    }
+
+    fn ask(responder: SocketAddr) -> serde_json::Value {
+        let socket = UdpSocket::bind("127.0.0.1:0").unwrap();
+        socket.set_read_timeout(Some(Duration::from_secs(2))).unwrap();
+        socket.send_to(PROBE_REQUEST, responder).unwrap();
+        let mut buffer = [0u8; 512];
+        let (size, _) = socket.recv_from(&mut buffer).expect("reply");
+        serde_json::from_slice(&buffer[..size]).unwrap()
+    }
+
+    #[test]
+    fn a_re_advertise_changes_the_reply_and_a_drop_frees_the_port() {
+        let main_only = Advertisement {
+            host_id: "h".into(),
+            name: "PC".into(),
+            port: 3040,
+            app_version: "t".into(),
+            requires_pin: true,
+            redundancy_main: true,
+            accepts_guests: false,
+        };
+        let (responder, bound) =
+            ProbeResponder::start_on(&main_only, "127.0.0.1:0".parse().unwrap()).unwrap();
+        let reply = ask(bound);
+        assert_eq!(reply["port"], 3040);
+        assert_eq!(reply["guests"], "0");
+
+        // The network session takes over on another port and takes guests.
+        responder.update(&Advertisement {
+            port: 3041,
+            accepts_guests: true,
+            ..main_only.clone()
+        });
+        let reply = ask(bound);
+        assert_eq!(reply["port"], 3041);
+        assert_eq!(reply["guests"], "1");
+
+        // Stop then advertise again: the port must be free right away.
+        drop(responder);
+        let (_again, rebound) = ProbeResponder::start_on(&main_only, bound).expect("port freed on drop");
+        assert_eq!(rebound, bound);
     }
 }

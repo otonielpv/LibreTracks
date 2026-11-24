@@ -243,6 +243,14 @@ pub fn random_hex(bytes: usize) -> String {
     buffer.iter().map(|byte| format!("{byte:02x}")).collect()
 }
 
+/// How long the preferred port is retried before falling back to the next.
+/// A server of this same process that was just stopped (the redundancy
+/// main's own one, handing over to a network session) gives the port back
+/// only when its accept task wakes up; without the wait the session landed
+/// on 3041 while the main's backup and older advertisements said 3040.
+const PREFERRED_PORT_RETRIES: u32 = 10;
+const PREFERRED_PORT_RETRY_MS: u64 = 50;
+
 async fn bind_with_fallback(config: &HostConfig) -> std::io::Result<TcpListener> {
     let mut last_error = None;
     for offset in 0..config.port_attempts.max(1) {
@@ -251,9 +259,21 @@ async fn bind_with_fallback(config: &HostConfig) -> std::io::Result<TcpListener>
         } else {
             config.preferred_port.saturating_add(offset)
         };
-        match TcpListener::bind(SocketAddr::new(config.bind_ip, port)).await {
-            Ok(listener) => return Ok(listener),
-            Err(error) => last_error = Some(error),
+        let retries = if offset == 0 && port != 0 { PREFERRED_PORT_RETRIES } else { 0 };
+        let mut attempt = 0;
+        loop {
+            match TcpListener::bind(SocketAddr::new(config.bind_ip, port)).await {
+                Ok(listener) => return Ok(listener),
+                Err(error) => {
+                    let in_use = error.kind() == std::io::ErrorKind::AddrInUse;
+                    last_error = Some(error);
+                    if !in_use || attempt >= retries {
+                        break;
+                    }
+                }
+            }
+            attempt += 1;
+            tokio::time::sleep(Duration::from_millis(PREFERRED_PORT_RETRY_MS)).await;
         }
         if config.preferred_port == 0 {
             break;
@@ -319,7 +339,11 @@ pub async fn start_host(config: HostConfig) -> std::io::Result<HostRuntime> {
         failover_tx: watch::channel(failover_text(None)).0,
     });
 
-    tokio::spawn(accept_loop(listener, shared.clone()));
+    // Subscribed here, not inside the task: a `stop()` that lands before the
+    // task first runs would otherwise be marked as already seen, and the
+    // listener would hold the port for the life of the process.
+    let shutdown = shared.shutdown_tx.subscribe();
+    tokio::spawn(accept_loop(listener, shared.clone(), shutdown));
     Ok(HostRuntime {
         handle: HostHandle { shared },
         commands,
@@ -327,8 +351,11 @@ pub async fn start_host(config: HostConfig) -> std::io::Result<HostRuntime> {
     })
 }
 
-async fn accept_loop(listener: TcpListener, shared: Arc<Shared>) {
-    let mut shutdown = shared.shutdown_tx.subscribe();
+async fn accept_loop(
+    listener: TcpListener,
+    shared: Arc<Shared>,
+    mut shutdown: watch::Receiver<bool>,
+) {
     loop {
         tokio::select! {
             accepted = listener.accept() => {

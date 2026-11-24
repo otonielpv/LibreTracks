@@ -105,9 +105,16 @@ pub fn advertise(ad: &Advertisement) {
     };
     state.advertising = true;
     update_multicast_lock(&state);
-    match libretracks_link::probe::ProbeResponder::start(ad) {
-        Ok(responder) => state.probe_responder = Some(responder),
-        Err(error) => eprintln!("[libretracks-link] probe responder: {error}"),
+    // Re-advertising (redundancy main → network session, new port) keeps the
+    // socket and swaps the reply: binding a second responder would fail on
+    // the port the first still holds and leave the stale reply answering.
+    if let Some(responder) = state.probe_responder.as_ref() {
+        responder.update(ad);
+    } else {
+        match libretracks_link::probe::ProbeResponder::start(ad) {
+            Ok(responder) => state.probe_responder = Some(responder),
+            Err(error) => eprintln!("[libretracks-link] probe responder: {error}"),
+        }
     }
     #[cfg(target_os = "ios")]
     {

@@ -440,6 +440,31 @@ async fn occupied_port_falls_back_to_the_next_one() {
     assert_eq!(runtime.handle.port(), busy + 1);
 }
 
+/// The redundancy main stops its own server and the network session starts
+/// right after: the session must get the same port back, not the next one.
+#[tokio::test]
+async fn a_server_just_stopped_gives_its_port_back_to_the_next_one() {
+    let (_occupied, busy) = occupied_port_with_free_neighbour();
+    drop(_occupied);
+    let first = start_host(HostConfig {
+        preferred_port: busy,
+        port_attempts: 2,
+        ..config()
+    })
+    .await
+    .unwrap();
+    assert_eq!(first.handle.port(), busy);
+    first.handle.stop();
+    let second = start_host(HostConfig {
+        preferred_port: busy,
+        port_attempts: 2,
+        ..config()
+    })
+    .await
+    .unwrap();
+    assert_eq!(second.handle.port(), busy);
+}
+
 #[tokio::test]
 async fn heartbeat_resends_transport_while_quiet() {
     let runtime = start_host(HostConfig {
