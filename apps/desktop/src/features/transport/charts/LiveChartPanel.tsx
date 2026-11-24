@@ -49,6 +49,8 @@ import { useNetworkPermissions } from "../../network/useNetworkPermissions";
 import { recordProductEvent } from "../../telemetry/telemetry";
 import { useChartImportStore } from "../../chartSources/chartImportStore";
 import { useChartSourcesAvailable } from "../../chartSources/useChartSourcesAvailable";
+import type { ChartEditorMode } from "./simple/editorMode";
+import { FEATURE_FLAGS } from "@libretracks/shared/featureFlags";
 import "./LiveChartPanel.css";
 
 const FONT_SCALE_KEY = "lt.liveChart.fontScale";
@@ -485,9 +487,10 @@ export const LiveChartPanel = memo(function LiveChartPanel({
     [song],
   );
 
-  const openEditor = () => {
+  const simpleEditor = FEATURE_FLAGS.simpleLyricsEditor;
+  const openEditor = (initialMode?: ChartEditorMode) => {
     if (!region || !canEdit) return;
-    useChartEditorStore.getState().open({ region, markers, chart, secondsPerBeatAt, onSave: save });
+    useChartEditorStore.getState().open({ region, markers, chart, secondsPerBeatAt, onSave: save, initialMode });
   };
   // Planning Center: the picked sheet opens the editor with "Ajustar a la
   // secuencia" (ChartImportHost), and saves through this panel.
@@ -631,7 +634,7 @@ export const LiveChartPanel = memo(function LiveChartPanel({
             <button
               type="button"
               className="lt-icon-button"
-              onClick={openEditor}
+              onClick={() => openEditor()}
               aria-label={t("liveChart.edit")}
               title={t("liveChart.edit")}
             >
@@ -709,9 +712,9 @@ export const LiveChartPanel = memo(function LiveChartPanel({
                 {t("chartSources.import.open")}
               </button>
             ) : null}
-            <button type="button" className="lt-live-chart-action" disabled={busy} onClick={openEditor}>
+            <button type="button" className="lt-live-chart-action" disabled={busy} onClick={() => openEditor(simpleEditor ? "simple" : undefined)}>
               <span className="material-symbols-outlined" aria-hidden="true">edit_note</span>
-              {t("liveChart.pasteText")}
+              {simpleEditor ? t("simpleLyrics.write") : t("liveChart.pasteText")}
             </button>
           </div>
           <small>{t("liveChart.formats")}</small>

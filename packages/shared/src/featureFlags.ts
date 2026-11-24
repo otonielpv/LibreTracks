@@ -29,4 +29,9 @@ export const FEATURE_FLAGS = {
    * docs/plans/smart-chart-import. Ships in 1.18.0. The matcher and the
    * sheet cleanup are not behind it. */
   chartSources: true,
+  /** Simple lyrics editor: parts of the song on one side, lyrics written
+   * "like on paper" (chords over the words), paste the whole song. Plan in
+   * docs/plans/simple-lyrics-editor. Off until validated (step 09); the
+   * configurable lyrics follow is not behind it. */
+  simpleLyricsEditor: false,
 } as const;

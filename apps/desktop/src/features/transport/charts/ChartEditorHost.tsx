@@ -33,6 +33,7 @@ export function ChartEditorHost() {
       onSave={save}
       onClose={close}
       initialImport={session.initialImport}
+      initialMode={session.initialMode}
     />
   );
 }

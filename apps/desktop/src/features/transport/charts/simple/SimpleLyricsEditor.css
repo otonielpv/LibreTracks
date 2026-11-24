@@ -1,0 +1,203 @@
+/* Simple lyrics editor: parts on the left, the box on the right; on a narrow
+   (phone, portrait) screen the parts become a row of chips above the box. */
+
+.lt-chart-editor-modes {
+  display: inline-flex;
+  gap: 0;
+  margin-top: 0.6rem;
+  border: 1px solid rgb(87 241 219 / 0.24);
+}
+
+.lt-chart-editor-modes button {
+  border: 0;
+  background: transparent;
+  color: rgb(229 226 225 / 0.7);
+  padding: 0.4rem 0.8rem;
+  font: 700 0.75rem/1 "Space Grotesk", sans-serif;
+}
+
+.lt-chart-editor-modes button[aria-selected="true"] {
+  background: rgb(87 241 219 / 0.14);
+  color: #57f1db;
+}
+
+.lt-simple-lyrics {
+  grid-column: 1 / -1;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(10rem, 14rem) minmax(0, 1fr);
+  gap: 1rem;
+}
+
+.lt-simple-lyrics-parts ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.lt-simple-lyrics-part {
+  width: 100%;
+  min-height: 2.5rem;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  border: 0;
+  border-left: 2px solid transparent;
+  background: rgb(28 31 32 / 0.9);
+  color: #f3f0ef;
+  padding: 0.5rem 0.65rem;
+  text-align: left;
+  font: 600 0.82rem/1.2 "Space Grotesk", sans-serif;
+}
+
+.lt-simple-lyrics-part:hover {
+  background: rgb(40 44 45 / 0.95);
+}
+
+.lt-simple-lyrics-part.is-selected {
+  border-left-color: #57f1db;
+  background: rgb(87 241 219 / 0.12);
+}
+
+.lt-simple-lyrics-part.is-instrumental .lt-simple-lyrics-part-name {
+  opacity: 0.55;
+}
+
+.lt-simple-lyrics-part-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lt-simple-lyrics-part-times {
+  color: rgb(229 226 225 / 0.6);
+  font-size: 0.72rem;
+}
+
+.lt-simple-lyrics-part-done {
+  color: #57f1db;
+  font-size: 16px;
+}
+
+.lt-simple-lyrics-quick {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-top: 0.6rem;
+}
+
+.lt-simple-lyrics-quick p {
+  width: 100%;
+  margin: 0 0 0.2rem;
+  color: rgb(229 226 225 / 0.6);
+  font: 500 0.72rem/1.4 "Space Grotesk", sans-serif;
+}
+
+.lt-simple-lyrics-main {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.lt-simple-lyrics-split {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.lt-simple-lyrics-textarea {
+  min-height: 18rem;
+  resize: vertical;
+  padding: 0.75rem 0.85rem;
+  border: 1px solid rgb(87 241 219 / 0.18);
+  border-radius: 2px;
+  color: #f3f0ef;
+  background: rgb(28 31 32 / 0.98);
+  /* Monospaced always: chords line up with the words by columns. */
+  font: 0.9rem/1.5 "JetBrains Mono", ui-monospace, monospace;
+  white-space: pre;
+}
+
+.lt-simple-lyrics-textarea:focus {
+  outline: none;
+  border-color: rgb(87 241 219 / 0.5);
+}
+
+.lt-simple-lyrics-main small {
+  color: rgb(229 226 225 / 0.55);
+  font: 500 0.72rem/1.4 "Space Grotesk", sans-serif;
+}
+
+.lt-simple-lyrics-notice {
+  margin: 0;
+  color: #f5c46b;
+  font: 600 0.75rem/1.4 "Space Grotesk", sans-serif;
+}
+
+.lt-simple-lyrics-paste .lt-simple-lyrics-textarea {
+  width: 100%;
+  min-height: 20rem;
+}
+
+.lt-simple-lyrics-blocks {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.lt-simple-lyrics-block-head {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.lt-simple-lyrics-blocks pre {
+  margin: 0.35rem 0 0;
+  padding: 0.5rem 0.65rem;
+  background: rgb(28 31 32 / 0.9);
+  color: #f3f0ef;
+  font: 0.8rem/1.45 "JetBrains Mono", ui-monospace, monospace;
+  white-space: pre-wrap;
+}
+
+.lt-simple-lyrics-confidence {
+  font: 600 0.7rem/1 "Space Grotesk", sans-serif;
+  color: rgb(229 226 225 / 0.6);
+}
+
+.lt-simple-lyrics-confidence.is-low {
+  color: #f5c46b;
+}
+
+@media (max-width: 640px) {
+  .lt-simple-lyrics {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .lt-simple-lyrics-parts ul {
+    flex-direction: row;
+    overflow-x: auto;
+    gap: 0.35rem;
+  }
+
+  .lt-simple-lyrics-part {
+    width: auto;
+    min-height: 2.5rem;
+    border-left: 0;
+    border-bottom: 2px solid transparent;
+    white-space: nowrap;
+  }
+
+  .lt-simple-lyrics-part.is-selected {
+    border-bottom-color: #57f1db;
+  }
+}

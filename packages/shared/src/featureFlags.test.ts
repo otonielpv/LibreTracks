@@ -28,4 +28,8 @@ describe("feature flags", () => {
   it("chart sources (Planning Center) ship in 1.18.0", () => {
     expect(FEATURE_FLAGS.chartSources).toBe(true);
   });
+
+  it("the simple lyrics editor stays hidden until it is validated", () => {
+    expect(FEATURE_FLAGS.simpleLyricsEditor).toBe(false);
+  });
 });
