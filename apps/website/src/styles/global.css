@@ -311,7 +311,7 @@ html {
 }
 
 /* A marker under the link instead of a pill behind it. */
-.nav-links a:not(.social-link):not(.nav-cta)::after {
+.nav-links a:not(.social-link):not(.nav-cta):not(.lang-option)::after {
   content: "";
   position: absolute;
   left: 0.75rem;
@@ -324,7 +324,7 @@ html {
   transition: transform 0.15s ease;
 }
 
-.nav-links a:not(.social-link):not(.nav-cta):hover::after {
+.nav-links a:not(.social-link):not(.nav-cta):not(.lang-option):hover::after {
   transform: scaleX(1);
 }
 
@@ -350,6 +350,85 @@ html {
 .nav-links .nav-cta:hover {
   color: #003731;
   background: var(--lt-heading);
+}
+
+/* Language menu: a native <details> so it works without JavaScript and takes
+   any number of locales without widening the header. */
+.lang-menu {
+  position: relative;
+}
+
+.lang-menu summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-height: 2.4rem;
+  padding: 0 0.75rem;
+  color: var(--lt-muted);
+  font: 700 0.74rem/1 var(--lt-font-label);
+  letter-spacing: 0.09em;
+  cursor: pointer;
+  list-style: none;
+  transition: color 0.12s ease;
+}
+
+.lang-menu summary::-webkit-details-marker {
+  display: none;
+}
+
+.lang-menu summary::after {
+  content: "";
+  width: 0.4rem;
+  height: 0.4rem;
+  margin-left: 0.1rem;
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  transform: translateY(-0.12rem) rotate(45deg);
+  transition: transform 0.12s ease;
+}
+
+.lang-menu[open] summary::after {
+  transform: translateY(0.1rem) rotate(-135deg);
+}
+
+.lang-menu summary:hover,
+.lang-menu[open] summary {
+  color: var(--lt-heading);
+}
+
+.lang-menu summary svg {
+  width: 1rem;
+  height: 1rem;
+}
+
+.lang-menu ul {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  z-index: 20;
+  min-width: 10rem;
+  margin: 0.25rem 0 0;
+  padding: 0.3rem 0;
+  list-style: none;
+  background: var(--lt-surface-container);
+  border: 1px solid var(--lt-border-strong);
+  border-radius: var(--lt-radius);
+}
+
+.nav-links .lang-menu a {
+  display: flex;
+  justify-content: flex-start;
+  width: 100%;
+  min-height: 2.4rem;
+  padding: 0 1rem;
+}
+
+.nav-links .lang-menu a:hover {
+  background: var(--lt-surface-high);
+}
+
+.nav-links .lang-menu a[aria-current="page"] {
+  color: var(--lt-primary);
 }
 
 /* Buttons are the app's transport keys: square, labelled in capitals, and
@@ -2759,6 +2838,12 @@ button.analytics-ranked-row:hover span,
   .nav-links .social-link {
     width: 2.2rem;
     padding: 0;
+  }
+
+  .lang-menu summary {
+    min-height: 2.2rem;
+    padding-inline: 0.5rem;
+    font-size: 0.68rem;
   }
 
   .nav-links .nav-cta {
