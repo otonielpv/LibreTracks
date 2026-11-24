@@ -135,13 +135,28 @@ export function ChartEditorModal({
   useLayoutEffect(() => {
     const element = textareaRef.current;
     if (!element) return;
-    // Collapsing to "auto" to measure shrinks the body for a moment, which
-    // clamps its scroll and throws the edited line to the top: put it back.
-    const scroller = element.closest<HTMLElement>(".lt-chart-editor-body");
-    const scrollTop = scroller?.scrollTop ?? 0;
-    element.style.height = "auto";
-    element.style.height = `${element.scrollHeight + 2}px`;
-    if (scroller && scroller.scrollTop !== scrollTop) scroller.scrollTop = scrollTop;
+    const fit = () => {
+      // Collapsing to "auto" to measure shrinks the body for a moment, which
+      // clamps its scroll and throws the edited line to the top: put it back.
+      const scroller = element.closest<HTMLElement>(".lt-chart-editor-body");
+      const scrollTop = scroller?.scrollTop ?? 0;
+      element.style.height = "auto";
+      element.style.height = `${element.scrollHeight + 2}px`;
+      if (scroller && scroller.scrollTop !== scrollTop) scroller.scrollTop = scrollTop;
+    };
+    fit();
+    // A narrower box wraps more lines (the phone turns to portrait right
+    // after the editor opens): measured at the old width, the text below
+    // was cut off and, the box not scrolling itself, out of reach.
+    if (typeof ResizeObserver === "undefined") return;
+    let width = element.clientWidth;
+    const observer = new ResizeObserver(() => {
+      if (element.clientWidth === width) return;
+      width = element.clientWidth;
+      fit();
+    });
+    observer.observe(element);
+    return () => observer.disconnect();
     // Also when Advanced is shown again: the box mounts then and must be measured.
   }, [text, mode]);
 
