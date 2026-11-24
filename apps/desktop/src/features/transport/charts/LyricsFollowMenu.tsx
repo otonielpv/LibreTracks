@@ -5,6 +5,8 @@ import { create } from "zustand";
 import type { FollowFocus } from "@libretracks/shared/models";
 import { DEFAULT_FOLLOW_FOCUS, FOLLOW_FOCUSES, parseFollowFocus } from "@libretracks/shared/charts/lyricsFollow";
 
+import { isMobileApp } from "../desktopApi";
+
 const GENERAL_KEY = "lt.liveChart.follow";
 
 function readGeneral(): FollowFocus {
@@ -82,16 +84,33 @@ export function LyricsFollowMenu({ general, song, onGeneral, onSong }: LyricsFol
         <span className="material-symbols-outlined" aria-hidden="true">format_line_spacing</span>
       </button>
       {open ? (
-        <div className="lt-context-menu lt-lyrics-follow-menu" role="menu" aria-label={t("lyricsFollow.title")}>
-          <strong>{t("lyricsFollow.allSongs")}</strong>
-          {FOLLOW_FOCUSES.map((focus) => option(focus, focus === general, () => onGeneral(focus), name(focus)))}
-          {onSong ? (
-            <>
-              <strong>{t("lyricsFollow.thisSong")}</strong>
-              {option(null, song === null, () => onSong(null), t("lyricsFollow.likeAll"))}
-              {FOLLOW_FOCUSES.map((focus) => option(focus, focus === song, () => onSong(focus), name(focus)))}
-            </>
+        <div
+          className={`lt-context-menu lt-lyrics-follow-menu${isMobileApp ? " is-mobile-sheet" : ""}`}
+          role="menu"
+          aria-label={t("lyricsFollow.title")}
+        >
+          {isMobileApp ? (
+            // A sheet on phones and tablets, like the app's other menus.
+            <div className="lt-context-menu-sheet-header">
+              <strong>{t("lyricsFollow.title")}</strong>
+              <button type="button" className="lt-icon-button" aria-label={t("liveChart.cancel")} onClick={() => setOpen(false)}>
+                <span className="material-symbols-outlined" aria-hidden="true">close</span>
+              </button>
+            </div>
           ) : null}
+          <div className="lt-lyrics-follow-groups">
+            <div className="lt-lyrics-follow-group">
+              <strong>{t("lyricsFollow.allSongs")}</strong>
+              {FOLLOW_FOCUSES.map((focus) => option(focus, focus === general, () => onGeneral(focus), name(focus)))}
+            </div>
+            {onSong ? (
+              <div className="lt-lyrics-follow-group">
+                <strong>{t("lyricsFollow.thisSong")}</strong>
+                {option(null, song === null, () => onSong(null), t("lyricsFollow.likeAll"))}
+                {FOLLOW_FOCUSES.map((focus) => option(focus, focus === song, () => onSong(focus), name(focus)))}
+              </div>
+            ) : null}
+          </div>
         </div>
       ) : null}
     </div>

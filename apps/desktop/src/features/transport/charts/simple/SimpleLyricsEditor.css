@@ -29,13 +29,18 @@
   gap: 1rem;
 }
 
+.lt-simple-lyrics-parts {
+  min-height: 0;
+  overflow-y: auto;
+}
+
 .lt-simple-lyrics-parts ul {
   margin: 0;
   padding: 0;
   list-style: none;
   display: flex;
   flex-direction: column;
-  gap: 1px;
+  gap: 0.35rem;
 }
 
 .lt-simple-lyrics-part {
@@ -44,8 +49,9 @@
   display: flex;
   align-items: center;
   gap: 0.4rem;
-  border: 0;
+  border: 1px solid rgb(133 148 144 / 0.16);
   border-left: 2px solid transparent;
+  border-radius: 2px;
   background: rgb(28 31 32 / 0.9);
   color: #f3f0ef;
   padding: 0.5rem 0.65rem;
@@ -58,6 +64,7 @@
 }
 
 .lt-simple-lyrics-part.is-selected {
+  border-color: rgb(87 241 219 / 0.35);
   border-left-color: #57f1db;
   background: rgb(87 241 219 / 0.12);
 }
@@ -109,6 +116,12 @@
   display: flex;
   flex-wrap: wrap;
   gap: 0.35rem;
+}
+
+.lt-simple-lyrics-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .lt-simple-lyrics-textarea {
@@ -262,6 +275,39 @@
   color: #0b1514;
 }
 
+/* Tablet and computer: the editor keeps one height whatever part is picked
+   (a longer name, the split buttons of a repeated part); the box takes what
+   is left. */
+@media (min-width: 641px) {
+  .lt-chart-editor.is-simple {
+    height: min(46rem, calc(var(--lt-chart-editor-visible-height, 100vh) - 2rem));
+  }
+
+  .lt-chart-editor.is-simple .lt-chart-editor-body {
+    flex: 1 1 auto;
+    display: flex;
+    overflow: hidden;
+  }
+
+  .lt-chart-editor.is-simple .lt-simple-lyrics {
+    flex: 1 1 auto;
+    min-height: 0;
+  }
+
+  .lt-chart-editor.is-simple .lt-simple-lyrics-main {
+    min-height: 0;
+    overflow-y: auto;
+  }
+
+  .lt-chart-editor.is-simple .lt-simple-lyrics-textarea,
+  .lt-chart-editor.is-simple .lt-simple-chords {
+    flex: 1 1 auto;
+    min-height: 8rem;
+    resize: none;
+    overflow-y: auto;
+  }
+}
+
 @media (max-width: 640px) {
   .lt-simple-lyrics {
     grid-template-columns: minmax(0, 1fr);
@@ -271,6 +317,11 @@
     flex-direction: row;
     overflow-x: auto;
     gap: 0.35rem;
+    scrollbar-width: none;
+  }
+
+  .lt-simple-lyrics-parts ul::-webkit-scrollbar {
+    display: none;
   }
 
   .lt-simple-lyrics-part {

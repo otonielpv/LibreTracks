@@ -123,11 +123,7 @@ export function SimpleLyricsEditor({ chart, markers, onChange, onSave, onImportF
         quickName={(kind) => QUICK_PART_NAMES[language][kind] ?? kind}
       />
       <div className="lt-simple-lyrics-main">
-        <div className="lt-chart-editor-row">
-          <span className="lt-settings-field-label">
-            {selected ? t("simpleLyrics.textFor", { part: selected.label || "…" }) : t("simpleLyrics.choosePart")}
-          </span>
-          <div className="lt-chart-editor-row-actions">
+        <div className="lt-chart-editor-row-actions lt-simple-lyrics-actions">
             <button type="button" className="lt-chart-editor-button" onClick={() => setPasteOpen(true)}>
               <span className="material-symbols-outlined" aria-hidden="true">content_paste</span>
               {t("simpleLyrics.pasteSong")}
@@ -142,8 +138,10 @@ export function SimpleLyricsEditor({ chart, markers, onChange, onSave, onImportF
                 {t("chartSources.import.open")}
               </button>
             ) : null}
-          </div>
         </div>
+        <span className="lt-settings-field-label lt-simple-lyrics-title">
+          {selected ? t("simpleLyrics.textFor", { part: selected.label || "…" }) : t("simpleLyrics.choosePart")}
+        </span>
         {selected && selected.section !== null && selected.times > 1 ? (
           <div className="lt-simple-lyrics-split">
             {selected.markerIds.slice(1).map((markerId, index) => (
@@ -187,7 +185,7 @@ export function SimpleLyricsEditor({ chart, markers, onChange, onSave, onImportF
           }}
         />
         )}
-        <small>{t("simpleLyrics.help")}</small>
+        {view === "text" ? <small>{t("simpleLyrics.help")}</small> : null}
         {clearedTimes ? (
           <p className="lt-simple-lyrics-notice" role="status">
             {t("simpleLyrics.clearedTimes")}

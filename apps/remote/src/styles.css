@@ -5612,6 +5612,20 @@ button {
   font-weight: 700;
 }
 
+/* A focus of several lines (2, 3 or the whole section) is one block: no gap
+   or rounded corners between its lines. */
+.lyrics-line.is-current:has(+ .lyrics-line.is-current) {
+  margin-bottom: 0;
+  padding-bottom: 0.35em;
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.lyrics-line.is-current + .lyrics-line.is-current {
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
+}
+
 .lyrics-comment {
   margin: 0 0 0.3em;
   font-style: italic;
