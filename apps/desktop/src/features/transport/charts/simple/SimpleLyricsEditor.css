@@ -279,8 +279,14 @@
    (a longer name, the split buttons of a repeated part); the box takes what
    is left. */
 @media (min-width: 641px) {
-  .lt-chart-editor.is-simple {
+  /* Same height in Simple and Advanced: switching modes or views does not
+     resize the window. */
+  .lt-chart-editor.has-modes {
     height: min(46rem, calc(var(--lt-chart-editor-visible-height, 100vh) - 2rem));
+  }
+
+  .lt-chart-editor.has-modes .lt-chart-editor-body {
+    flex: 1 1 auto;
   }
 
   .lt-chart-editor.is-simple .lt-chart-editor-body {

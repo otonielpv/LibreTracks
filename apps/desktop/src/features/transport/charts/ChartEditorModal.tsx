@@ -327,7 +327,7 @@ export function ChartEditorModal({
       onClick={saving ? undefined : close}
     >
       <section
-        className={`lt-settings-modal lt-chart-editor${mode === "simple" ? " is-simple" : ""}`}
+        className={`lt-settings-modal lt-chart-editor${FEATURE_FLAGS.simpleLyricsEditor ? " has-modes" : ""}${mode === "simple" ? " is-simple" : ""}`}
         role="dialog"
         aria-modal="true"
         aria-labelledby="lt-chart-editor-title"
