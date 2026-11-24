@@ -263,6 +263,27 @@ fn family(chroma: &[f64; 12]) -> usize {
     }
 }
 
+/// Two stretches read in the same key: the same family, or keys a fifth apart
+/// that do not each sound the note only they have. Such keys share six notes,
+/// so a verse sitting on the dominant reads as a modulation to it: "Al estar
+/// ante ti" (D, D–A–Em–Bm verse ending on A) came out A, D, A, D, though its
+/// verses had more G than G#. A real move to the dominant sounds its leading
+/// tone, and the key it left its own fourth.
+fn same_key(a: &[f64; 12], b: &[f64; 12]) -> bool {
+    let (family_a, family_b) = (family(a), family(b));
+    if family_a == family_b {
+        return true;
+    }
+    // The note each key has and the other lacks: the dominant's leading tone
+    // against the tonic's fourth.
+    let (only_a, only_b) = match (family_b + 12 - family_a) % 12 {
+        7 => ((family_a + 5) % 12, (family_a + 6) % 12),
+        5 => ((family_b + 6) % 12, (family_b + 5) % 12),
+        _ => return false,
+    };
+    !(a[only_a] > a[only_b] && b[only_b] > b[only_a])
+}
+
 fn add_chroma(into: &mut [f64; 12], other: [f64; 12]) {
     into.iter_mut().zip(other).for_each(|(a, b)| *a += b);
 }
@@ -288,7 +309,7 @@ fn key_stretches(frames: &[(f64, Peaks)], tuning: f64, total_seconds: f64) -> Ve
             Some(last) if !pitched => {
                 last.end = end;
             }
-            Some(last) if family(&last.chroma) == family(&chroma) => {
+            Some(last) if same_key(&last.chroma, &chroma) => {
                 last.end = end;
                 add_chroma(&mut last.chroma, chroma);
             }
@@ -316,7 +337,7 @@ fn key_stretches(frames: &[(f64, Peaks)], tuning: f64, total_seconds: f64) -> Ve
         add_chroma(&mut target.chroma, absorbed.chroma);
         let mut index = 1;
         while index < groups.len() {
-            if family(&groups[index - 1].chroma) == family(&groups[index].chroma) {
+            if same_key(&groups[index - 1].chroma, &groups[index].chroma) {
                 let next = groups.remove(index);
                 let previous = &mut groups[index - 1];
                 previous.end = next.end;
@@ -656,6 +677,44 @@ mod tests {
         assert_eq!(sections[0], (0.0, "D"));
         assert_eq!(sections[1].1, "E");
         assert!((sections[1].0 - 112.0).abs() <= 32.0, "{analysis:?}");
+    }
+
+    /// Triads (root MIDI, third offset), two seconds each, with the bass an
+    /// octave down, repeated until they last at least `seconds`.
+    fn chords_lasting(triads: &[(i32, i32)], seconds: f64) -> Vec<f32> {
+        let mut song = Vec::new();
+        while (song.len() as f64) < seconds * f64::from(RATE) {
+            for &(r, third) in triads {
+                song.extend(chord(&[r - 12, r, r + third, r + 7], 2.0, 0.0));
+            }
+        }
+        song
+    }
+
+    #[test]
+    fn a_verse_on_the_dominant_is_not_a_modulation() {
+        // "Al estar ante ti" (D): verses that lean on A and E minor (no G#)
+        // read as A between choruses in D, an A, D, A, D that was not there.
+        let verse: &[(i32, i32)] = &[(57, 4), (64, 3), (57, 4), (59, 3), (57, 4), (64, 3)];
+        let chorus: &[(i32, i32)] = &[(55, 4), (62, 4), (57, 4), (59, 3), (55, 4), (62, 4)];
+        let mut song = Vec::new();
+        for _ in 0..2 {
+            song.extend(chords_lasting(verse, 60.0));
+            song.extend(chords_lasting(chorus, 60.0));
+        }
+        let analysis = analyze_key(&song, RATE);
+        assert_eq!(analysis.key.as_deref(), Some("D"), "{analysis:?}");
+        assert!(analysis.sections.is_empty(), "{analysis:?}");
+    }
+
+    #[test]
+    fn a_real_move_to_the_dominant_is_still_a_modulation() {
+        // C, then G sounding its F#: a key change, not a verse on the dominant.
+        let mut song = lasting(60, 90.0);
+        song.extend(lasting(67, 90.0));
+        let analysis = analyze_key(&song, RATE);
+        let keys: Vec<&str> = analysis.sections.iter().map(|s| s.key.as_str()).collect();
+        assert_eq!(keys, ["C", "G"], "{analysis:?}");
     }
 
     #[test]
