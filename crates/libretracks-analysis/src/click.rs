@@ -44,6 +44,16 @@ const CLICK_TOLERANCES: Tolerances = Tolerances {
 };
 /// Shortest gap between two clicks: a 16th at 300 BPM is 50 ms.
 const REFRACTORY_SECONDS: f64 = 0.050;
+/// A click this soon after a louder one, and this much quieter, with nothing
+/// after it for `ECHO_ISOLATION` times as long, is that click's echo or flam,
+/// not a click of its own. "Al estar ante ti" (Alejandro del Bosque) doubles
+/// every accent 60 ms later at -23 dB: read as a beat, every bar had five
+/// (89.6 BPM in 5/4 instead of 71 in 4/4) and the last one lasted 60 ms
+/// (996 BPM). A real quiet subdivision repeats at its own pace, so the
+/// isolation test keeps it.
+const ECHO_SECONDS: f64 = 0.120;
+const ECHO_BELOW_DB: f64 = 12.0;
+const ECHO_ISOLATION: f64 = 3.0;
 /// Part of each click its features are measured on.
 const FEATURE_WINDOW_SECONDS: f64 = 0.015;
 /// Smallest pitch jump that may separate two click sounds (~1/3 semitone).
@@ -486,7 +496,25 @@ fn detect_onsets(samples: &[f32], sample_rate: u32) -> Vec<Onset> {
             pitch_octaves: frequency.max(1.0).log2(),
         });
     }
-    onsets
+    without_echoes(onsets)
+}
+
+/// Drops every echo (see `ECHO_SECONDS`).
+fn without_echoes(onsets: Vec<Onset>) -> Vec<Onset> {
+    let mut kept: Vec<Onset> = Vec::with_capacity(onsets.len());
+    for (index, onset) in onsets.iter().enumerate() {
+        let echo = kept.last().is_some_and(|previous| {
+            let gap = onset.seconds - previous.seconds;
+            let isolated = onsets
+                .get(index + 1)
+                .is_none_or(|next| next.seconds - onset.seconds > ECHO_ISOLATION * gap);
+            gap < ECHO_SECONDS && onset.level_db <= previous.level_db - ECHO_BELOW_DB && isolated
+        });
+        if !echo {
+            kept.push(*onset);
+        }
+    }
+    kept
 }
 
 /// Zero-padded FFT size for a click's pitch.
@@ -1349,6 +1377,45 @@ mod tests {
         assert_eq!(analysis.segments.len(), 1, "{analysis:?}");
         assert_eq!(analysis.segments[0].bpm, 100.0);
         assert_eq!(analysis.segments[0].signature(), "4/4");
+    }
+
+    #[test]
+    fn an_echo_after_the_accent_is_not_a_beat() {
+        // "Al estar ante ti": every accent sounds again 60 ms later, 23 dB down.
+        let (mut clicks, _) = bars_at(0.0, 71.0, 4, 8);
+        let echoes: Vec<Click> = clicks
+            .iter()
+            .filter(|c| c.frequency == HIGH)
+            .map(|c| Click {
+                seconds: c.seconds + 0.060,
+                frequency: HIGH,
+                amplitude: 0.055,
+            })
+            .collect();
+        clicks.extend(echoes);
+        clicks.sort_by(|a, b| a.seconds.total_cmp(&b.seconds));
+        let analysis = analyze_click(&render(&clicks), RATE, 4);
+        assert_eq!(analysis.segments.len(), 1, "{analysis:?}");
+        assert_eq!(analysis.segments[0].bpm, 71.0);
+        assert_eq!(analysis.segments[0].signature(), "4/4");
+    }
+
+    #[test]
+    fn quiet_sixteenths_close_to_the_beat_are_not_echoes() {
+        let period = 60.0 / 130.0;
+        let mut clicks = Vec::new();
+        for beat in 0..32 {
+            let t = f64::from(beat) * period;
+            for sixteenth in 0..4 {
+                clicks.push(Click {
+                    seconds: t + f64::from(sixteenth) * period / 4.0,
+                    frequency: if sixteenth > 0 { LOW } else if beat % 4 == 0 { HIGH } else { 1250.0 },
+                    amplitude: if sixteenth == 0 { 0.8 } else { 0.15 },
+                });
+            }
+        }
+        let onsets = detect_onsets(&render(&clicks), RATE);
+        assert_eq!(onsets.len(), 128);
     }
 
     #[test]

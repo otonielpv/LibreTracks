@@ -1123,6 +1123,28 @@ mod tests {
     }
 
     #[test]
+    fn a_count_in_heard_as_un_is_still_the_count_in() {
+        // Real ("Al estar ante ti", 71 BPM): whisper hears the "uno" of
+        // "Coro." … "Uno." "Dos." "Tres." "Cuatro." as "Un.", which broke the
+        // count-in: "Un." stayed an unnamed announcement and "dos, tres,
+        // cuatro" became a count said on its own, with count markers.
+        let audio = track(
+            &[(0.1, 0, 0.5), (1.7, 1, 0.3), (2.55, 1, 0.3), (3.4, 1, 0.3), (4.25, 2, 0.4)],
+            8.0,
+        );
+        let analysis = scripted(&audio, &["Coro.", "Un.", "Dos.", "Tres.", "Cuatro."]);
+        assert_eq!(analysis.announcements.len(), 5, "{analysis:?}");
+        let labels: Vec<&[String]> = analysis
+            .announcements
+            .iter()
+            .map(|a| analysis.groups[a.group].labels.as_slice())
+            .collect();
+        assert_eq!(labels[0], &["chorus".to_string()][..], "{analysis:?}");
+        assert!(labels[1..].iter().all(|l| *l == ["count".to_string()]), "{analysis:?}");
+        assert!(analysis.announcements.iter().all(|a| a.count_words.is_empty()));
+    }
+
+    #[test]
     fn a_count_after_a_clip_match_is_its_count_in() {
         // Real (Es Él): "Coro" in the app's own voice is a sure clip match
         // and not transcribed; the "dos, tres" after it was taken for a
