@@ -17,8 +17,8 @@ type PartListProps = {
 
 /**
  * The song's sections, one row per marker in the order they play (as on the
- * timeline), on the side of the simple editor (chips on a phone). A link
- * icon marks rows that share their lyrics with others of the same name.
+ * timeline), on the side of the simple editor (chips on a phone). Each one
+ * has its own lyrics.
  */
 export function PartList({ entries, selectedKey, onSelect, onAdd, quickName }: PartListProps) {
   const { t } = useTranslation();
@@ -36,15 +36,6 @@ export function PartList({ entries, selectedKey, onSelect, onAdd, quickName }: P
             >
               <span className="lt-simple-lyrics-part-position">{String(entry.position).padStart(2, "0")}</span>
               <span className="lt-simple-lyrics-part-name">{entry.label || "…"}</span>
-              {entry.times > 1 ? (
-                <span
-                  className="material-symbols-outlined lt-simple-lyrics-part-shared"
-                  title={t("simpleLyrics.sharedCount", { count: entry.times })}
-                  aria-label={t("simpleLyrics.sharedCount", { count: entry.times })}
-                >
-                  link
-                </span>
-              ) : null}
               {entry.section !== null ? (
                 <span className="material-symbols-outlined lt-simple-lyrics-part-done" aria-label={t("simpleLyrics.hasLyrics")}>
                   check

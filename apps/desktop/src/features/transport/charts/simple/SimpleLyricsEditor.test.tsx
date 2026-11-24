@@ -110,19 +110,15 @@ describe("simple lyrics editor", () => {
     flags.simpleLyricsEditor = true;
   });
 
-  it("C2: picking Coro, writing chords and lyrics and saving links the chorus to its three markers", async () => {
+  it("C2: picking a Coro, writing chords and lyrics and saving links only that marker", async () => {
     const { onSave } = renderEditor(null);
     fireEvent.click(partButton(/Coro/));
     fireEvent.change(box(), { target: { value: "C          G\nSanto eres tú" } });
-    expect(partButton(/Coro/).querySelector(".lt-simple-lyrics-part-done")).not.toBeNull();
+    expect(partButtons(/Coro/).map((button) => button.querySelector(".lt-simple-lyrics-part-done") !== null)).toEqual([true, false, false]);
     await save();
     const saved = onSave.mock.calls[0][0] as SongChart;
     expect(saved.text).toBe("{section: Coro}\n[C]Santo eres [G]tú\n");
-    expect(saved.links.map((link) => [link.markerId, link.section])).toEqual([
-      ["c1", 0],
-      ["c2", 0],
-      ["c3", 0],
-    ]);
+    expect(saved.links.map((link) => [link.markerId, link.section])).toEqual([["c1", 0]]);
   });
 
   it("C3: editing one part of a Planning Center sheet keeps the rest of the text", async () => {
@@ -173,7 +169,9 @@ describe("simple lyrics editor", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "simpleLyrics.review" }));
     const selects = screen.getAllByRole("combobox", { name: /simpleLyrics\.blockFor/ }) as HTMLSelectElement[];
-    expect(selects.map((select) => select.selectedOptions[0].textContent)).toEqual(["Verso 1", "Coro", "Verso 2", "Coro"]);
+    expect(selects.map((select) => select.selectedOptions[0].textContent)).toEqual(["01 Verso 1", "02 Coro", "03 Verso 2", "02 Coro"]);
+    // The chorus block is copied to every chorus.
+    expect(screen.getAllByText(/simpleLyrics\.pasteAlso/)[0].textContent).toContain("04 Coro, 06 Coro");
     // Cancel from the review: back, then cancel; nothing written.
     fireEvent.click(screen.getByRole("button", { name: "simpleLyrics.back" }));
     fireEvent.click(screen.getByRole("button", { name: "simpleLyrics.cancel" }));
@@ -185,9 +183,10 @@ describe("simple lyrics editor", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "simpleLyrics.review" }));
     fireEvent.click(screen.getByRole("button", { name: "simpleLyrics.apply" }));
-    fireEvent.click(partButton(/Coro/));
+    fireEvent.click(partButtons(/Coro/)[2]);
     expect(box().value).toBe("Santo eres tú\nDigno de honor");
     await save();
+    // Verso 1, three choruses and Verso 2 (the bridge got no block).
     expect((onSave.mock.calls[0][0] as SongChart).links).toHaveLength(5);
   });
 
@@ -247,15 +246,29 @@ describe("simple lyrics editor", () => {
     expect((onSave.mock.calls[0][0] as SongChart).text).toBe(["{section: Puente}", "[C] [G]", ""].join("\n"));
   });
 
-  it("lists every marker in song order; rows of the same name share their lyrics", () => {
-    renderEditor(PC_CHART);
+  it("lists every marker in song order, each with its own lyrics", async () => {
+    const { onSave } = renderEditor(PC_CHART);
     const names = within(screen.getByRole("navigation", { name: "simpleLyrics.parts" }))
       .getAllByRole("button")
       .map((button) => button.querySelector(".lt-simple-lyrics-part-name")?.textContent);
     expect(names).toEqual(["Verso 1", "Coro", "Verso 2", "Coro", "Puente", "Coro"]);
     fireEvent.click(partButtons(/Coro/)[2]);
+    // The sheet links the three choruses to one section: each shows it...
     expect(box().value).toBe(["C          G", "Santo eres tú"].join("\n"));
-    expect(screen.getByText(/simpleLyrics\.sharedWith/).textContent).toContain("2. Coro, 4. Coro");
-    expect(screen.queryByRole("button", { name: /simpleLyrics\.(splitHere|join)/ })).toBeNull();
+    // ...and editing the last one changes only that one.
+    fireEvent.change(box(), { target: { value: "Otra letra al final" } });
+    fireEvent.click(partButtons(/Coro/)[0]);
+    expect(box().value).toBe(["C          G", "Santo eres tú"].join("\n"));
+    await save();
+    const saved = onSave.mock.calls[0][0] as SongChart;
+    expect(saved.text).toContain("Otra letra al final");
+    expect(saved.text).toContain("[C]Santo eres [G]tú");
+  });
+
+  it("the ChordPro box is measured when Advanced is shown after Simple (it grows, the body scrolls)", () => {
+    renderEditor(PC_CHART, "simple");
+    fireEvent.click(screen.getByRole("tab", { name: "simpleLyrics.advanced" }));
+    const advanced = screen.getByRole("textbox", { name: "liveChart.textLabel" }) as HTMLTextAreaElement;
+    expect(advanced.style.height).not.toBe("");
   });
 });

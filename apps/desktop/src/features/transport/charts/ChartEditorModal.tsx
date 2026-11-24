@@ -142,7 +142,8 @@ export function ChartEditorModal({
     element.style.height = "auto";
     element.style.height = `${element.scrollHeight + 2}px`;
     if (scroller && scroller.scrollTop !== scrollTop) scroller.scrollTop = scrollTop;
-  }, [text]);
+    // Also when Advanced is shown again: the box mounts then and must be measured.
+  }, [text, mode]);
 
   const setLink = (markerId: string, value: string) => {
     setLinks((current) => {

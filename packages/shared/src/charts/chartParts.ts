@@ -92,36 +92,21 @@ export function chartParts(chart: SongChart | null, markers: readonly SectionMar
     );
   }
 
-  // Group by name; inside a name, markers already showing different sections
-  // stay apart (nothing saved is merged). Markers without a section join the
-  // first group of their name.
-  type Group = { name: string; kind: MarkerKind | null; section: number | null; markers: SectionMarkerSummary[] };
-  const groups: Group[] = [];
-  for (const marker of songMarkers) {
-    const { key: name, kind } = markerName(marker);
-    const section = sectionOf(marker.id);
-    const sameName = groups.filter((group) => group.name === name);
-    const target =
-      section === null
-        ? sameName[0]
-        : (sameName.find((group) => group.section === section) ?? sameName.find((group) => group.section === null));
-    if (target) {
-      target.markers.push(marker);
-      if (target.section === null) target.section = section;
-    } else {
-      groups.push({ name, kind, section, markers: [marker] });
-    }
-  }
-  const parts = groups.map((group) =>
-    partFor(group.section, {
-      key: `m:${group.markers[0].id}`,
-      label: group.markers[0].name,
-      kind: group.kind,
-      markerIds: group.markers.map((marker) => marker.id),
-      times: group.markers.length,
-      sung: !isLyricless(group.kind),
-    }),
-  );
+  // One part per marker, in timeline order, each with its own lyrics
+  // (decided 2026-11-24: six bridges are six parts; the same words are copied
+  // by hand). A sheet that links several markers to one section shows that
+  // section in each, and editing one gives it its own (`applyPartEdit`).
+  const parts = songMarkers.map((marker) => {
+    const { kind } = markerName(marker);
+    return partFor(sectionOf(marker.id), {
+      key: `m:${marker.id}`,
+      label: marker.name,
+      kind,
+      markerIds: [marker.id],
+      times: 1,
+      sung: !isLyricless(kind),
+    });
+  });
   // Sections no marker shows (an imported sheet with more parts than the
   // song) are still there to edit.
   const shown = new Set(parts.map((part) => part.section));
@@ -206,9 +191,11 @@ function withoutTimes(link: ChartLink): ChartLink {
 
 /**
  * Writes one part. Only its section changes; a part without lyrics yet gets a
- * new section at the end, linked to its markers. Recorded line times stay
- * while the number of lines does; otherwise this part's go (`clearedTimes`).
- * An emptied part loses its section.
+ * new section at the end, linked to its marker. A section other markers also
+ * show is not touched: the part gets a section of its own with the new lyrics
+ * (the others keep theirs). Recorded line times stay while the number of
+ * lines does; otherwise this part's go (`clearedTimes`). An emptied part
+ * loses its section, or only its link when others still show it.
  */
 export function applyPartEdit(
   chart: SongChart | null,
@@ -234,6 +221,22 @@ export function applyPartEdit(
   const parsed = parse(current.text);
   const old = parsed.doc.sections[part.section];
   if (sameLines(old.lines, lines)) return { chart: current, clearedTimes: false };
+  const shared = current.links.some((link) => link.section === part.section && !part.markerIds.includes(link.markerId));
+  if (shared) {
+    const mine = current.links.filter((link) => part.markerIds.includes(link.markerId));
+    const others = current.links.filter((link) => !part.markerIds.includes(link.markerId));
+    if (lines.length === 0) return { chart: { ...current, links: others }, clearedTimes: false };
+    const text = appendSection(current.text, part.label, lines);
+    const section = parseChordPro(text).sections.length - 1;
+    let clearedTimes = false;
+    const relinked = mine.map((link) => {
+      const moved = { ...link, section };
+      if (old.lines.length === lines.length || !(link.lineBeats?.length)) return moved;
+      clearedTimes = true;
+      return withoutTimes(moved);
+    });
+    return { chart: { ...current, text, links: [...others, ...relinked] }, clearedTimes };
+  }
   if (lines.length === 0) {
     const dropped = dropSection(current, part.section);
     const cleared = current.links.some((link) => link.section === part.section && (link.lineBeats?.length ?? 0) > 0);
@@ -256,59 +259,6 @@ export function applyPartEdit(
     });
   }
   return { chart: { ...current, text, links }, clearedTimes };
-}
-
-/**
- * "This time the lyrics change": one appearance of a repeated part gets its
- * own section, a copy of the shared one, linked only to that marker.
- */
-export function splitPart(
-  chart: SongChart | null,
-  markers: readonly SectionMarkerSummary[],
-  partKey: string,
-  markerId: string,
-): SongChart | null {
-  const part = chartParts(chart, markers).find((candidate) => candidate.key === partKey);
-  if (!chart || !part || part.section === null || part.markerIds.length < 2 || !part.markerIds.includes(markerId)) {
-    return chart;
-  }
-  const doc = parseChordPro(chart.text);
-  const marker = markers.find((candidate) => candidate.id === markerId);
-  const text = appendSection(chart.text, marker?.name ?? part.label, doc.sections[part.section].lines);
-  const section = parseChordPro(text).sections.length - 1;
-  const links = chart.links.some((link) => link.markerId === markerId)
-    ? chart.links.map((link) => (link.markerId === markerId ? { ...link, section } : link))
-    : [...chart.links, { markerId, section }];
-  return { ...chart, text, links };
-}
-
-/** Undoes `splitPart`: the part goes back to the lyrics of the other part with
- * its name, and its own section goes if nothing else shows it. */
-export function joinPart(
-  chart: SongChart | null,
-  markers: readonly SectionMarkerSummary[],
-  partKey: string,
-): SongChart | null {
-  if (!chart) return chart;
-  const parts = chartParts(chart, markers);
-  const part = parts.find((candidate) => candidate.key === partKey);
-  if (!part || part.markerIds.length === 0) return chart;
-  const nameOf = (candidate: ChartPart) => {
-    const marker = markers.find((entry) => entry.id === candidate.markerIds[0]);
-    return marker ? markerName(marker).key : null;
-  };
-  const name = nameOf(part);
-  const sibling = parts.find((candidate) => candidate !== part && candidate.markerIds.length > 0 && nameOf(candidate) === name);
-  if (!sibling || sibling.section === null) return chart;
-  const links = chart.links.map((link) =>
-    part.markerIds.includes(link.markerId) ? { ...link, section: sibling.section as number } : link,
-  );
-  for (const markerId of part.markerIds) {
-    if (!links.some((link) => link.markerId === markerId)) links.push({ markerId, section: sibling.section });
-  }
-  const joined = { ...chart, links };
-  if (part.section === null || links.some((link) => link.section === part.section)) return joined;
-  return dropSection(joined, part.section);
 }
 
 /** Names for the quick buttons of a song without markers, in the sheet's
@@ -362,7 +312,7 @@ export function addPart(
 export type ChartPartEntry = {
   /** Stable selection key: the marker's id (or the part's key without markers). */
   key: string;
-  /** The part it edits (`applyPartEdit`, `splitPart`, `joinPart`). */
+  /** The part it edits (`applyPartEdit`). */
   partKey: string;
   markerId: string | null;
   label: string;

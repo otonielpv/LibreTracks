@@ -34,13 +34,11 @@ export function SimpleLyricsEditor({ chart, markers, onChange, onSave, onImportF
   const language: "es" | "en" = i18n?.language?.startsWith("en") ? "en" : "es";
   const parts = useMemo(() => chartParts(chart, markers), [chart, markers]);
   const hasMarkers = useMemo(() => markers.some((marker) => !marker.id.includes("~")), [markers]);
-  // One row per marker, in song order; rows with the same name share a part.
+  // One row per marker, in song order, each with its own lyrics.
   const entries = useMemo(() => chartPartEntries(parts, markers), [parts, markers]);
   const [selectedKey, setSelectedKey] = useState<string | null>(() => entries[0]?.key ?? null);
   const entry = entries.find((candidate) => candidate.key === selectedKey) ?? null;
   const selected = entry ? (parts.find((part) => part.key === entry.partKey) ?? null) : null;
-  /** The other rows that show the same lyrics. */
-  const sharing = entry ? entries.filter((candidate) => candidate.partKey === entry.partKey && candidate.key !== entry.key) : [];
   const [draft, setDraft] = useState<{ key: string | null; text: string }>(() => ({ key: selectedKey, text: selected?.plain ?? "" }));
   const [clearedTimes, setClearedTimes] = useState(false);
   const [pasteOpen, setPasteOpen] = useState(false);
@@ -131,14 +129,6 @@ export function SimpleLyricsEditor({ chart, markers, onChange, onSave, onImportF
         <span className="lt-settings-field-label lt-simple-lyrics-title">
           {entry ? t("simpleLyrics.textFor", { part: entry.label || "…" }) : t("simpleLyrics.choosePart")}
         </span>
-        {sharing.length > 0 ? (
-          // Same name, same lyrics: other lyrics for one time = another
-          // name for its marker (or Advanced).
-          <p className="lt-simple-lyrics-shared">
-            <span className="material-symbols-outlined" aria-hidden="true">link</span>
-            {t("simpleLyrics.sharedWith", { list: sharing.map((other) => `${other.position}. ${other.label}`).join(", ") })}
-          </p>
-        ) : null}
         <div className="lt-chart-editor-modes lt-simple-lyrics-views" role="tablist" aria-label={t("simpleLyrics.viewLabel")}>
           {(["text", "chords"] as const).map((option) => (
             <button key={option} type="button" role="tab" aria-selected={view === option} disabled={!selected} onClick={() => setView(option)}>

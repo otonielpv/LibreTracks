@@ -5,15 +5,20 @@ import { matchChartToMarkers, type MatchConfidence } from "./chartMatch";
 import { addPart, applyPartEdit, type ChartPart } from "./chartParts";
 import { parseChordPro, parseSectionHeader, type ChartDoc, type ChartLine } from "./chordChart";
 import { plainToSectionLines, sectionToPlain } from "./plainChart";
+import { chartKind } from "./sectionVocab";
 
 /**
  * "Paste the whole song": what was pasted, cut into blocks, each one already
- * proposed for a part of the song, for the user to check before applying.
+ * proposed for the sections of the song where it goes, for the user to check
+ * before applying.
  *
- * Blocks are cut at recognised headers ("CORO", "Verso 2:", "[Puente]"); with
- * no header at all, at blank lines (one or more), the way Holyrics reads a
- * song. Each block is read like one part of the simple editor
- * (`plainToSectionLines`): lyrics alone, chords over the lyric, or ChordPro.
+ * Blocks are cut at recognised headers ("CORO", "Verso 2:", "[Puente]",
+ * "////// Puente //////", "Puente x6"); with no header at all, at blank lines
+ * (one or more), the way Holyrics reads a song. Each block is read like one
+ * section of the simple editor (`plainToSectionLines`).
+ *
+ * Every section has its own lyrics, so a block written once in the paste
+ * ("Puente") is COPIED to every section it fits (the six bridges of the song).
  */
 
 export type PastedBlock = {
@@ -28,8 +33,8 @@ export type PastedBlock = {
 
 export type PasteAssignment = {
   block: number;
-  /** The part it goes to, or `null` = a new part. */
-  partKey: string | null;
+  /** The sections (parts) it is copied to, in song order; empty = a new one. */
+  partKeys: string[];
   confidence: MatchConfidence;
 };
 
@@ -38,17 +43,22 @@ function block(label: string | null, lines: ChartLine[]): PastedBlock {
   return { label, kind: header?.kind ?? null, number: header?.number ?? null, lines, plain: sectionToPlain({ lines }) };
 }
 
+/** A header line with repeat marks around it: "////// Puente //////". */
+function headerOf(row: string) {
+  const bare = row.replace(/^[\s/|]+|[\s/|]+$/g, "");
+  return bare ? parseSectionHeader(bare) : null;
+}
+
 export function splitPastedSong(text: string): PastedBlock[] {
   const source = text.replace(/\r\n?/g, "\n");
-  const chordPro = looksLikeChordPro(source);
-  if (chordPro) {
+  if (looksLikeChordPro(source)) {
     // ChordPro sections are already the blocks.
     return parseChordPro(source)
       .sections.filter((section) => section.lines.length > 0)
       .map((section) => block(section.label || null, section.lines));
   }
   const rows = splitSectionHeaderLines(source, false).split("\n");
-  const hasHeaders = rows.some((row) => parseSectionHeader(row) !== null);
+  const hasHeaders = rows.some((row) => headerOf(row) !== null);
   const blocks: PastedBlock[] = [];
   let label: string | null = null;
   let chunk: string[] = [];
@@ -58,7 +68,7 @@ export function splitPastedSong(text: string): PastedBlock[] {
     chunk = [];
   };
   for (const row of rows) {
-    const header = hasHeaders ? parseSectionHeader(row) : null;
+    const header = hasHeaders ? headerOf(row) : null;
     if (header) {
       flush();
       label = header.label;
@@ -92,6 +102,13 @@ function similar(left: readonly string[], right: readonly string[]): boolean {
   return shared / new Set([...a, ...b]).size >= 0.7;
 }
 
+/** Same kind and number = the same name ("Puente" six times). */
+function nameKey(part: ChartPart): string {
+  const header = parseSectionHeader(part.label);
+  const kind = part.kind ?? (header?.kind ? chartKind(header.kind) : null);
+  return kind ? `${kind}:${header?.number ?? ""}` : `name:${part.label.trim().toLowerCase()}`;
+}
+
 export function proposePasteAssignment(
   blocks: readonly PastedBlock[],
   parts: readonly ChartPart[],
@@ -101,31 +118,26 @@ export function proposePasteAssignment(
   const songParts = parts.filter((part) => part.markerIds.length > 0);
 
   if (withHeaders && songParts.length > 0) {
-    // The one matcher, with the pasted headers as the source's sequence.
+    // The one matcher, with the pasted headers as the source's sequence: each
+    // marker gets a block, and a block goes to every marker that got it.
     const doc: ChartDoc = {
       title: null,
       artist: null,
       key: null,
       sections: blocks.map((entry) => ({ label: entry.label ?? "", kind: entry.kind, number: entry.number, lines: entry.lines })),
     };
-    const match = matchChartToMarkers(doc, markers, {
-      sourceSequence: blocks.map((entry) => entry.label ?? ""),
-    });
+    const match = matchChartToMarkers(doc, markers, { sourceSequence: blocks.map((entry) => entry.label ?? "") });
     const byMarker = new Map(match.items.map((item) => [item.markerId, item]));
-    const taken = new Map<number, { partKey: string; confidence: MatchConfidence }>();
-    for (const part of songParts) {
-      const item = part.markerIds.map((id) => byMarker.get(id)).find((candidate) => candidate && candidate.section !== null);
-      if (!item || item.section === null || taken.has(item.section)) continue;
-      taken.set(item.section, { partKey: part.key, confidence: item.confidence });
-    }
     return blocks.map((_, index) => {
-      const found = taken.get(index);
-      return found ? { block: index, ...found } : { block: index, partKey: null, confidence: "low" };
+      const fits = songParts.filter((part) => byMarker.get(part.markerIds[0])?.section === index);
+      const confidences = fits.map((part) => byMarker.get(part.markerIds[0])?.confidence ?? "low");
+      const confidence: MatchConfidence = confidences.includes("low") ? "low" : confidences.includes("medium") ? "medium" : fits.length ? "high" : "low";
+      return { block: index, partKeys: fits.map((part) => part.key), confidence };
     });
   }
 
   if (withHeaders || songParts.length === 0) {
-    // A song without markers: same name, same part; the rest are new parts.
+    // A song without markers: same name, same section; the rest are new.
     const used = new Set<string>();
     return blocks.map((entry, index) => {
       const part = parts.find((candidate) => {
@@ -134,30 +146,39 @@ export function proposePasteAssignment(
         return header?.kind === entry.kind && (header?.number ?? null) === entry.number;
       });
       if (part) used.add(part.key);
-      return { block: index, partKey: part?.key ?? null, confidence: part ? "high" : "low" };
+      return { block: index, partKeys: part ? [part.key] : [], confidence: part ? "high" : "low" };
     });
   }
 
-  // No headers: the block that comes back is the chorus, the rest go in order
-  // to the parts that are sung.
+  // No headers: the block that comes back is the chorus (every chorus of the
+  // song); the others go in order to the sung names that follow, each one to
+  // every section with that name.
   const blockWords = blocks.map((entry) => words(entry.lines));
   const repeated = blocks.map((_, index) => blockWords.some((other, at) => at !== index && similar(blockWords[index], other)));
-  const chorus = songParts.find((part) => part.kind === "chorus");
-  const others = songParts.filter((part) => part.sung && part !== chorus);
+  const choruses = songParts.filter((part) => part.kind === "chorus");
+  const names: string[] = [];
+  for (const part of songParts) {
+    if (!part.sung || part.kind === "chorus") continue;
+    const key = nameKey(part);
+    if (!names.includes(key)) names.push(key);
+  }
   let next = 0;
   return blocks.map((_, index) => {
-    if (repeated[index] && chorus) return { block: index, partKey: chorus.key, confidence: "medium" };
-    const part = others[next];
-    if (!part) return { block: index, partKey: null, confidence: "low" };
+    // Every time it is pasted it points at the choruses; the first one wins.
+    if (repeated[index] && choruses.length > 0) {
+      return { block: index, partKeys: choruses.map((part) => part.key), confidence: "medium" };
+    }
+    const name = names[next];
+    if (!name) return { block: index, partKeys: [], confidence: "low" };
     next += 1;
-    return { block: index, partKey: part.key, confidence: "medium" };
+    return { block: index, partKeys: songParts.filter((part) => part.sung && nameKey(part) === name).map((part) => part.key), confidence: "medium" };
   });
 }
 
 /**
- * Writes the reviewed paste: each block into its part (`applyPartEdit`), the
- * first block wins when several go to the same part, and blocks without a
- * part become new parts at the end.
+ * Writes the reviewed paste: each block copied into its sections
+ * (`applyPartEdit`, the first block wins when several go to the same one),
+ * and blocks without a section become new ones at the end.
  */
 export function applyPaste(
   chart: SongChart | null,
@@ -172,17 +193,19 @@ export function applyPaste(
   for (const assignment of assignments) {
     const entry = blocks[assignment.block];
     if (!entry || entry.lines.length === 0) continue;
-    let key = assignment.partKey;
-    if (key === null) {
+    let keys = assignment.partKeys;
+    if (keys.length === 0) {
       const added = addPart(current, entry.kind ?? "verse", fallbackLanguage, entry.label ?? undefined);
       current = added.chart;
-      key = added.key;
+      keys = [added.key];
     }
-    if (done.has(key)) continue;
-    done.add(key);
-    const result = applyPartEdit(current, markers, key, entry.plain);
-    current = result.chart;
-    clearedTimes ||= result.clearedTimes;
+    for (const key of keys) {
+      if (done.has(key)) continue;
+      done.add(key);
+      const result = applyPartEdit(current, markers, key, entry.plain);
+      current = result.chart;
+      clearedTimes ||= result.clearedTimes;
+    }
   }
   return { chart: current, clearedTimes };
 }

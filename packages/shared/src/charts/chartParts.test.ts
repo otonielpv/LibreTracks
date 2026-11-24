@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { MarkerKind, SectionMarkerSummary, SongChart } from "../models";
 
 import { analyzeSongSheet, textToSourceLines } from "./chartImport";
-import { addPart, applyPartEdit, chartPartEntries, chartParts, joinPart, splitPart } from "./chartParts";
+import { addPart, applyPartEdit, chartPartEntries, chartParts } from "./chartParts";
 import { parseChordPro, parseChordProWithPlaces, serializeChordPro } from "./chordChart";
 import { chartTextHash } from "./importedChart";
 import { canonicalLabel } from "./sectionVocab";
@@ -64,6 +64,8 @@ const PC_CHART: SongChart = {
   source: { provider: "planningCenter", songId: "1", arrangementId: "2", importedHash: chartTextHash(PC_TEXT) },
 };
 
+const CHORUS_PLAIN = ["C          G", "Santo eres tú", "Am       D", "Digno de honor"].join("\n");
+
 /** Rows of every section except `skip`, raw, as they are in the text. */
 function otherRows(text: string, skip: number): string[][] {
   const { doc, sectionStarts } = parseChordProWithPlaces(text);
@@ -74,54 +76,44 @@ function otherRows(text: string, skip: number): string[][] {
 }
 
 describe("chartParts", () => {
-  it("C1: one part per name, in order, with how many times it sounds", () => {
+  it("C1: one part per marker, in song order, each on its own", () => {
     const parts = chartParts(null, SONG_MARKERS);
-    expect(parts.map((part) => [part.label, part.times])).toEqual([
-      ["Intro", 1],
-      ["Verso 1", 1],
-      ["Coro", 3],
-      ["Verso 2", 1],
-      ["Puente", 1],
-    ]);
-    expect(parts[2].markerIds).toEqual(["m3", "m5", "m7"]);
+    expect(parts.map((part) => part.label)).toEqual(["Intro", "Verso 1", "Coro", "Verso 2", "Coro", "Puente", "Coro"]);
+    expect(parts.every((part) => part.markerIds.length === 1 && part.times === 1)).toBe(true);
     expect(parts.find((part) => part.label === "Intro")?.sung).toBe(false);
     expect(parts.every((part) => part.section === null && part.plain === "")).toBe(true);
   });
 
   it("C1: repeats from arrangements and cues are not parts", () => {
     const parts = chartParts(null, [...SONG_MARKERS, marker("m3~1", "Coro", 70, "chorus"), marker("c1", "Aviso", 5, "get_ready")]);
-    expect(parts).toHaveLength(5);
-    expect(parts[2].times).toBe(3);
+    expect(parts).toHaveLength(7);
   });
 
-  it("C2: two choruses saved with different sections stay two parts; saving untouched is identical", () => {
-    const text = PC_TEXT + "\n{section: Coro}\n[C]Otra letra del [G]coro\n";
-    const chart: SongChart = { ...PC_CHART, text, links: PC_CHART.links.map((link) => (link.markerId === "m7" ? { ...link, section: 5 } : link)) };
-    const parts = chartParts(chart, SONG_MARKERS);
-    expect(parts.filter((part) => part.label === "Coro").map((part) => part.markerIds)).toEqual([["m3", "m5"], ["m7"]]);
+  it("C2: a sheet linking several markers to one section shows it in each; saving untouched is identical", () => {
+    const parts = chartParts(PC_CHART, SONG_MARKERS);
+    expect(parts.filter((part) => part.label === "Coro").map((part) => part.section)).toEqual([2, 2, 2]);
     for (const part of parts) {
-      expect(applyPartEdit(chart, SONG_MARKERS, part.key, part.plain).chart).toBe(chart);
+      expect(applyPartEdit(PC_CHART, SONG_MARKERS, part.key, part.plain).chart).toBe(PC_CHART);
     }
   });
 
   it("shows the plain text of each part", () => {
-    const chorus = chartParts(PC_CHART, SONG_MARKERS)[2];
-    expect(chorus.plain).toBe("C          G\nSanto eres tú\nAm       D\nDigno de honor");
+    expect(chartParts(PC_CHART, SONG_MARKERS)[2].plain).toBe(CHORUS_PLAIN);
   });
 });
 
 describe("applyPartEdit", () => {
   it("C3: Planning Center sheet, the rest of the text stays byte for byte", () => {
-    const chorus = chartParts(PC_CHART, SONG_MARKERS)[2];
-    const { chart } = applyPartEdit(PC_CHART, SONG_MARKERS, chorus.key, "C          G\nSanto eres tú\nAm       D\nDigno de honor y gloria");
+    const verse = chartParts(PC_CHART, SONG_MARKERS)[1];
+    const { chart } = applyPartEdit(PC_CHART, SONG_MARKERS, verse.key, ["G               D", "Camino por la senda", "Em       C", "Con paso firme y fiel"].join("\n"));
     expect(chart?.text).not.toBe(PC_TEXT);
-    expect(otherRows(chart!.text, 2)).toEqual(otherRows(PC_TEXT, 2));
-    expect(chart!.text.startsWith("{title: Canción de prueba}\n{key: G}\n")).toBe(true);
-    expect(parseChordPro(chart!.text).sections[2].lines[1]).toEqual({
+    expect(otherRows(chart!.text, 1)).toEqual(otherRows(PC_TEXT, 1));
+    expect(chart!.text.startsWith(["{title: Canción de prueba}", "{key: G}", ""].join("\n"))).toBe(true);
+    expect(parseChordPro(chart!.text).sections[1].lines[1]).toEqual({
       kind: "lyrics",
       segments: [
-        { chord: "Am", text: "Digno de " },
-        { chord: "D", text: "honor y gloria" },
+        { chord: "Em", text: "Con paso " },
+        { chord: "C", text: "firme y fiel" },
       ],
     });
   });
@@ -135,35 +127,46 @@ describe("applyPartEdit", () => {
     expect(otherRows(edited!.text, 1)).toEqual(otherRows(text, 1));
   });
 
+  it("editing one of several markers sharing a section gives it its own; the others keep theirs", () => {
+    const { chart } = applyPartEdit(PC_CHART, SONG_MARKERS, "m:m7", "Otra letra al final");
+    expect(chart!.text.startsWith(PC_TEXT)).toBe(true);
+    expect(chartParts(chart, SONG_MARKERS).filter((part) => part.label === "Coro").map((part) => part.plain)).toEqual([
+      CHORUS_PLAIN,
+      CHORUS_PLAIN,
+      "Otra letra al final",
+    ]);
+    // Emptying one that still shares only unlinks it.
+    const emptied = applyPartEdit(PC_CHART, SONG_MARKERS, "m:m5", "");
+    expect(emptied.chart!.text).toBe(PC_TEXT);
+    expect(emptied.chart!.links.some((link) => link.markerId === "m5")).toBe(false);
+  });
+
   it("C4: same number of lines keeps the times; another number clears only this part's", () => {
-    const chorus = chartParts(PC_CHART, SONG_MARKERS)[2];
-    const same = applyPartEdit(PC_CHART, SONG_MARKERS, chorus.key, "Santo eres tú\nDigno eres tú");
+    const same = applyPartEdit(PC_CHART, SONG_MARKERS, "m:m2", ["Camino", "Paso firme"].join("\n"));
     expect(same.clearedTimes).toBe(false);
     expect(same.chart?.links).toEqual(PC_CHART.links);
 
-    const longer = applyPartEdit(PC_CHART, SONG_MARKERS, chorus.key, "Santo eres tú\nDigno eres tú\nSiempre");
+    const longer = applyPartEdit(PC_CHART, SONG_MARKERS, "m:m2", ["Camino", "Paso firme", "Siempre"].join("\n"));
     expect(longer.clearedTimes).toBe(true);
-    expect(longer.chart?.links.find((link) => link.markerId === "m3")?.lineBeats).toBeUndefined();
-    expect(longer.chart?.links.find((link) => link.markerId === "m2")?.lineBeats).toEqual([0, 8]);
+    expect(longer.chart?.links.find((link) => link.markerId === "m2")?.lineBeats).toBeUndefined();
+    expect(longer.chart?.links.find((link) => link.markerId === "m3")?.lineBeats).toEqual([0, 4]);
+
+    const sharedLonger = applyPartEdit(PC_CHART, SONG_MARKERS, "m:m3", ["Santo", "Digno", "Siempre"].join("\n"));
+    expect(sharedLonger.clearedTimes).toBe(true);
+    expect(sharedLonger.chart?.links.find((link) => link.markerId === "m3")?.lineBeats).toBeUndefined();
   });
 
-  it("C5: a song without a chart gets its section and the links of its markers", () => {
-    const chorus = chartParts(null, SONG_MARKERS)[2];
-    const { chart } = applyPartEdit(null, SONG_MARKERS, chorus.key, "C          G\nSanto eres tú");
-    expect(chart?.text).toBe("{section: Coro}\n[C]Santo eres [G]tú\n");
-    expect(chart?.links).toEqual([
-      { markerId: "m3", section: 0 },
-      { markerId: "m5", section: 0 },
-      { markerId: "m7", section: 0 },
-    ]);
+  it("C5: a song without a chart gets the section and the link of its marker", () => {
+    const { chart } = applyPartEdit(null, SONG_MARKERS, "m:m3", ["C          G", "Santo eres tú"].join("\n"));
+    expect(chart?.text).toBe(["{section: Coro}", "[C]Santo eres [G]tú", ""].join("\n"));
+    expect(chart?.links).toEqual([{ markerId: "m3", section: 0 }]);
     const after = chartParts(chart!, SONG_MARKERS);
     expect(after[2].section).toBe(0);
-    expect(after[1].section).toBeNull();
+    expect(after[4].section).toBeNull();
   });
 
   it("C8: emptying a part does not move the other parts' links", () => {
-    const verse1 = chartParts(PC_CHART, SONG_MARKERS)[1];
-    const { chart } = applyPartEdit(PC_CHART, SONG_MARKERS, verse1.key, "   \n");
+    const { chart } = applyPartEdit(PC_CHART, SONG_MARKERS, "m:m2", "   ");
     const doc = parseChordPro(chart!.text);
     expect(doc.sections.map((section) => section.label)).toEqual(["Intro", "Coro", "Verso 2", "Puente"]);
     const label = (markerId: string) => {
@@ -175,23 +178,9 @@ describe("applyPartEdit", () => {
   });
 
   it("C9: the source is not touched (edited here shows by the text hash)", () => {
-    const chorus = chartParts(PC_CHART, SONG_MARKERS)[2];
-    const { chart } = applyPartEdit(PC_CHART, SONG_MARKERS, chorus.key, "Otra letra");
+    const { chart } = applyPartEdit(PC_CHART, SONG_MARKERS, "m:m2", "Otra letra");
     expect(chart?.source).toBe(PC_CHART.source);
     expect(chartTextHash(chart!.text)).not.toBe(PC_CHART.source?.importedHash);
-  });
-});
-
-describe("splitPart / joinPart", () => {
-  it("C6: splitting one appearance and joining it back is the same chart", () => {
-    const chorus = chartParts(PC_CHART, SONG_MARKERS)[2];
-    const split = splitPart(PC_CHART, SONG_MARKERS, chorus.key, "m7");
-    const parts = chartParts(split, SONG_MARKERS);
-    const choruses = parts.filter((part) => part.label === "Coro");
-    expect(choruses.map((part) => part.markerIds)).toEqual([["m3", "m5"], ["m7"]]);
-    expect(choruses[1].plain).toBe(choruses[0].plain);
-    const joined = joinPart(split, SONG_MARKERS, choruses[1].key);
-    expect(joined).toEqual(PC_CHART);
   });
 });
 
@@ -206,16 +195,16 @@ describe("addPart", () => {
     }
     expect(chartParts(chart, []).map((part) => part.label)).toEqual(["Verso", "Coro", "Verso 2"]);
     expect(keys).toEqual(["s:0", "s:1", "s:2"]);
-    const english = addPart({ text: "{section: Chorus}\nHoly\n", links: [] }, "verse", "es");
+    const english = addPart({ text: ["{section: Chorus}", "Holy", ""].join("\n"), links: [] }, "verse", "es");
     expect(chartParts(english.chart, []).map((part) => part.label)).toEqual(["Chorus", "Verse"]);
   });
 
   it("C7: without markers the sheet's order rules and editing writes its section", () => {
-    const chart: SongChart = { text: "{section: Coro}\nSanto\n\n{section: Verso}\nCamino\n", links: [] };
+    const chart: SongChart = { text: ["{section: Coro}", "Santo", "", "{section: Verso}", "Camino", ""].join("\n"), links: [] };
     const parts = chartParts(chart, []);
     expect(parts.map((part) => part.label)).toEqual(["Coro", "Verso"]);
     const { chart: edited } = applyPartEdit(chart, [], parts[1].key, "Camino por la senda");
-    expect(edited?.text).toBe("{section: Coro}\nSanto\n\n{section: Verso}\nCamino por la senda\n");
+    expect(edited?.text).toBe(["{section: Coro}", "Santo", "", "{section: Verso}", "Camino por la senda", ""].join("\n"));
   });
 
   it("the quick names read back to their kind", () => {
@@ -227,30 +216,21 @@ describe("addPart", () => {
 });
 
 describe("chartPartEntries", () => {
-  it("one row per marker, in song order, sharing the part of its name", () => {
+  it("one row per marker, in song order, each its own part", () => {
     const entries = chartPartEntries(chartParts(PC_CHART, SONG_MARKERS), SONG_MARKERS);
-    expect(entries.map((entry) => [entry.position, entry.label, entry.appearance, entry.times])).toEqual([
-      [1, "Intro", 1, 1],
-      [2, "Verso 1", 1, 1],
-      [3, "Coro", 1, 3],
-      [4, "Verso 2", 1, 1],
-      [5, "Coro", 2, 3],
-      [6, "Puente", 1, 1],
-      [7, "Coro", 3, 3],
+    expect(entries.map((entry) => [entry.position, entry.label, entry.partKey])).toEqual([
+      [1, "Intro", "m:m1"],
+      [2, "Verso 1", "m:m2"],
+      [3, "Coro", "m:m3"],
+      [4, "Verso 2", "m:m4"],
+      [5, "Coro", "m:m5"],
+      [6, "Puente", "m:m6"],
+      [7, "Coro", "m:m7"],
     ]);
-    expect(new Set(entries.filter((entry) => entry.label === "Coro").map((entry) => entry.partKey)).size).toBe(1);
-  });
-
-  it("a split appearance edits its own part", () => {
-    const split = splitPart(PC_CHART, SONG_MARKERS, "m:m3", "m7");
-    const entries = chartPartEntries(chartParts(split, SONG_MARKERS), SONG_MARKERS);
-    const last = entries.find((entry) => entry.key === "m7");
-    expect(last?.partKey).toBe("m:m7");
-    expect(last?.times).toBe(1);
   });
 
   it("without markers, one row per part", () => {
-    const chart: SongChart = { text: "{section: Coro}\nSanto\n\n{section: Verso}\nCamino\n", links: [] };
+    const chart: SongChart = { text: ["{section: Coro}", "Santo", "", "{section: Verso}", "Camino", ""].join("\n"), links: [] };
     expect(chartPartEntries(chartParts(chart, []), []).map((entry) => [entry.key, entry.label])).toEqual([
       ["s:0", "Coro"],
       ["s:1", "Verso"],
