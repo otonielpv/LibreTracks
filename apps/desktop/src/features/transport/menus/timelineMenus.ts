@@ -241,6 +241,8 @@ export type TimelineMenuDeps = {
   /** Color por grupo (guía, batería, guitarras…); `[]` = todas. Devuelve si
    * alguna pista cambió. */
   handleColorTracksByGroup: (trackIds: string[]) => Promise<boolean>;
+  /** Reordena por grupo; devuelve si el orden cambió. */
+  handleSortTracksByGroup: () => Promise<boolean>;
   audioRoutingOptions: Array<{ value: string; label: string }>;
 };
 
@@ -1292,6 +1294,19 @@ export function createTimelineMenus(getDeps: () => TimelineMenuDeps) {
 
     if ((d.songRef.current?.tracks.length ?? 0) > 0) {
       actions.push(colorByGroupAction(t("transport.menu.colorAllByGroup"), []));
+      actions.push({
+        label: t("transport.menu.sortByGroup"),
+        onSelect: async () => {
+          const changed = await d.handleSortTracksByGroup();
+          d.setStatus(
+            t(
+              changed
+                ? "transport.status.tracksSortedByGroup"
+                : "transport.status.tracksAlreadySortedByGroup",
+            ),
+          );
+        },
+      });
     }
 
     return actions;

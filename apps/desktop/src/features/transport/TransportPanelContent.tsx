@@ -96,6 +96,7 @@ import {
   stopTransport,
   updateClipColor,
   colorTracksByGroup,
+  sortTracksByGroup,
   updateAudioSettings,
   updateSectionMarker,
   updateLiveRegionMasterGain,
@@ -2106,6 +2107,7 @@ export function TransportPanelContent() {
   // See ./colors/colorHandlers.
   const {
     handleColorTracksByGroup,
+    handleSortTracksByGroup,
     handleSetTrackColor,
     handleSetTrackColors,
     handleSetClipColors,
@@ -2121,6 +2123,7 @@ export function TransportPanelContent() {
         updateTrackColor,
         updateClipColor,
         colorTracksByGroup,
+        sortTracksByGroup,
         getProjectRevision: () => songRef.current?.projectRevision ?? null,
       }),
     [runAction, setSong, applyPlaybackSnapshot, setStatus],
@@ -4866,6 +4869,7 @@ export function TransportPanelContent() {
       handleSetTrackColor,
       handleSetTrackColors,
       handleColorTracksByGroup,
+      handleSortTracksByGroup,
       handleSetClipColors,
       audioRoutingOptions,
     };

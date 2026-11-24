@@ -77,7 +77,9 @@ pub(crate) const TRACK_COLOR_GROUPS: [TrackColorGroup; 12] = [
         color: "#4FB8E6", // Celeste
         aliases: &[
             "perc", "percussion", "percusion", "pandero", "pandereta", "tambourine", "shaker",
-            "conga", "bongo", "cajon", "loop", "loops", "drum loop", "synth loop",
+            "conga", "bongo", "cajon", "woodblock", "wood block", "cowbell", "clap", "claps",
+            "triangle", "triangulo", "timbal", "timbales", "guiro", "maracas", "loop", "loops",
+            "drum loop", "synth loop",
         ],
     },
     TrackColorGroup {
@@ -169,12 +171,7 @@ pub(crate) const TRACK_COLOR_GROUPS: [TrackColorGroup; 12] = [
 
 /// El grupo al que pertenece una pista por su nombre, si se reconoce.
 pub(crate) fn color_group_for_name(name: &str) -> Option<&'static TrackColorGroup> {
-    let targets: Vec<&[&str]> = TRACK_COLOR_GROUPS.iter().map(|group| group.aliases).collect();
-    match_stems(&[name], None, &targets)
-        .into_iter()
-        .next()
-        .flatten()
-        .map(|index| &TRACK_COLOR_GROUPS[index])
+    TRACK_COLOR_GROUPS.get(group_rank(name))
 }
 
 /// Paleta de colores automáticos.
@@ -205,6 +202,85 @@ pub(crate) const AUTO_TRACK_COLORS: [&str; 14] = [
     "#C96FD6", // Magenta
     "#DF6FA8", // Rosa
 ];
+
+/// Posición del grupo de una pista en [`TRACK_COLOR_GROUPS`]; lo que no se
+/// reconoce va detrás de todo.
+pub(crate) fn group_rank(name: &str) -> usize {
+    let targets: Vec<&[&str]> = TRACK_COLOR_GROUPS.iter().map(|group| group.aliases).collect();
+    match_stems(&[name], None, &targets)
+        .into_iter()
+        .next()
+        .flatten()
+        .unwrap_or(TRACK_COLOR_GROUPS.len())
+}
+
+/// Ordena por grupo un tramo de pistas hermanas sin hijas (las de un lote
+/// recién soltado). Estable: dentro del grupo, el orden en que llegaron.
+pub(crate) fn sort_track_run_by_group(tracks: &mut [Track]) {
+    tracks.sort_by_cached_key(|track| group_rank(&track.name));
+}
+
+/// Las pistas de la sesión ordenadas por grupo, nivel a nivel del árbol.
+///
+/// Cada carpeta se mueve con sus hijas, y dentro de cada nivel:
+/// - las pistas de una misma canción (`song_region_id`) siguen juntas y las
+///   canciones conservan su orden, para no mezclar el click de una con el de
+///   otra;
+/// - dentro de cada canción, por grupo; lo no reconocido va al final;
+/// - a igualdad, el orden de antes (estable).
+pub(crate) fn sort_tracks_by_group(tracks: &[Track]) -> Vec<Track> {
+    let ids: std::collections::HashSet<&str> = tracks.iter().map(|t| t.id.as_str()).collect();
+    let mut sorted = Vec::with_capacity(tracks.len());
+    push_children_sorted(tracks, None, &ids, &mut sorted);
+    // Un ciclo de carpetas (no debería existir) no puede tragarse pistas.
+    if sorted.len() < tracks.len() {
+        let placed: std::collections::HashSet<String> =
+            sorted.iter().map(|t| t.id.clone()).collect();
+        sorted.extend(tracks.iter().filter(|t| !placed.contains(&t.id)).cloned());
+    }
+    sorted
+}
+
+/// La carpeta de una pista; una hija de una carpeta que no existe cuelga de la
+/// raíz, para que nunca se pierda al ordenar.
+fn effective_parent<'a>(
+    track: &'a Track,
+    ids: &std::collections::HashSet<&str>,
+) -> Option<&'a str> {
+    track
+        .parent_track_id
+        .as_deref()
+        .filter(|id| ids.contains(id) && *id != track.id)
+}
+
+fn push_children_sorted(
+    tracks: &[Track],
+    parent: Option<&str>,
+    ids: &std::collections::HashSet<&str>,
+    sorted: &mut Vec<Track>,
+) {
+    let mut children: Vec<&Track> = tracks
+        .iter()
+        .filter(|t| effective_parent(t, ids) == parent)
+        .collect();
+    let mut songs: Vec<Option<&str>> = Vec::new();
+    for child in &children {
+        if !songs.contains(&child.song_region_id.as_deref()) {
+            songs.push(child.song_region_id.as_deref());
+        }
+    }
+    children.sort_by_cached_key(|track| {
+        let song = songs
+            .iter()
+            .position(|song| *song == track.song_region_id.as_deref())
+            .unwrap_or(0);
+        (song, group_rank(&track.name))
+    });
+    for child in children {
+        sorted.push(child.clone());
+        push_children_sorted(tracks, Some(child.id.as_str()), ids, sorted);
+    }
+}
 
 /// Color que le toca a la pista coloreable número `index` (contando desde 0).
 ///
@@ -457,5 +533,82 @@ mod tests {
                 group.color
             );
         }
+    }
+
+    fn names(tracks: &[Track]) -> Vec<&str> {
+        tracks.iter().map(|t| t.name.as_str()).collect()
+    }
+
+    fn named(id: &str, name: &str, parent: Option<&str>, song: Option<&str>) -> Track {
+        let mut t = track(id, if id.starts_with("dir") { TrackKind::Folder } else { TrackKind::Audio });
+        t.name = name.into();
+        t.parent_track_id = parent.map(str::to_string);
+        t.song_region_id = song.map(str::to_string);
+        t
+    }
+
+    #[test]
+    fn a_dropped_batch_is_sorted_by_group_keeping_arrival_order_inside_each() {
+        // El orden alfabético de los ficheros de «Al Estar Ante Ti».
+        let mut tracks: Vec<Track> = [
+            "Bajo 3", "Click 12", "Drums 6", "Guistar Distortion 10", "Guitar Electric 7",
+            "Organo 4", "Over Guitar 9", "Pandero 1", "Piano 2", "Voz Guia 11", "Warm Pad 5",
+            "Woodblock 8", "Coalo",
+        ]
+        .iter()
+        .enumerate()
+        .map(|(i, name)| named(&format!("t{i}"), name, None, None))
+        .collect();
+        sort_track_run_by_group(&mut tracks);
+        assert_eq!(
+            names(&tracks),
+            [
+                "Click 12", "Voz Guia 11", "Drums 6", "Pandero 1", "Woodblock 8", "Bajo 3",
+                "Guistar Distortion 10", "Guitar Electric 7", "Over Guitar 9", "Warm Pad 5",
+                "Organo 4", "Piano 2", "Coalo",
+            ]
+        );
+    }
+
+    #[test]
+    fn sorting_the_session_keeps_folders_whole_and_songs_apart() {
+        let tracks = vec![
+            named("a_eg", "EG 1", None, Some("song_a")),
+            named("a_click", "Click", None, Some("song_a")),
+            named("b_bass", "Bass", None, Some("song_b")),
+            named("a_ag", "AG", None, Some("song_a")),
+            named("b_click", "Click", None, Some("song_b")),
+            named("dir_keys", "Teclados", None, None),
+            named("k_pad", "Pad", Some("dir_keys"), None),
+            named("k_piano", "Piano", Some("dir_keys"), None),
+            named("k_click", "Click alt", Some("dir_keys"), None),
+            named("x", "Coalo", None, None),
+            named("dir_drums", "Batería", None, None),
+        ];
+        let sorted = sort_tracks_by_group(&tracks);
+        assert_eq!(
+            sorted.iter().map(|t| t.id.as_str()).collect::<Vec<_>>(),
+            [
+                // Canción A junta y en su sitio, ordenada por grupo.
+                "a_click", "a_eg", "a_ag",
+                // Luego la B (la eléctrica de A no se va con la de B).
+                "b_click", "b_bass",
+                // Las compartidas: la carpeta de batería antes que la de
+                // teclados, que se lleva a sus hijas ordenadas.
+                "dir_drums", "dir_keys", "k_click", "k_pad", "k_piano",
+                // Lo que no se reconoce, al final.
+                "x",
+            ]
+        );
+    }
+
+    #[test]
+    fn sorting_never_loses_a_track_with_a_missing_parent() {
+        let tracks = vec![
+            named("a", "Piano", Some("gone"), None),
+            named("b", "Click", None, None),
+        ];
+        let sorted = sort_tracks_by_group(&tracks);
+        assert_eq!(names(&sorted), ["Click", "Piano"]);
     }
 }

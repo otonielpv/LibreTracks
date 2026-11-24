@@ -14,7 +14,10 @@ use crate::models::TransportSnapshot;
 use super::song_templates::{
     organise_stem_drop, StemPlacement, TemplateDropSummary, TrackIdAllocator,
 };
-use super::track_colors::{auto_color_for_new_track, color_group_for_name};
+use super::track_colors::{
+    auto_color_for_new_track, color_group_for_name, group_rank, sort_track_run_by_group,
+    sort_tracks_by_group,
+};
 use super::{
     append_clip_to_song, apply_clip_moves_with_region_reshape, delete_track_and_repair_hierarchy,
     ensure_region_covers_clip, file_stem_for_auto_track, insert_track,
@@ -606,6 +609,7 @@ impl DesktopSession {
                 .collect();
             return self.place_organised_drop(song, &song_dir, &drops, &names, placements, true, audio);
         }
+        let first_new_track = song.tracks.len();
         for (offset, request) in requests.iter().enumerate() {
             let source_start_seconds =
                 source_seconds_at_view(&song, request.timeline_start_seconds);
@@ -654,6 +658,8 @@ impl DesktopSession {
             )?;
         }
 
+        // El lote entra ordenado por grupo: guía con click, guitarras juntas…
+        sort_track_run_by_group(&mut song.tracks[first_new_track..]);
         refresh_song_duration(&mut song);
         self.persist_song_update(song, audio, AudioChangeImpact::StructureRebuild, true)?;
 
@@ -706,6 +712,7 @@ impl DesktopSession {
                 .collect();
             return self.place_organised_drop(song, &song_dir, &drops, &names, placements, false, audio);
         }
+        let first_new_track = song.tracks.len();
         for (offset, request) in requests.iter().enumerate() {
             let trimmed_name = request.track_name.trim();
             // view-time -> source-time, same conversion create_clips_batch does
@@ -755,6 +762,8 @@ impl DesktopSession {
             )?;
         }
 
+        // El lote entra ordenado por grupo: guía con click, guitarras juntas…
+        sort_track_run_by_group(&mut song.tracks[first_new_track..]);
         refresh_song_duration(&mut song);
         self.persist_song_update(song, audio, AudioChangeImpact::StructureRebuild, true)?;
 
@@ -780,7 +789,14 @@ impl DesktopSession {
         let locale = ui_locale(audio);
         let auto_color = auto_color_enabled(audio);
         let mut ids = TrackIdAllocator::new(&song);
-        for (index, placement) in placements.iter().enumerate() {
+        // Por grupo, no en el orden de los ficheros: las pistas nuevas de cada
+        // carpeta (o de la raíz) quedan con la guía junto al click, las
+        // guitarras juntas… El orden estable respeta el de llegada dentro de
+        // cada grupo.
+        let mut order: Vec<usize> = (0..placements.len()).collect();
+        order.sort_by_cached_key(|&index| group_rank(&names[index]));
+        for index in order {
+            let placement = &placements[index];
             let track_id = match placement {
                 StemPlacement::Matched { track_id } => track_id.clone(),
                 StemPlacement::Unmatched {
@@ -988,6 +1004,31 @@ impl DesktopSession {
         self.perf_metrics.song_save_millis = 0;
         self.project_revision = self.project_revision.saturating_add(1);
         audio.record_commit_model_only();
+        Ok(self.snapshot())
+    }
+
+    /// Reordena las pistas por grupo (ver `track_colors::sort_tracks_by_group`):
+    /// las de cada grupo juntas, en cada nivel del árbol y sin mezclar
+    /// canciones. Una entrada de historial; si el orden ya era ese, ninguna.
+    pub fn sort_tracks_by_group(
+        &mut self,
+        audio: &AudioController,
+    ) -> Result<TransportSnapshot, DesktopError> {
+        let mut song = self
+            .engine
+            .song()
+            .cloned()
+            .ok_or(DesktopError::NoSongLoaded)?;
+        let sorted = sort_tracks_by_group(&song.tracks);
+        let unchanged = sorted
+            .iter()
+            .map(|track| &track.id)
+            .eq(song.tracks.iter().map(|track| &track.id));
+        if unchanged {
+            return Ok(self.snapshot());
+        }
+        song.tracks = sorted;
+        self.persist_song_update(song, audio, AudioChangeImpact::StructureRebuild, true)?;
         Ok(self.snapshot())
     }
 

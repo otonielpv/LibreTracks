@@ -3023,6 +3023,13 @@ export async function colorTracksByGroup(
   return invokeCommand<TransportSnapshot>("color_tracks_by_group", { trackIds });
 }
 
+/** Reordena las pistas por grupo (las de cada grupo juntas, sin mezclar
+ * canciones). Una entrada de deshacer; si ya estaban así, la revisión no
+ * cambia. */
+export async function sortTracksByGroup(): Promise<TransportSnapshot> {
+  return invokeCommand<TransportSnapshot>("sort_tracks_by_group");
+}
+
 /** Persist a folder track's collapsed state. View-only: never reaches the
  * engine and deliberately isn't undoable. */
 export async function updateTrackCollapsed(args: {

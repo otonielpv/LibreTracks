@@ -1358,6 +1358,19 @@ pub fn color_tracks_by_group(
         .map_err(|error| error.to_string())
 }
 
+/// Reordena las pistas por grupo. Ver `DesktopSession::sort_tracks_by_group`.
+#[tauri::command(async)]
+pub fn sort_tracks_by_group(state: State<'_, DesktopState>) -> Result<TransportSnapshot, String> {
+    let mut session = state
+        .session
+        .lock()
+        .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+
+    session
+        .sort_tracks_by_group(&state.audio)
+        .map_err(|error| error.to_string())
+}
+
 #[tauri::command(async)]
 pub fn update_track_collapsed(
     track_id: String,

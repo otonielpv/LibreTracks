@@ -7111,3 +7111,60 @@ fn color_tracks_by_group_paints_known_names_in_one_undo_step() {
     assert_eq!(colour(&session, "track_1").as_deref(), Some("#E35D5B"));
     assert_eq!(colour(&session, "t_ag"), None);
 }
+
+#[test]
+fn sort_tracks_by_group_reorders_in_one_undo_step_and_is_a_no_op_when_sorted() {
+    let mut song = demo_song();
+    let base = song.tracks[0].clone();
+    let with = |id: &str, name: &str| Track { id: id.into(), name: name.into(), ..base.clone() };
+    song.tracks = vec![with("track_1", "EG 1"), with("t_odd", "Coalo"), with("t_click", "Click")];
+    let mut session = session_with_song_dir("sort-by-group", song);
+    let audio = crate::audio::engine::AudioController::default();
+    let order = |session: &DesktopSession| -> Vec<String> {
+        session.engine.song().unwrap().tracks.iter().map(|t| t.id.clone()).collect()
+    };
+
+    let undo_depth = session.undo_stack.len();
+    session.sort_tracks_by_group(&audio).expect("sort");
+    assert_eq!(order(&session), ["t_click", "track_1", "t_odd"]);
+    assert_eq!(session.undo_stack.len(), undo_depth + 1);
+
+    let revision = session.project_revision;
+    session.sort_tracks_by_group(&audio).expect("already sorted");
+    assert_eq!(session.undo_stack.len(), undo_depth + 1);
+    assert_eq!(session.project_revision, revision);
+
+    session.undo_action(&audio).expect("undo");
+    assert_eq!(order(&session), ["track_1", "t_odd", "t_click"]);
+}
+
+#[test]
+fn a_dropped_multitrack_lands_sorted_by_group() {
+    let mut session = session_with_song_dir("drop-sorted-by-group", demo_song());
+    let audio = crate::audio::engine::AudioController::default();
+    let song_dir = session.song_dir.clone().expect("song dir should exist");
+    let requests: Vec<CreateAudioTrackWithClipRequest> = ["Bass", "Click", "EG 1", "Guide"]
+        .iter()
+        .map(|name| {
+            let file = format!("{name}.wav");
+            write_silent_test_wav(&song_dir.join("audio").join(&file), 1);
+            CreateAudioTrackWithClipRequest {
+                track_name: name.to_string(),
+                file_path: format!("audio/{file}"),
+                timeline_start_seconds: 0.0,
+            }
+        })
+        .collect();
+    session.create_audio_tracks_with_clips(&requests, &audio).expect("drop");
+    let names: Vec<String> = session
+        .engine
+        .song()
+        .unwrap()
+        .tracks
+        .iter()
+        .skip(1) // la pista de la demo, que ya estaba
+        .map(|t| t.name.clone())
+        .collect();
+    assert_eq!(names, ["Click", "Guide", "Bass", "EG 1"]);
+}
+

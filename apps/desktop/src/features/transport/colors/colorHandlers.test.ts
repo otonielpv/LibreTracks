@@ -39,6 +39,7 @@ function setup(overrides: Partial<ColorHandlerDeps> = {}) {
     updateTrackColor: vi.fn(async () => snapshot(7)),
     updateClipColor: vi.fn(async () => snapshot(9)),
     colorTracksByGroup: vi.fn(async () => snapshot(4)),
+    sortTracksByGroup: vi.fn(async () => snapshot(3)),
     getProjectRevision: () => 3,
     ...overrides,
   };
@@ -61,6 +62,14 @@ describe("createColorHandlers", () => {
     // tiene que recargar la canción.
     expect(optimisticallyAppliedRevisionsRef.current.size).toBe(0);
     expect(deps.setSong).not.toHaveBeenCalled();
+  });
+
+  it("sort by group reports whether the order changed", async () => {
+    const { handlers, deps } = setup({ sortTracksByGroup: vi.fn(async () => snapshot(5)) });
+    await expect(handlers.handleSortTracksByGroup()).resolves.toBe(true);
+    expect(deps.applyPlaybackSnapshot).toHaveBeenCalled();
+    const unchanged = setup();
+    await expect(unchanged.handlers.handleSortTracksByGroup()).resolves.toBe(false);
   });
 
   it("colour by group reports no change when the revision stays put", async () => {

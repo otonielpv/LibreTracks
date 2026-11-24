@@ -31,6 +31,7 @@ export type ColorHandlerDeps = {
     color: string | null,
   ) => Promise<TransportSnapshot>;
   colorTracksByGroup: (trackIds: string[]) => Promise<TransportSnapshot>;
+  sortTracksByGroup: () => Promise<TransportSnapshot>;
   /** Revisión de la canción cargada ahora mismo (por ref, no por estado). */
   getProjectRevision: () => number | null;
 };
@@ -46,6 +47,7 @@ export function createColorHandlers(deps: ColorHandlerDeps) {
     updateTrackColor,
     updateClipColor,
     colorTracksByGroup,
+    sortTracksByGroup,
     getProjectRevision,
   } = deps;
 
@@ -210,8 +212,22 @@ export function createColorHandlers(deps: ColorHandlerDeps) {
     return changed;
   };
 
+  /** Reordena las pistas por grupo. Igual que el color: sin parche optimista,
+   * y devuelve si el orden cambió. */
+  const handleSortTracksByGroup = async () => {
+    let changed = false;
+    await runAction(async () => {
+      const previousRevision = getProjectRevision();
+      const nextSnapshot = await sortTracksByGroup();
+      changed = previousRevision !== nextSnapshot.projectRevision;
+      applyPlaybackSnapshot(nextSnapshot);
+    });
+    return changed;
+  };
+
   return {
     handleColorTracksByGroup,
+    handleSortTracksByGroup,
     handleSetTrackColor,
     handleSetTrackColors,
     handleSetClipColor,
