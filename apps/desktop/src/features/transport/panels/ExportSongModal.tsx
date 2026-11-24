@@ -29,7 +29,9 @@ export function ExportSongModal({
   onConfirm,
 }: ExportSongModalProps) {
   // En Android, atras cierra este overlay en vez de salir de la aplicacion.
-  useDismissOnBack(onCancel);
+  // Solo abierto: el modal vive siempre montado, y sin la condicion ocupaba
+  // la pila y se comia el primer atras (con el panel Ritmo delante no cerraba).
+  useDismissOnBack(onCancel, target != null);
   const { t } = useTranslation();
   const [includeAudio, setIncludeAudio] = useState(true);
   // A song goes local or to the cloud AFTER this dialog, so the box starts

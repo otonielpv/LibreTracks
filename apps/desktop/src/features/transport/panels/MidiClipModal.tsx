@@ -116,7 +116,7 @@ export function MidiClipModal({
   onConfirm,
 }: MidiClipModalProps) {
   // En Android, atras cierra este overlay en vez de salir de la aplicacion.
-  useDismissOnBack(onCancel);
+  useDismissOnBack(onCancel, draft != null);
   const { t } = useTranslation();
   const [events, setEvents] = useState<MidiEventSummary[]>(
     () => draft?.events ?? [],

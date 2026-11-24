@@ -42,7 +42,7 @@ export function MidiRouteModal({
   const onCancelRef = useRef(onCancel);
   onCancelRef.current = onCancel;
   const onBack = useCallback(() => onCancelRef.current(), []);
-  useDismissOnBack(onBack);
+  useDismissOnBack(onBack, draft != null);
   const { t } = useTranslation();
   const [port, setPort] = useState<string>(() => draft?.port ?? "");
   const [channel, setChannel] = useState<number>(() => draft?.channel ?? 1);
