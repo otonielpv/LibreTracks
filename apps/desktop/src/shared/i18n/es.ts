@@ -3474,6 +3474,8 @@ const es = {
     chordRemove: "Quitar acorde",
     chordPut: "Poner {{chord}}",
     chordPutEmpty: "Elige una nota",
+    addChord: "Añadir acorde",
+    addChordLine: "Línea de acordes",
     write: "Escribir letra",
   },
   lyricsFollow: {

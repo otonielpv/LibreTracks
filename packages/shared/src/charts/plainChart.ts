@@ -200,3 +200,13 @@ export function usedChords(lines: readonly ChartLine[]): string[] {
 export function usesLatinNotation(lines: readonly ChartLine[]): boolean {
   return usedChords(lines).some((chord) => /^(?:Do|Re|Mi|Fa|Sol|La|Si)/.test(chord));
 }
+
+/** A chord added at the end of a line (a part played, not sung: "C G Am"
+ * one chord after another), written like a line of chords typed by hand. */
+export function appendChord(segments: Segments, chord: string): ChartLine {
+  const out = segments.map((segment) => ({ ...segment }));
+  const last = out[out.length - 1];
+  if (last && last.chord && !last.text) last.text = " ";
+  out.push({ chord, text: "" });
+  return { kind: "lyrics", segments: out.filter((segment, position) => segment.chord !== null || segment.text || position === 0) };
+}

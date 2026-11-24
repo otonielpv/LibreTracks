@@ -231,4 +231,18 @@ describe("simple lyrics editor", () => {
     const byTouch = (onSave.mock.calls[0][0] as SongChart).text;
     expect(byTouch).toBe(["{section: Puente}", "Santo es el [D]Señor", ""].join("\n"));
   });
+
+  it("chords by touch in a part without lyrics: a line of chords, then more chords", async () => {
+    const { onSave } = renderEditor(null);
+    fireEvent.click(partButton(/Puente/));
+    fireEvent.click(screen.getByRole("tab", { name: "simpleLyrics.viewChords" }));
+    fireEvent.click(screen.getByRole("button", { name: /simpleLyrics\.addChordLine/ }));
+    fireEvent.click(screen.getByRole("button", { name: "C" }));
+    fireEvent.click(screen.getByRole("button", { name: "simpleLyrics.chordPut:C" }));
+    fireEvent.click(screen.getByRole("button", { name: "simpleLyrics.addChord" }));
+    fireEvent.click(screen.getAllByRole("button", { name: "G" })[0]);
+    fireEvent.click(screen.getByRole("button", { name: "simpleLyrics.chordPut:G" }));
+    await save();
+    expect((onSave.mock.calls[0][0] as SongChart).text).toBe(["{section: Puente}", "[C] [G]", ""].join("\n"));
+  });
 });

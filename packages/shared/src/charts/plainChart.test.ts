@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 
 import { chordProFromText, looksLikeChordPro } from "./chartImport";
 import { parseChordPro, parseLyricLine, type ChartLine, type ChartSection } from "./chordChart";
-import { lyricToPlain, normalizeChartLine, plainToSectionLines, sectionToPlain, setChordAt, usedChords, usesLatinNotation } from "./plainChart";
+import { lyricToPlain, normalizeChartLine, plainToSectionLines, sectionToPlain, setChordAt, usedChords, usesLatinNotation, appendChord } from "./plainChart";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
@@ -168,5 +168,14 @@ describe("chord picker operations", () => {
     expect(usedChords(lines)).toEqual(["Sol", "Re", "Mim"]);
     expect(usesLatinNotation(lines)).toBe(true);
     expect(usesLatinNotation([lyrics("[G]Santo")])).toBe(false);
+  });
+});
+
+describe("appendChord", () => {
+  it("adds chords one after another like a typed chord line", () => {
+    let line = appendChord([], "C");
+    line = appendChord(line.kind === "lyrics" ? line.segments : [], "G");
+    line = appendChord(line.kind === "lyrics" ? line.segments : [], "Am");
+    expect(normalizeChartLine(line)).toBe(normalizeChartLine(plainToSectionLines("C  G  Am")[0]));
   });
 });

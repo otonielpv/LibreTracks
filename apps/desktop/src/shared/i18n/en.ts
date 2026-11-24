@@ -3442,6 +3442,8 @@ const en = {
     chordRemove: "Remove chord",
     chordPut: "Put {{chord}}",
     chordPutEmpty: "Pick a note",
+    addChord: "Add a chord",
+    addChordLine: "Line of chords",
     write: "Write lyrics",
   },
   lyricsFollow: {

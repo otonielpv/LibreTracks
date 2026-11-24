@@ -237,6 +237,39 @@
 }
 
 /* At least 40 px tall: chords are put with a finger on a tablet. */
+.lt-simple-chords-line.is-chords-only {
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.lt-simple-chords-line.is-chords-only .lt-simple-chords-chord {
+  min-height: 2.5rem;
+  min-width: 2.5rem;
+  padding: 0 0.6rem;
+  line-height: 2.5rem;
+}
+
+.lt-simple-chords-add {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 2.5rem;
+  min-height: 2.5rem;
+  border: 1px dashed rgb(87 241 219 / 0.35);
+  border-radius: 2px;
+  background: transparent;
+  color: #57f1db;
+}
+
+.lt-simple-chords-add .material-symbols-outlined {
+  font-size: 18px;
+}
+
+.lt-simple-chords-new-line {
+  align-self: flex-start;
+  min-height: 2.5rem;
+}
+
 .lt-simple-chords-syllable {
   min-height: 2.5rem;
   min-width: 2.5rem;

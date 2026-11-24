@@ -2,13 +2,15 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import type { ChartLine } from "@libretracks/shared/charts/chordChart";
-import { chordsByIndex, setChordAt, usedChords, usesLatinNotation } from "@libretracks/shared/charts/plainChart";
+import { appendChord, chordsByIndex, setChordAt, usedChords, usesLatinNotation } from "@libretracks/shared/charts/plainChart";
 
 const AMERICAN = ["C", "C#", "Db", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "B"];
 const LATIN = ["Do", "Do#", "Reb", "Re", "Mib", "Mi", "Fa", "Fa#", "Sol", "Lab", "La", "Sib", "Si"];
 const QUALITIES = ["", "m", "7", "m7", "maj7", "sus4", "sus2", "add9", "dim"];
 
-type Target = { line: number; index: number; chord: string | null };
+/** Where the picked chord goes: on a character, after the last chord of a
+ * line, or on a new line of chords (a part played, not sung). */
+type Target = { line: number; index: number; chord: string | null; mode?: "set" | "append" | "newLine" };
 
 type ChordViewProps = {
   lines: readonly ChartLine[];
@@ -29,9 +31,16 @@ export function ChordView({ lines, songLines, onChange }: ChordViewProps) {
 
   const apply = (chord: string | null) => {
     if (!target) return;
-    const next = lines.map((line, index) =>
-      index === target.line && line.kind === "lyrics" ? setChordAt(line.segments, target.index, chord) : line,
-    );
+    if (target.mode === "newLine") {
+      if (chord) onChange([...lines, appendChord([], chord)]);
+      setTarget(null);
+      return;
+    }
+    const next = lines.map((line, index) => {
+      if (index !== target.line || line.kind !== "lyrics") return line;
+      if (target.mode === "append") return chord ? appendChord(line.segments, chord) : line;
+      return setChordAt(line.segments, target.index, chord);
+    });
     onChange(next);
     setTarget(null);
   };
@@ -43,7 +52,27 @@ export function ChordView({ lines, songLines, onChange }: ChordViewProps) {
         const text = line.segments.map((segment) => segment.text).join("");
         const chords = chordsByIndex(line.segments);
         const words = [...text.matchAll(/\S+/g)].map((match) => ({ start: match.index ?? 0, word: match[0] }));
-        if (words.length === 0) words.push({ start: 0, word: "" });
+        if (words.length === 0) {
+          // A line of chords alone: each chord can be changed, and more added.
+          return (
+            <div className="lt-simple-chords-line is-chords-only" key={lineIndex}>
+              {[...chords.entries()].map(([at, chord]) => (
+                <button key={at} type="button" className="lt-simple-chords-chord" onClick={() => setTarget({ line: lineIndex, index: at, chord })}>
+                  {chord}
+                </button>
+              ))}
+              <button
+                type="button"
+                className="lt-simple-chords-add"
+                aria-label={t("simpleLyrics.addChord")}
+                title={t("simpleLyrics.addChord")}
+                onClick={() => setTarget({ line: lineIndex, index: text.length, chord: null, mode: "append" })}
+              >
+                <span className="material-symbols-outlined" aria-hidden="true">add</span>
+              </button>
+            </div>
+          );
+        }
         return (
           <div className="lt-simple-chords-line" key={lineIndex}>
             {words.map(({ start, word }, wordIndex) => {
@@ -71,6 +100,14 @@ export function ChordView({ lines, songLines, onChange }: ChordViewProps) {
           </div>
         );
       })}
+      <button
+        type="button"
+        className="lt-chart-editor-button lt-simple-chords-new-line"
+        onClick={() => setTarget({ line: lines.length, index: 0, chord: null, mode: "newLine" })}
+      >
+        <span className="material-symbols-outlined" aria-hidden="true">add</span>
+        {t("simpleLyrics.addChordLine")}
+      </button>
       {target ? (
         <ChordPicker
           latin={latin}
