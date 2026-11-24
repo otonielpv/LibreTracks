@@ -152,3 +152,51 @@ export function normalizeChartLine(line: ChartLine): string {
     .trim();
   return `lyrics:${text}`;
 }
+
+type Segments = ReadonlyArray<{ chord: string | null; text: string }>;
+
+/** The chords of a lyric line by the character they start on. */
+export function chordsByIndex(segments: Segments): Map<number, string> {
+  const out = new Map<number, string>();
+  let at = 0;
+  for (const segment of segments) {
+    if (segment.chord) out.set(at, segment.chord);
+    at += segment.text.length;
+  }
+  return out;
+}
+
+/**
+ * The line with `chord` put on (or, with `null`, taken off) the character at
+ * `index`: what the chord picker does when a syllable is tapped. The words
+ * stay as they are.
+ */
+export function setChordAt(segments: Segments, index: number, chord: string | null): ChartLine {
+  const text = segments.map((segment) => segment.text).join("");
+  const chords = chordsByIndex(segments);
+  const at = Math.max(0, Math.min(index, text.length));
+  if (chord) chords.set(at, chord);
+  else chords.delete(at);
+  const starts = [...chords.keys()].sort((left, right) => left - right);
+  const out: Array<{ chord: string | null; text: string }> = [];
+  if (starts.length === 0 || starts[0] > 0) out.push({ chord: null, text: text.slice(0, starts[0] ?? text.length) });
+  starts.forEach((start, position) => {
+    out.push({ chord: chords.get(start) ?? null, text: text.slice(start, starts[position + 1] ?? text.length) });
+  });
+  return { kind: "lyrics", segments: out.filter((segment, position) => segment.chord !== null || segment.text || position === 0) };
+}
+
+/** Chords the part or song already uses, most used first: offered first. */
+export function usedChords(lines: readonly ChartLine[]): string[] {
+  const counts = new Map<string, number>();
+  for (const line of lines) {
+    if (line.kind !== "lyrics") continue;
+    for (const segment of line.segments) if (segment.chord) counts.set(segment.chord, (counts.get(segment.chord) ?? 0) + 1);
+  }
+  return [...counts.entries()].sort((left, right) => right[1] - left[1]).map(([chord]) => chord);
+}
+
+/** Whether the chords are written in Latin notation (Do, Re, Sol…). */
+export function usesLatinNotation(lines: readonly ChartLine[]): boolean {
+  return usedChords(lines).some((chord) => /^(?:Do|Re|Mi|Fa|Sol|La|Si)/.test(chord));
+}

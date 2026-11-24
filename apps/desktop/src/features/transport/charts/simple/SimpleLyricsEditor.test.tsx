@@ -218,4 +218,17 @@ describe("simple lyrics editor", () => {
     expect(screen.queryByRole("tab")).toBeNull();
     expect(screen.getByRole("textbox", { name: "liveChart.textLabel" })).toBeTruthy();
   });
+
+  it("07 C1: a chord put by touch gives the same chart as typing the chord line", async () => {
+    const { onSave } = renderEditor(null);
+    fireEvent.click(partButton(/Puente/));
+    fireEvent.change(box(), { target: { value: "Santo es el Señor" } });
+    fireEvent.click(screen.getByRole("tab", { name: "simpleLyrics.viewChords" }));
+    fireEvent.click(screen.getByRole("button", { name: "Señor" }));
+    fireEvent.click(screen.getByRole("button", { name: "D" }));
+    fireEvent.click(screen.getByRole("button", { name: "simpleLyrics.chordPut:D" }));
+    await save();
+    const byTouch = (onSave.mock.calls[0][0] as SongChart).text;
+    expect(byTouch).toBe(["{section: Puente}", "Santo es el [D]Señor", ""].join("\n"));
+  });
 });

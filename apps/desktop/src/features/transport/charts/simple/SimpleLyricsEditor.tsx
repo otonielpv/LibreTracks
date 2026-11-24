@@ -3,6 +3,10 @@ import { useTranslation } from "react-i18next";
 
 import type { MarkerKind, SectionMarkerSummary, SongChart } from "@libretracks/shared/models";
 import { addPart, applyPartEdit, chartParts, joinPart, QUICK_PART_NAMES, splitPart } from "@libretracks/shared/charts/chartParts";
+import { parseChordPro } from "@libretracks/shared/charts/chordChart";
+import { plainToSectionLines, sectionToPlain } from "@libretracks/shared/charts/plainChart";
+
+import { ChordView } from "./ChordPicker";
 
 import { PartList } from "./PartList";
 import { PasteSongDialog } from "./PasteSongDialog";
@@ -35,6 +39,8 @@ export function SimpleLyricsEditor({ chart, markers, onChange, onSave, onImportF
   const [draft, setDraft] = useState<{ key: string | null; text: string }>(() => ({ key: selectedKey, text: selected?.plain ?? "" }));
   const [clearedTimes, setClearedTimes] = useState(false);
   const [pasteOpen, setPasteOpen] = useState(false);
+  /** Write the text, or put chords by touch on the words. */
+  const [view, setView] = useState<"text" | "chords">("text");
 
   /** The text this editor last wrote: another one means the draft was
    * replaced from outside (an import), and the box shows the new lyrics. */
@@ -154,6 +160,20 @@ export function SimpleLyricsEditor({ chart, markers, onChange, onSave, onImportF
             </button>
           </div>
         ) : null}
+        <div className="lt-chart-editor-modes lt-simple-lyrics-views" role="tablist" aria-label={t("simpleLyrics.viewLabel")}>
+          {(["text", "chords"] as const).map((option) => (
+            <button key={option} type="button" role="tab" aria-selected={view === option} disabled={!selected} onClick={() => setView(option)}>
+              {t(option === "text" ? "simpleLyrics.viewText" : "simpleLyrics.viewChords")}
+            </button>
+          ))}
+        </div>
+        {view === "chords" && selected ? (
+          <ChordView
+            lines={plainToSectionLines(draft.text)}
+            songLines={chart ? parseChordPro(chart.text).sections.flatMap((section) => section.lines) : []}
+            onChange={(lines) => type(sectionToPlain({ lines }))}
+          />
+        ) : (
         <textarea
           className="lt-simple-lyrics-textarea"
           value={selected ? draft.text : ""}
@@ -166,6 +186,7 @@ export function SimpleLyricsEditor({ chart, markers, onChange, onSave, onImportF
             if (selectedKey !== null && !draft.text.trim()) commit(selectedKey, draft.text);
           }}
         />
+        )}
         <small>{t("simpleLyrics.help")}</small>
         {clearedTimes ? (
           <p className="lt-simple-lyrics-notice" role="status">

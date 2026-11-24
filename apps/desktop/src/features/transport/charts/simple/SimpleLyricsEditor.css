@@ -178,6 +178,90 @@
   color: #f5c46b;
 }
 
+.lt-simple-lyrics-views {
+  align-self: flex-start;
+  margin-top: 0;
+}
+
+.lt-simple-chords {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  min-height: 12rem;
+  padding: 0.75rem 0.85rem;
+  border: 1px solid rgb(87 241 219 / 0.18);
+  border-radius: 2px;
+  background: rgb(28 31 32 / 0.98);
+}
+
+.lt-simple-chords-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.25rem;
+}
+
+.lt-simple-chords-word {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.lt-simple-chords-marks {
+  display: flex;
+  gap: 0.15rem;
+  min-height: 1.6rem;
+}
+
+.lt-simple-chords-chord {
+  min-height: 1.6rem;
+  padding: 0 0.35rem;
+  border: 0;
+  border-radius: 2px;
+  background: rgb(87 241 219 / 0.12);
+  color: #57f1db;
+  font: 700 0.8rem/1.6rem "JetBrains Mono", ui-monospace, monospace;
+}
+
+/* At least 40 px tall: chords are put with a finger on a tablet. */
+.lt-simple-chords-syllable {
+  min-height: 2.5rem;
+  min-width: 2.5rem;
+  padding: 0 0.5rem;
+  border: 1px solid transparent;
+  border-radius: 2px;
+  background: transparent;
+  color: #f3f0ef;
+  font: 500 1rem/2.5rem "Space Grotesk", sans-serif;
+}
+
+.lt-simple-chords-syllable:hover {
+  border-color: rgb(87 241 219 / 0.35);
+}
+
+.lt-simple-chord-picker .lt-settings-modal-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.lt-simple-chord-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.lt-simple-chord-grid .lt-chart-editor-button {
+  min-height: 2.5rem;
+  min-width: 2.75rem;
+  justify-content: center;
+}
+
+.lt-simple-chord-grid .lt-chart-editor-button.is-active {
+  background: #57f1db;
+  color: #0b1514;
+}
+
 @media (max-width: 640px) {
   .lt-simple-lyrics {
     grid-template-columns: minmax(0, 1fr);

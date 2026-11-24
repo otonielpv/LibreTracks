@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 
 import { chordProFromText, looksLikeChordPro } from "./chartImport";
 import { parseChordPro, parseLyricLine, type ChartLine, type ChartSection } from "./chordChart";
-import { lyricToPlain, normalizeChartLine, plainToSectionLines, sectionToPlain } from "./plainChart";
+import { lyricToPlain, normalizeChartLine, plainToSectionLines, sectionToPlain, setChordAt, usedChords, usesLatinNotation } from "./plainChart";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
@@ -147,5 +147,26 @@ describe("plain chart: columns", () => {
         if (segment.text) expect(lyric.slice(columns[index]).startsWith(segment.text)).toBe(true);
       });
     }
+  });
+});
+
+describe("chord picker operations", () => {
+  it("putting, changing and taking off a chord gives the line typed by hand", () => {
+    const line = parseLyricLine("Santo es el Señor");
+    const put = setChordAt(line, 0, "G");
+    expect(put).toEqual(plainToSectionLines("G\nSanto es el Señor")[0]);
+    const second = setChordAt(put.kind === "lyrics" ? put.segments : [], 12, "D");
+    expect(second).toEqual(plainToSectionLines("G           D\nSanto es el Señor")[0]);
+    const changed = setChordAt(second.kind === "lyrics" ? second.segments : [], 12, "Em");
+    expect(changed).toEqual(plainToSectionLines("G           Em\nSanto es el Señor")[0]);
+    const off = setChordAt(changed.kind === "lyrics" ? changed.segments : [], 0, null);
+    expect(off).toEqual(plainToSectionLines("            Em\nSanto es el Señor")[0]);
+  });
+
+  it("offers the chords already used, most used first, and tells the notation", () => {
+    const lines = [lyrics("[Sol]Santo [Re]es [Sol]el"), lyrics("[Mim]Señor")];
+    expect(usedChords(lines)).toEqual(["Sol", "Re", "Mim"]);
+    expect(usesLatinNotation(lines)).toBe(true);
+    expect(usesLatinNotation([lyrics("[G]Santo")])).toBe(false);
   });
 });
