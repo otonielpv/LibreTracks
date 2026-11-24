@@ -159,11 +159,24 @@ const rates = async (call) => {
   console.log("\nThresholds (user-perceived): crash 1.09 %, ANR 0.47 %.");
 };
 
+// Without an interval the search endpoints only look at the last day; widen
+// both to 28 days (ending yesterday, the newest complete day) in UTC.
+const setLast28Days = (params) => {
+  const day = 24 * 3600 * 1000;
+  for (const [key, date] of [["startTime", new Date(Date.now() - 28 * day)], ["endTime", new Date(Date.now() - day)]]) {
+    params.set(`interval.${key}.year`, String(date.getUTCFullYear()));
+    params.set(`interval.${key}.month`, String(date.getUTCMonth() + 1));
+    params.set(`interval.${key}.day`, String(date.getUTCDate()));
+    params.set(`interval.${key}.timeZone.id`, "UTC");
+  }
+};
+
 const issues = async (call, type) => {
   const all = [];
   let pageToken;
   do {
     const params = new URLSearchParams({ pageSize: "100" });
+    setLast28Days(params);
     if (type) params.set("filter", `errorIssueType = ${type}`);
     if (pageToken) params.set("pageToken", pageToken);
     const page = await call("GET", `${API}/errorIssues:search?${params}`);
@@ -187,6 +200,7 @@ const issues = async (call, type) => {
 const reports = async (call, issueId, count) => {
   if (!issueId) fail("usage: reports <issueId> [count]");
   const params = new URLSearchParams({ pageSize: String(count), filter: `errorIssueId = ${issueId}` });
+  setLast28Days(params);
   const page = await call("GET", `${API}/errorReports:search?${params}`);
   for (const report of page.errorReports ?? []) {
     console.log("=".repeat(80));

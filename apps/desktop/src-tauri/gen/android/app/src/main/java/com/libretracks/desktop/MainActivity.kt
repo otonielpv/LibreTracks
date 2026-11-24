@@ -19,6 +19,26 @@ import java.io.File
 
 class MainActivity : TauriActivity() {
   override fun onCreate(savedInstanceState: Bundle?) {
+    // tao starts the Rust app (a second main thread, a second Tauri app) on
+    // every onCreate. A second activity in the same process means the first
+    // one was destroyed and its process is on its way out: Play reported the
+    // resulting panic in WryActivity.create and an abort in __start_app.
+    // Start over in a fresh process instead. Before super, so nothing native
+    // runs twice; killProcess does not return.
+    if (rustStarted) {
+      Log.w("LTActivity", "segunda actividad en el mismo proceso; relanzando")
+      // The same intent, so a file opened from another app is not lost.
+      val relaunch = intent?.let { Intent(it) }
+        ?: packageManager.getLaunchIntentForPackage(packageName)
+      relaunch?.let {
+        it.setClass(this, MainActivity::class.java)
+        it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
+        startActivity(it)
+      }
+      android.os.Process.killProcess(android.os.Process.myPid())
+      return
+    }
+    rustStarted = true
     enableEdgeToEdge()
     // Before super: Tauri starts the Rust side from there, and the video
     // output looks for this Activity to put its Presentation on.
@@ -491,6 +511,8 @@ class MainActivity : TauriActivity() {
   }
 
   companion object {
+    // Per process: set once the first onCreate has started the Rust side.
+    @Volatile private var rustStarted = false
     private const val REQUEST_PICK_PERSISTABLE_AUDIO = 0x4C54
     private const val REQUEST_CREATE_DOCUMENT = 0x4C55
     private const val REQUEST_PICK_LIBRARY_TREE = 0x4C56

@@ -308,6 +308,22 @@ private:
     static constexpr int kInitialTrackCapacity = 64;
     std::vector<std::unique_ptr<TrackRenderer>> renderers_;
     std::atomic<int> renderer_count_{0};
+    // Growing the per-track pools (renderers_, track_buses_, track_meters_,
+    // track_block_state_, controls_) reallocates their arrays of pointers, and
+    // the render loops reach some of them without going through
+    // renderer_count_ / control_count_ (meters, the renderer->slot maps). A
+    // zero count is therefore not enough: while pool_resizing_ is set render()
+    // outputs silence without touching any pool, and the control thread waits
+    // for renders_in_flight_ (the render() calls already past that check) to
+    // drain before it reallocates. Play reported the crash this prevents
+    // (SIGSEGV in the phase-A job, 1.16); tests/test_mixer_grow_during_render.
+    std::atomic<int> renders_in_flight_{0};
+    std::atomic<bool> pool_resizing_{false};
+    // Control thread: raises pool_resizing_ and waits for the renders in
+    // flight. False if one is still running after 500 ms (pool_resizing_ is
+    // left set; end_pool_resize() clears it either way).
+    bool begin_pool_resize() noexcept;
+    void end_pool_resize() noexcept;
 
     // Per-track mix overrides (command thread writes, audio thread reads).
     struct TrackControlState {

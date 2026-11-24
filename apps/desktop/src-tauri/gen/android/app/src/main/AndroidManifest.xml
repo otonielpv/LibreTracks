@@ -54,10 +54,12 @@
         android:label="@string/app_name"
         android:theme="@style/Theme.libretracks_desktop"
         android:usesCleartextTraffic="${usesCleartextTraffic}">
-        <!-- sensorLandscape: the DAW surface (timeline + mixer) is unusable in
+        <!-- configChanges lists every change Android can apply live: recreating
+             the activity would start a second Rust main() in the same process
+             (tao) and crash. sensorLandscape: the DAW surface (timeline + mixer) is unusable in
              portrait on a phone; lock to landscape but allow both rotations. -->
         <activity
-            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode|density|fontScale|layoutDirection|navigation|touchscreen|colorMode|mcc|mnc"
             android:launchMode="singleTask"
             android:screenOrientation="sensorLandscape"
             android:label="@string/main_activity_title"

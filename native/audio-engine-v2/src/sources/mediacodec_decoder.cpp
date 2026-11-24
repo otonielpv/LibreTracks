@@ -44,6 +44,7 @@ namespace lt {
 namespace {
 
 constexpr int64_t kDequeueTimeoutUs = 10000;  // 10 ms per pump step
+constexpr int32_t kPcmEncodingFloat = 4;   // AudioFormat.ENCODING_PCM_FLOAT
 constexpr int kMaxPumpIterations = 512;       // watchdog per read_frames call
 
 class MediaCodecDecoder final : public AudioDecoder {
@@ -162,6 +163,8 @@ public:
         input_eos_ = false;
         output_eos_ = false;
         skip_frames_ = 0;
+        decoded_channels_ = info_.channel_count;
+        decoded_float_ = false;
         pending_.clear();
         if (lt_env_flag_enabled("LIBRETRACKS_AUDIO_DIAG")) {
             lt_debug_log(
@@ -279,10 +282,12 @@ private:
                 size_t capacity = 0;
                 const uint8_t* out_buf = AMediaCodec_getOutputBuffer(
                     codec_, static_cast<size_t>(out_index), &capacity);
-                if (out_buf) {
-                    append_pcm16(reinterpret_cast<const int16_t*>(
-                                     out_buf + buffer_info.offset),
-                                 static_cast<size_t>(buffer_info.size) / 2);
+                // Never read past the buffer the codec handed out.
+                if (out_buf && buffer_info.offset >= 0 &&
+                    static_cast<size_t>(buffer_info.offset) +
+                            static_cast<size_t>(buffer_info.size) <= capacity) {
+                    append_decoded(out_buf + buffer_info.offset,
+                                   static_cast<size_t>(buffer_info.size));
                 }
             }
             if (buffer_info.flags & AMEDIACODEC_BUFFER_FLAG_END_OF_STREAM) {
@@ -301,30 +306,56 @@ private:
                     sample_rate > 0) {
                     info_.original_sample_rate = sample_rate;
                 }
+                // The caller sized its buffers with the channel count open()
+                // reported, so info_.channel_count stays fixed and the decoded
+                // layout is converted to it. Changing it here made read_frames
+                // write past the caller's buffer (Play: SIGSEGV in read_frames,
+                // a mono-tagged file the codec decoded as stereo).
                 if (AMediaFormat_getInt32(format,
                                           AMEDIAFORMAT_KEY_CHANNEL_COUNT,
                                           &channel_count) &&
                     channel_count > 0) {
-                    info_.channel_count = channel_count;
+                    decoded_channels_ = channel_count;
                 }
+                int32_t encoding = 0;
+                decoded_float_ =
+                    AMediaFormat_getInt32(format, "pcm-encoding", &encoding) &&
+                    encoding == kPcmEncodingFloat;
                 AMediaFormat_delete(format);
             }
         }
     }
 
-    void append_pcm16(const int16_t* samples, size_t sample_count) {
-        const int channels = std::max(1, info_.channel_count);
-        size_t start = 0;
+    // Decoded PCM (16-bit or float, decoded_channels_ wide) into pending_
+    // as floats in info_.channel_count channels: extra channels are dropped,
+    // a mono source is copied to every channel.
+    void append_decoded(const uint8_t* bytes, size_t byte_count) {
+        const int in_channels = std::max(1, decoded_channels_);
+        const int out_channels = std::max(1, info_.channel_count);
+        const size_t bytes_per_sample = decoded_float_ ? sizeof(float) : sizeof(int16_t);
+        size_t frames = byte_count / (bytes_per_sample * static_cast<size_t>(in_channels));
+        size_t first = 0;
         if (skip_frames_ > 0) {
-            const size_t skip_samples = std::min(
-                sample_count,
-                static_cast<size_t>(skip_frames_) * channels);
-            start = skip_samples;
-            skip_frames_ -= static_cast<Frame>(skip_samples / channels);
+            first = std::min(frames, static_cast<size_t>(skip_frames_));
+            skip_frames_ -= static_cast<Frame>(first);
         }
         constexpr float kScale = 1.0f / 32768.0f;
-        for (size_t i = start; i < sample_count; ++i) {
-            pending_.push_back(static_cast<float>(samples[i]) * kScale);
+        auto sample_at = [&](size_t index) -> float {
+            if (decoded_float_) {
+                float value;
+                std::memcpy(&value, bytes + index * sizeof(float), sizeof(float));
+                return value;
+            }
+            int16_t value;
+            std::memcpy(&value, bytes + index * sizeof(int16_t), sizeof(int16_t));
+            return static_cast<float>(value) * kScale;
+        };
+        for (size_t f = first; f < frames; ++f) {
+            const size_t row = f * static_cast<size_t>(in_channels);
+            for (int c = 0; c < out_channels; ++c) {
+                const int source = in_channels == 1 ? 0 : std::min(c, in_channels - 1);
+                pending_.push_back(sample_at(row + static_cast<size_t>(source)));
+            }
         }
     }
 
@@ -335,6 +366,8 @@ private:
     bool input_eos_ = false;
     bool output_eos_ = false;
     Frame skip_frames_ = 0;
+    int decoded_channels_ = 1;
+    bool decoded_float_ = false;
 };
 
 } // namespace

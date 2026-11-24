@@ -23,8 +23,26 @@
 #include <limits>
 #include <string>
 #include <string_view>
+#include <thread>
 
 namespace lt {
+
+namespace {
+// Counts a render() call for prepare_render_resources. The fence pairs with
+// the one there (store renderer_count_, fence, load renders_in_flight_): either
+// the control thread sees this render, or this render sees the new count.
+struct RenderInFlight {
+    std::atomic<int>& count;
+    explicit RenderInFlight(std::atomic<int>& c) noexcept : count(c) {
+        count.fetch_add(1, std::memory_order_relaxed);
+        std::atomic_thread_fence(std::memory_order_seq_cst);
+    }
+    ~RenderInFlight() { count.fetch_sub(1, std::memory_order_release); }
+    RenderInFlight(const RenderInFlight&) = delete;
+    RenderInFlight& operator=(const RenderInFlight&) = delete;
+};
+} // namespace
+
 
 #if defined(LT_ENGINE_TEST_HOOKS)
 void Mixer::force_control_count_zero_for_test() noexcept {
@@ -606,6 +624,11 @@ void Mixer::rebuild_control_slots(std::shared_ptr<const Session> session, bool p
     // pre-existing code could grow nothing, so this store used to sit after the
     // sizing; it has to happen before any reallocation.
     control_count_.store(0, std::memory_order_release);
+    // A block already past that check is still reading controls_ and the
+    // renderer->slot maps rewritten below: keep new blocks out until the
+    // rebuild is published and wait for that one (see pool_resizing_).
+    if (!begin_pool_resize())
+        lt_debug_log("mixer: el hilo de audio no solto el bloque al rehacer los controles");
 
     try {
         while (controls_.size() < needed)
@@ -759,6 +782,7 @@ void Mixer::rebuild_control_slots(std::shared_ptr<const Session> session, bool p
         }
     }
     control_count_.store(count, std::memory_order_release);
+    end_pool_resize();
 }
 
 void Mixer::render_timeline_span(float** output_channels,
@@ -1078,6 +1102,16 @@ void Mixer::render(float** output_channels,
                    int     num_frames,
                    double  /*sample_rate*/) noexcept {
     lt::rt::ScopedRealtimeSection rt_section;
+    // First, before anything touches the track pools (see pool_resizing_).
+    RenderInFlight in_flight(renders_in_flight_);
+    if (pool_resizing_.load(std::memory_order_relaxed)) {
+        // The control thread is reallocating the pools: silence for this
+        // block, and the transport keeps moving as it would have.
+        for (int ch = 0; ch < num_channels; ++ch)
+            std::fill(output_channels[ch], output_channels[ch] + num_frames, 0.f);
+        clock_->advance(num_frames);
+        return;
+    }
     // Tells realtime-aware callees (SourceManager::request_blocks) to take
     // their lock-free path.
     lt::audio_context::ScopedRender render_scope;
@@ -2306,6 +2340,15 @@ void Mixer::prepare_render_resources(int max_block_frames) noexcept {
         renderers_.size() < needed || track_meters_.size() < needed
         || track_buses_.size() < needed || track_block_state_.size() < needed;
     if (needs_growth) {
+        // A block already running is still indexing the vectors about to
+        // reallocate: keep new ones out and wait for it. An audio thread stuck
+        // for half a second is not something to race against, so give up
+        // growing instead.
+        if (!begin_pool_resize()) {
+            lt_debug_log("mixer: el hilo de audio no solto el bloque; no se amplian las pistas");
+            end_pool_resize();
+            return;
+        }
         renderer_count_.store(0, std::memory_order_release);
     }
     try {
@@ -2337,9 +2380,13 @@ void Mixer::prepare_render_resources(int max_block_frames) noexcept {
     // mismo orden que los 6x block que TrackRenderer ya reserva por ranura, asi
     // que no cambia la clase de consumo del render.
     try {
+        // Only the buses that need it: assign() on a bus the audio thread is
+        // mixing into would zero it under its feet.
         for (auto& bus : track_buses_) {
-            bus->left.assign(static_cast<std::size_t>(frames), 0.0f);
-            bus->right.assign(static_cast<std::size_t>(frames), 0.0f);
+            if (bus->left.size() != static_cast<std::size_t>(frames))
+                bus->left.assign(static_cast<std::size_t>(frames), 0.0f);
+            if (bus->right.size() != static_cast<std::size_t>(frames))
+                bus->right.assign(static_cast<std::size_t>(frames), 0.0f);
         }
     } catch (...) {
         // Igual que arriba: si no hay memoria, lo que queda es lo que habia.
@@ -2353,6 +2400,27 @@ void Mixer::prepare_render_resources(int max_block_frames) noexcept {
         usable = std::min(usable, std::min(renderers_.size(), track_meters_.size()));
     }
     renderer_count_.store(static_cast<int>(usable), std::memory_order_release);
+    if (needs_growth)
+        end_pool_resize();
+}
+
+bool Mixer::begin_pool_resize() noexcept {
+    pool_resizing_.store(true, std::memory_order_relaxed);
+    // Pairs with the fence in RenderInFlight: either we see that render in
+    // renders_in_flight_, or it sees pool_resizing_ and touches nothing.
+    std::atomic_thread_fence(std::memory_order_seq_cst);
+    // Blocks last a few ms and leave gaps between them.
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(500);
+    while (renders_in_flight_.load(std::memory_order_acquire) != 0) {
+        if (std::chrono::steady_clock::now() > deadline)
+            return false;
+        std::this_thread::yield();
+    }
+    return true;
+}
+
+void Mixer::end_pool_resize() noexcept {
+    pool_resizing_.store(false, std::memory_order_release);
 }
 
 void Mixer::set_render_thread_count(int threads) {

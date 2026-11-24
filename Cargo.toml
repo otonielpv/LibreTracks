@@ -35,6 +35,8 @@ midir = { path = "vendor/midir" }
 tao = { path = "vendor/tao" }
 # iOS/macOS: reload the UI when WebKit's content process dies (vendor/tauri-runtime-wry/LIBRETRACKS_PATCH.md).
 tauri-runtime-wry = { path = "vendor/tauri-runtime-wry" }
+# Android: the main thread never blocks sending to its own WebView queue (ANR on close; vendor/wry/LIBRETRACKS_PATCH.md).
+wry = { path = "vendor/wry" }
 
 # Full debug info made target-desktop-native/debug grow past 30 GB (the
 # desktop lib alone is built as staticlib + cdylib + rlib). Line tables keep

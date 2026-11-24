@@ -100,7 +100,13 @@ impl<T: 'static> EventLoop<T> {
       'static + FnMut(event::Event<'_, T>, &event_loop::EventLoopWindowTarget<T>, &mut ControlFlow),
   {
     let exit_code = self.run_return(event_handler);
-    ::std::process::exit(exit_code);
+    // LIBRETRACKS PATCH: `std::process::exit` runs the C++ static destructors
+    // while system threads (hwui, EGL, gralloc, MediaCodec, FenceMonitor) are
+    // still alive and locking their mutexes; bionic then aborts with
+    // `HandleUsingDestroyedMutex` or crashes in `eglTerminate`. Play reported
+    // it as a crash on every close. `_exit` ends the process without running
+    // those destructors. Tauri's own exit handlers already ran in run_return.
+    unsafe { ::libc::_exit(exit_code) }
   }
 
   pub fn run_return<F>(&mut self, mut event_handler: F) -> i32
