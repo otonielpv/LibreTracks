@@ -1,11 +1,12 @@
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { ChartSource, SectionMarkerSummary, SongRegionSummary } from "@libretracks/shared/models";
+import type { ChartSource, SectionMarkerSummary, SongRegionSummary, SongView } from "@libretracks/shared/models";
 import { chartTextHash } from "@libretracks/shared/charts/importedChart";
 
 const api = vi.hoisted(() => ({
   getPcoArrangement: vi.fn(),
+  getPcoArrangements: vi.fn(),
   createPcoArrangement: vi.fn(),
   updatePcoArrangement: vi.fn(),
 }));
@@ -15,7 +16,7 @@ vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key }),
 }));
 
-import { SaveToPlanningCenterDialog } from "./SaveToPlanningCenterDialog";
+import { SaveToPlanningCenterDialog, songTimingFor } from "./SaveToPlanningCenterDialog";
 
 const region = { id: "r1", name: "Camino", startSeconds: 0, endSeconds: 100, key: "D", transposeSemitones: 0 } as SongRegionSummary;
 const markers: SectionMarkerSummary[] = [
@@ -53,6 +54,7 @@ function open() {
 beforeEach(() => {
   for (const mock of Object.values(api)) mock.mockReset();
   api.getPcoArrangement.mockResolvedValue(original());
+  api.getPcoArrangements.mockResolvedValue([original()]);
   api.createPcoArrangement.mockResolvedValue({ ...original("2026-11-23T12:00:00Z"), id: "a9", name: "LibreTracks" });
   api.updatePcoArrangement.mockResolvedValue({ ...original("2026-11-23T12:00:00Z") });
 });
@@ -74,6 +76,8 @@ describe("saving to Planning Center", () => {
       chordChart: "VERSO 1\n[D]Camino\n\nCORO\n[G]Luz\n",
       chordChartKey: "D",
       sequence: ["Verso 1", "Coro", "Coro"],
+      // The region's whole duration, in seconds.
+      length: 100,
     });
     expect(onSaved.mock.calls[0][0]).toEqual({
       provider: "planningCenter",
@@ -83,6 +87,23 @@ describe("saving to Planning Center", () => {
       updatedAt: "2026-11-23T12:00:00Z",
       importedHash: chartTextHash(TEXT),
     });
+  });
+
+  it("updates the arrangement that already has the name instead of making another", async () => {
+    api.getPcoArrangements.mockResolvedValue([original(), { ...original(), id: "a7", name: "LibreTracks" }]);
+    open();
+    await act(async () => {});
+    const nameInput = screen.getByDisplayValue("chartSources.save.defaultName");
+    expect(screen.queryByTestId("pco-save-same-name")).toBeNull();
+    fireEvent.change(nameInput, { target: { value: " libretracks " } });
+    expect(screen.getByTestId("pco-save-same-name")).toBeTruthy();
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "chartSources.save.save" }));
+    });
+    expect(api.createPcoArrangement).not.toHaveBeenCalled();
+    const [songId, arrangementId, write] = api.updatePcoArrangement.mock.calls[0];
+    expect([songId, arrangementId]).toEqual(["s1", "a7"]);
+    expect(write.name).toBeUndefined();
   });
 
   it("replaces the original only after confirming, and shows what changes", async () => {
@@ -142,3 +163,34 @@ describe("saving to Planning Center", () => {
   });
 });
 
+
+describe("the arrangement's BPM and meter", () => {
+  const song = (overrides: Partial<SongView> = {}) =>
+    ({
+      id: "song",
+      title: "Set",
+      bpm: 120,
+      timeSignature: "4/4",
+      durationSeconds: 400,
+      tempoMarkers: [],
+      timeSignatureMarkers: [],
+      regions: [],
+      sectionMarkers: [],
+      clips: [],
+      ...overrides,
+    }) as unknown as SongView;
+  const second = { ...region, id: "r2", startSeconds: 200, endSeconds: 300 } as SongRegionSummary;
+
+  it("takes the tempo and time signature the song starts with", () => {
+    const timed = song({
+      tempoMarkers: [{ id: "t", startSeconds: 200, bpm: 72.5 }],
+      timeSignatureMarkers: [{ id: "m", startSeconds: 200, signature: "6/8" }] as SongView["timeSignatureMarkers"],
+    });
+    expect(songTimingFor(timed, second)).toEqual({ bpm: 72.5, meter: "6/8" });
+    expect(songTimingFor(timed, region)).toEqual({ bpm: 120, meter: "4/4" });
+  });
+
+  it("sends nothing without a song", () => {
+    expect(songTimingFor(null, region)).toEqual({});
+  });
+});

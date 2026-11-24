@@ -94,7 +94,7 @@ pub struct PcoPlanItem {
 
 /// What LibreTracks writes to an arrangement: the chart as Planning Center
 /// shows it, its key and the song's sequence. `name` only for a new one.
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ArrangementWrite {
     #[serde(default)]
@@ -105,6 +105,16 @@ pub struct ArrangementWrite {
     /// in the sheet as "// … //").
     #[serde(default)]
     pub sequence: Option<Vec<String>>,
+    /// The song's duration in whole seconds (Planning Center's `length`).
+    /// `None` or 0: the arrangement's length is not touched.
+    #[serde(default)]
+    pub length: Option<u32>,
+    /// The tempo the song starts at. `None`: not touched.
+    #[serde(default)]
+    pub bpm: Option<f64>,
+    /// The time signature the song starts in ("4/4", "6/8"). `None`: not touched.
+    #[serde(default)]
+    pub meter: Option<String>,
 }
 
 impl ArrangementWrite {
@@ -116,6 +126,15 @@ impl ArrangementWrite {
         });
         if let Some(sequence) = &self.sequence {
             attributes["sequence"] = serde_json::json!(sequence);
+        }
+        if let Some(length) = self.length.filter(|length| *length > 0) {
+            attributes["length"] = serde_json::json!(length);
+        }
+        if let Some(bpm) = self.bpm.filter(|bpm| bpm.is_finite() && *bpm > 0.0) {
+            attributes["bpm"] = serde_json::json!(bpm);
+        }
+        if let Some(meter) = self.meter.as_deref().map(str::trim).filter(|meter| !meter.is_empty()) {
+            attributes["meter"] = serde_json::Value::String(meter.to_string());
         }
         if let Some(name) = self.name.as_deref().filter(|name| !name.trim().is_empty()) {
             attributes["name"] = serde_json::Value::String(name.trim().to_string());
@@ -209,6 +228,27 @@ pub(crate) struct ArrangementAttributes {
     pub meter: Option<String>,
     pub updated_at: Option<String>,
     pub archived_at: Option<String>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(default)]
+pub(crate) struct KeyAttributes {
+    pub starting_key: Option<String>,
+}
+
+/// The keys Planning Center accepts for a Key's `starting_key` (minor with a
+/// trailing "m").
+const PCO_KEYS: &[&str] = &[
+    "Ab", "A", "A#", "Bb", "B", "C", "C#", "Db", "D", "D#", "Eb", "E", "F", "F#", "Gb", "G", "G#",
+];
+
+/// The key as Planning Center writes it ("F#", "Dm"), or `None` for one it
+/// does not accept.
+pub fn pco_key(key: &str) -> Option<String> {
+    let key = key.trim();
+    let root = key.strip_suffix('m').unwrap_or(key);
+    let found = PCO_KEYS.iter().find(|candidate| candidate.eq_ignore_ascii_case(root))?;
+    Some(if root.len() < key.len() { format!("{found}m") } else { (*found).to_string() })
 }
 
 #[derive(Debug, Default, Deserialize)]

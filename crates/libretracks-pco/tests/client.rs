@@ -298,6 +298,9 @@ fn write() -> libretracks_pco::ArrangementWrite {
         chord_chart: "VERSO 1\n[D]Uno\n\nCORO\n[G]Luz\n".into(),
         chord_chart_key: "D".into(),
         sequence: Some(vec!["Verso 1".into(), "Coro".into(), "Coro".into()]),
+        length: Some(272),
+        bpm: Some(72.5),
+        meter: Some("6/8".into()),
     }
 }
 
@@ -327,6 +330,9 @@ async fn a_new_arrangement_is_posted_with_chart_key_and_sequence() {
     assert_eq!(body["data"]["attributes"]["name"], "LibreTracks");
     assert_eq!(body["data"]["attributes"]["chord_chart_key"], "D");
     assert_eq!(body["data"]["attributes"]["sequence"], serde_json::json!(["Verso 1", "Coro", "Coro"]));
+    assert_eq!(body["data"]["attributes"]["length"], 272);
+    assert_eq!(body["data"]["attributes"]["bpm"], 72.5);
+    assert_eq!(body["data"]["attributes"]["meter"], "6/8");
 }
 
 #[tokio::test]
@@ -359,4 +365,66 @@ async fn a_write_without_permission_says_so() {
         client.create_arrangement("1", &write()).await.unwrap_err(),
         PcoError::NoEditPermission
     );
+}
+
+/// A keys endpoint that answers `keys` and records each request.
+async fn keys_client(keys: &'static str) -> (PcoClient, Arc<Mutex<Vec<(String, String, String)>>>) {
+    let seen = Arc::new(Mutex::new(Vec::new()));
+    let seen_by_server = Arc::clone(&seen);
+    let client = client_for(
+        move |request, _| {
+            seen_by_server.lock().unwrap().push((
+                request.method.clone(),
+                request.target.clone(),
+                String::from_utf8(request.body.clone()).unwrap(),
+            ));
+            if request.method == "GET" {
+                Response::json(200, keys)
+            } else {
+                Response::json(201, r#"{"data":{"type":"Key","id":"77","attributes":{"name":"D","starting_key":"D"}}}"#)
+            }
+        },
+        FakeTokens::new(true),
+    )
+    .await;
+    (client, seen)
+}
+
+#[tokio::test]
+async fn a_missing_key_is_added_to_the_arrangement() {
+    let (client, seen) = keys_client(
+        r#"{"data":[{"type":"Key","id":"1","attributes":{"name":"C","starting_key":"C"}}],"links":{},"meta":{}}"#,
+    )
+    .await;
+    client.ensure_key("9000009", "9000010", "D").await.unwrap();
+    let seen = seen.lock().unwrap().clone();
+    assert_eq!(seen.len(), 2);
+    let (method, target, body) = &seen[1];
+    assert_eq!(method, "POST");
+    assert_eq!(target, "/services/v2/songs/9000009/arrangements/9000010/keys");
+    let body: serde_json::Value = serde_json::from_str(body).unwrap();
+    assert_eq!(body["data"]["type"], "Key");
+    assert_eq!(body["data"]["attributes"]["name"], "D");
+    assert_eq!(body["data"]["attributes"]["starting_key"], "D");
+}
+
+#[tokio::test]
+async fn an_existing_key_is_not_added_twice() {
+    let (client, seen) = keys_client(
+        r#"{"data":[{"type":"Key","id":"1","attributes":{"name":"Original","starting_key":"D"}}],"links":{},"meta":{}}"#,
+    )
+    .await;
+    client.ensure_key("9000009", "9000010", "D").await.unwrap();
+    let seen = seen.lock().unwrap().clone();
+    assert_eq!(seen.len(), 1, "only the GET: {seen:?}");
+}
+
+#[test]
+fn keys_are_written_as_planning_center_accepts_them() {
+    use libretracks_pco::pco_key;
+    assert_eq!(pco_key("D").as_deref(), Some("D"));
+    assert_eq!(pco_key("f#m").as_deref(), Some("F#m"));
+    assert_eq!(pco_key(" Bbm ").as_deref(), Some("Bbm"));
+    assert_eq!(pco_key("Cb"), None);
+    assert_eq!(pco_key(""), None);
 }

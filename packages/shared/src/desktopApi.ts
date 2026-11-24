@@ -3674,6 +3674,13 @@ export type PcoArrangementWrite = {
   chordChartKey: string;
   /** Absent: the arrangement's sequence is left as it is. */
   sequence?: string[];
+  /** The song's duration in whole seconds (Planning Center's `length`).
+   * Absent: the arrangement's length is left as it is. */
+  length?: number;
+  /** The tempo the song starts at. Absent: left as it is. */
+  bpm?: number;
+  /** The time signature the song starts in ("4/4"). Absent: left as it is. */
+  meter?: string;
 };
 
 /** A new arrangement in the song (the default of "Save to Planning Center"). */

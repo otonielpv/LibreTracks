@@ -361,6 +361,28 @@ impl PcoClient {
             .await?;
         Ok(with_song(PcoArrangement::from(document.data), song_id))
     }
+
+    /// The arrangement has a Key in `key` (named after it, like "D"), so
+    /// Planning Center shows the chord chart in that key beside the lyrics.
+    /// An existing Key that starts in it is left as it is.
+    pub async fn ensure_key(&self, song_id: &str, arrangement_id: &str, key: &str) -> Result<(), PcoError> {
+        let Some(key) = crate::model::pco_key(key) else {
+            return Ok(());
+        };
+        let path = format!("songs/{}/arrangements/{}/keys", segment(song_id), segment(arrangement_id));
+        let existing = self.get_all::<KeyAttributes>(&path, MAX_PAGES).await?;
+        if existing
+            .iter()
+            .any(|resource| resource.attributes.starting_key.as_deref() == Some(key.as_str()))
+        {
+            return Ok(());
+        }
+        let body = serde_json::json!({
+            "data": { "type": "Key", "attributes": { "name": key, "starting_key": key } }
+        });
+        let _: Document<Resource<KeyAttributes>> = self.request(reqwest::Method::POST, &path, Some(&body)).await?;
+        Ok(())
+    }
 }
 
 fn with_song(mut arrangement: PcoArrangement, song_id: &str) -> PcoArrangement {
