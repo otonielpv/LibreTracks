@@ -820,6 +820,18 @@ void VoiceGuideRenderer::render(float** output_channels,
                                 if (previous.kind == MarkerKind::Custom) continue;
                                 available_start = std::max(available_start, previous.frame + 1);
                             }
+                            // Nor before the song the marker belongs to: an intro
+                            // a bar into a song must not borrow the previous
+                            // song's tail, which is never played when the song
+                            // is started on its own. The name then opens the
+                            // song and the count keeps only the beats that fit.
+                            for (const auto& region : song->regions) {
+                                if (target_frame <= region.start_frame
+                                    || target_frame > region.end_frame)
+                                    continue;
+                                available_start = std::max(available_start, region.start_frame);
+                                break;
+                            }
                         }
                         const Frame announcement_end = std::max(
                             count_bar_start, available_start + announcement_frames);
