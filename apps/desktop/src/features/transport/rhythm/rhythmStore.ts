@@ -49,6 +49,8 @@ type RhythmStore = {
   surface: RhythmSurface;
   /** Modo edición de los pads (✎). */
   padEditMode: boolean;
+  /** Panel a pantalla completa (como la letra). Sin persistir. */
+  expanded: boolean;
   /** Panel abierto en cada vista (persistido, como las demás preferencias de vista). */
   openByView: OpenByView;
   setOpen: (view: RhythmView, open: boolean) => void;
@@ -57,6 +59,7 @@ type RhythmStore = {
   applyMeters: (payload: RhythmMeterPayload) => void;
   setSurface: (surface: RhythmSurface) => void;
   setPadEditMode: (on: boolean) => void;
+  setExpanded: (expanded: boolean) => void;
   reset: () => void;
 };
 
@@ -74,6 +77,7 @@ const INITIAL = {
   oneShotsActive: 0,
   surface: "loops" as RhythmSurface,
   padEditMode: false,
+  expanded: false,
 };
 
 function sameRows(a: LoopRowMeter[], b: LoopRowMeter[]): boolean {
@@ -117,6 +121,7 @@ export const useRhythmStore = create<RhythmStore>((set, get) => ({
   },
   setSurface: (surface) => set({ surface }),
   setPadEditMode: (padEditMode) => set({ padEditMode }),
+  setExpanded: (expanded) => set({ expanded }),
   reset: () => {
     rhythmStepRef.step = -1;
     rhythmStepRef.bar = 0;

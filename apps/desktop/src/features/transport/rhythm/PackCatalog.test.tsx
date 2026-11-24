@@ -39,4 +39,11 @@ describe("PackCatalog", () => {
     render(<PackCatalog />);
     expect(await screen.findByText("No connection: the catalog will show when you are online.")).toBeTruthy();
   });
+
+  it("online with nothing published says there are no packs, not that it is offline", async () => {
+    setRhythmPacksForTest({ packs: [], offline: false });
+    render(<PackCatalog />);
+    expect(await screen.findByText("There are no packs to download yet.")).toBeTruthy();
+    expect(screen.queryByText(/No connection/)).toBeNull();
+  });
 });

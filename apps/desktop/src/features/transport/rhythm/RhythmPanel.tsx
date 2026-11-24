@@ -55,6 +55,9 @@ export type RhythmPanelProps = {
   onClose?: () => void;
   /** Handlers ya creados por la vista (para compartirlos con teclado/MIDI). */
   handlers?: RhythmHandlers;
+  /** A pantalla completa, tapando la vista (como la letra). */
+  expanded?: boolean;
+  onToggleExpanded?: () => void;
 };
 
 function kitFor(pattern: LoopPattern, kits: DrumKit[]): DrumKit | null {
@@ -127,6 +130,8 @@ export function RhythmPanel({
   onEdit,
   onClose,
   handlers: providedHandlers,
+  expanded = false,
+  onToggleExpanded,
 }: RhythmPanelProps) {
   const { t } = useTranslation();
   const rootRef = useRef<HTMLDivElement | null>(null);
@@ -199,6 +204,7 @@ export function RhythmPanel({
         `lt-rhythm-panel--${variant}`,
         `lt-rhythm-panel--${layout}`,
         touch ? "is-touch" : "",
+        expanded ? "is-expanded" : "",
       ].join(" ")}
       data-layout={layout}
       data-variant={variant}
@@ -214,6 +220,8 @@ export function RhythmPanel({
         handlers={handlers}
         onEdit={onEdit ? () => onEdit({ kind: "pattern" }) : undefined}
         onClose={onClose}
+        expanded={expanded}
+        onToggleExpanded={onToggleExpanded}
       />
       {layout === "short" && surfaces === "both" ? (
         <div className="lt-rhythm-switch" role="tablist" data-testid="rhythm-surface-switch">

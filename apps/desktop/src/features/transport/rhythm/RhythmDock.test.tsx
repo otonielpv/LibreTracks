@@ -68,6 +68,41 @@ describe("RhythmDock in the four views", () => {
     expect(useBackDismissStore.getState().stack.map((e) => e.id)).toEqual(["other-overlay"]);
     useBackDismissStore.getState().unregister("other-overlay");
   });
+
+  // Pantalla completa a petición (2026-11-24), como la letra: el acoplado
+  // sigue siendo lo normal.
+  it("full screen is opt-in; back leaves full screen before closing the panel", async () => {
+    render(<RhythmDock view="live" layoutClass="short" />);
+    act(() => useRhythmStore.getState().setOpen("live", true));
+    const panel = await screen.findByTestId("rhythm-panel");
+    expect(panel.className).not.toContain("is-expanded");
+    fireEvent.click(screen.getByRole("button", { name: "Full screen" }));
+    expect(screen.getByTestId("rhythm-panel").className).toContain("is-expanded");
+    await waitFor(() => expect(useBackDismissStore.getState().stack.length).toBe(2));
+    let stack = useBackDismissStore.getState().stack;
+    act(() => stack[stack.length - 1].close());
+    expect(screen.getByTestId("rhythm-panel").className).not.toContain("is-expanded");
+    await waitFor(() => expect(useBackDismissStore.getState().stack.length).toBe(1));
+    stack = useBackDismissStore.getState().stack;
+    act(() => stack[stack.length - 1].close());
+    expect(screen.queryByTestId("rhythm-panel")).toBeNull();
+  });
+
+  it("closing from full screen opens docked next time", async () => {
+    render(<RhythmDock view="daw" layoutClass="short" />);
+    act(() => useRhythmStore.getState().setOpen("daw", true));
+    await screen.findByTestId("rhythm-panel");
+    fireEvent.click(screen.getByRole("button", { name: "Full screen" }));
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    act(() => useRhythmStore.getState().setOpen("daw", true));
+    expect((await screen.findByTestId("rhythm-panel")).className).not.toContain("is-expanded");
+  });
+
+  it("the setlist tab has no full screen button", async () => {
+    render(<RhythmDock view="setlist" alwaysOpen layoutClass="wide" />);
+    await screen.findByTestId("rhythm-panel");
+    expect(screen.queryByRole("button", { name: "Full screen" })).toBeNull();
+  });
 });
 
 describe("RhythmDock editors", () => {

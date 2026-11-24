@@ -26,6 +26,9 @@ type RhythmHeaderProps = {
   >;
   onEdit?: () => void;
   onClose?: () => void;
+  /** Pantalla completa: sin él no hay botón. */
+  expanded?: boolean;
+  onToggleExpanded?: () => void;
 };
 
 export function RhythmHeader({
@@ -38,6 +41,8 @@ export function RhythmHeader({
   handlers,
   onEdit,
   onClose,
+  expanded = false,
+  onToggleExpanded,
 }: RhythmHeaderProps) {
   const { t } = useTranslation();
   const [menuOpen, setMenuOpen] = useState(false);
@@ -168,6 +173,20 @@ export function RhythmHeader({
       {onEdit ? (
         <button type="button" className="lt-rhythm-icon" aria-label={t("rhythm.edit")} onClick={onEdit}>
           ✎
+        </button>
+      ) : null}
+      {onToggleExpanded ? (
+        <button
+          type="button"
+          className={expanded ? "lt-rhythm-icon is-active" : "lt-rhythm-icon"}
+          aria-pressed={expanded}
+          aria-label={expanded ? t("rhythm.collapse") : t("rhythm.expand")}
+          title={expanded ? t("rhythm.collapse") : t("rhythm.expand")}
+          onClick={onToggleExpanded}
+        >
+          <span className="material-symbols-outlined" aria-hidden="true">
+            {expanded ? "close_fullscreen" : "open_in_full"}
+          </span>
         </button>
       ) : null}
       {onClose ? (

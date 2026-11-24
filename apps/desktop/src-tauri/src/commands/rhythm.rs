@@ -325,17 +325,24 @@ pub fn import_user_sample(path: String, kind: UserSampleKind, state: State<'_, D
 
 // ── Packs descargables (paso 11) ─────────────────────────────────────────────
 
-async fn fetch_packs_manifest() -> Option<crate::rhythm::packs::PacksManifest> {
+/// `Err(())` solo cuando no hubo respuesta (sin red, DNS, tiempo agotado).
+/// Un 404 es que aún no se ha publicado ningún pack, no que falte Internet:
+/// antes se decía «Sin conexión» con la red funcionando.
+async fn fetch_packs_manifest() -> Result<crate::rhythm::packs::PacksManifest, ()> {
     let client = reqwest::Client::builder()
         .user_agent(format!("LibreTracks/{}", env!("CARGO_PKG_VERSION")))
         .timeout(std::time::Duration::from_secs(15))
         .build()
-        .ok()?;
-    let response = client.get(crate::rhythm::packs::PACKS_MANIFEST_URL).send().await.ok()?;
+        .map_err(|_| ())?;
+    let response = client
+        .get(crate::rhythm::packs::PACKS_MANIFEST_URL)
+        .send()
+        .await
+        .map_err(|_| ())?;
     if !response.status().is_success() {
-        return None;
+        return Ok(Default::default());
     }
-    response.json().await.ok()
+    Ok(response.json().await.unwrap_or_default())
 }
 
 #[tauri::command]
@@ -348,7 +355,7 @@ pub async fn get_rhythm_packs_catalog(
         .map(|lib| crate::rhythm::packs::installed_pack_ids(&lib.packs_dir()))
         .unwrap_or_default();
     let manifest = fetch_packs_manifest().await;
-    let offline = manifest.is_none();
+    let offline = manifest.is_err();
     let packs = manifest
         .unwrap_or_default()
         .packs
@@ -388,7 +395,7 @@ pub async fn download_rhythm_pack(
         );
     };
     let result: Result<(), String> = async {
-        let manifest = fetch_packs_manifest().await.ok_or("packs catalog unavailable")?;
+        let manifest = fetch_packs_manifest().await.map_err(|()| "packs catalog unavailable")?;
         let entry = manifest
             .packs
             .into_iter()
