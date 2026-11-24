@@ -169,14 +169,12 @@ describe("pasting a whole song", () => {
     };
 
     it("with headers the first goes to the first verse and the second to the second", () => {
-      const chart = pasted(["VERSO", "Primer verso", "", "CORO", "El coro", "", "VERSO", "Segundo verso", "", "PUENTE", "El puente"].join("
-"));
+      const chart = pasted(["VERSO", "Primer verso", "", "CORO", "El coro", "", "VERSO", "Segundo verso", "", "PUENTE", "El puente"].join("\n"));
       expect(plainByLabel(chart, markers)).toEqual(expected);
     });
 
     it("without headers too; the bridges left copy the first one", () => {
-      const chart = pasted(["Primer verso", "", "El coro", "", "Segundo verso", "", "El coro", "", "El puente"].join("
-"));
+      const chart = pasted(["Primer verso", "", "El coro", "", "Segundo verso", "", "El coro", "", "El puente"].join("\n"));
       expect(plainByLabel(chart, markers)).toEqual(expected);
     });
   });
