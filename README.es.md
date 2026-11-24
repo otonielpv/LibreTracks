@@ -259,6 +259,10 @@ MIT/Apache). Consulta
 atribuciones y ofertas de fuente; los textos completos están en
 [`licenses/`](./licenses/).
 
-Sobre la AGPL se aplica un permiso adicional para la distribución en tiendas de
-aplicaciones — ver [LICENSE-EXCEPTIONS.md](./LICENSE-EXCEPTIONS.md). Concede
-derechos y no quita ninguno: el código sigue siendo AGPL y público.
+Sobre la AGPL se aplican dos añadidos, descritos en
+[LICENSE-EXCEPTIONS.md](./LICENSE-EXCEPTIONS.md): un permiso para la distribución
+en tiendas de aplicaciones, que concede derechos y no quita ninguno, y un
+requisito de atribución al autor según la sección 7(b): los forks y versiones
+modificadas, con este nombre u otro, deben conservar el aviso «Based on
+LibreTracks by Otoniel Pérez Velarde» (o su traducción) en su README y en
+cualquier pantalla de Acerca de o de avisos legales.
