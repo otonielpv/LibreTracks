@@ -3431,6 +3431,19 @@ const en = {
     confidenceLow: "Check it",
     write: "Write lyrics",
   },
+  lyricsFollow: {
+    title: "Follow",
+    allSongs: "In all songs",
+    thisSong: "Only in this song",
+    likeAll: "Like all songs",
+    focus: {
+      1: "1 line",
+      2: "2 lines",
+      3: "3 lines",
+      section: "Whole section",
+      off: "No follow",
+    },
+  },
   liveChart: {
     jump: "Jump",
     vamp: "Looping",

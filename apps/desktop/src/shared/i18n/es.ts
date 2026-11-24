@@ -3463,6 +3463,19 @@ const es = {
     confidenceLow: "Revísalo",
     write: "Escribir letra",
   },
+  lyricsFollow: {
+    title: "Seguimiento",
+    allSongs: "En todas las canciones",
+    thisSong: "Solo en esta canción",
+    likeAll: "Como en todas",
+    focus: {
+      1: "1 línea",
+      2: "2 líneas",
+      3: "3 líneas",
+      section: "Sección entera",
+      off: "Sin seguimiento",
+    },
+  },
   liveChart: {
     jump: "Salto",
     vamp: "En bucle",

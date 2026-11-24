@@ -858,3 +858,29 @@
   padding: 0.3rem 0.35rem;
   font: 700 0.72rem/1 "Space Grotesk", sans-serif;
 }
+
+/* "Follow" menu in the lyrics toolbar (LyricsFollowMenu). */
+.lt-lyrics-follow {
+  position: relative;
+  display: inline-flex;
+}
+
+.lt-context-menu.lt-lyrics-follow-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 60;
+  min-width: 13rem;
+}
+
+.lt-lyrics-follow-menu strong:not(:first-child) {
+  margin-top: 0.4rem;
+}
+
+.lt-lyrics-follow-menu button.is-active {
+  color: #57f1db;
+}
+
+.lt-lyrics-follow-menu .material-symbols-outlined {
+  font-size: 16px;
+}

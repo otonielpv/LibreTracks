@@ -708,6 +708,7 @@ mod tests {
             text: "{section: Coro}\n[C]Letra".into(),
             links: vec![],
             source: None,
+            follow: None,
         });
         let saved = serialize_song_document(&song).expect("serialize");
         let raw: Value = serde_json::from_str(&saved).expect("saved is json");

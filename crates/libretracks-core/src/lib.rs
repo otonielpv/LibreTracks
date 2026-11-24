@@ -32,7 +32,7 @@ pub use automation::{
 };
 pub use model::{
     default_audio_to, LyricsLink, LyricsSoftware, LyricsStep, OverrideTarget, RegionLyrics, SectionLead, SectionOverride, SectionTiming, SlideSelection, SlideTiming, StartTarget, StepMode, implicit_start_section_id, Arrangement, ArrangementBlock, BlockContent, ChannelMode, OriginalSection,
-    OriginalSnapshot, SongStructure, SongChart, ChartLink, ChartSource, chart_link_marker_id, parse_audio_output_route, Clip, FadeCurve, Marker, MarkerCategory, MarkerKind, MidiClip,
+    OriginalSnapshot, SongStructure, SongChart, ChartLink, ChartSource, ChartFollow, FollowFocus, chart_link_marker_id, parse_audio_output_route, Clip, FadeCurve, Marker, MarkerCategory, MarkerKind, MidiClip,
     KeyChange, KeyMap, MidiEvent, MidiEventKind, Project, Song, SongMaster, SongRegion, TempoMarker, TempoMetadata,
     is_video_file_path, TempoSource, TimeSignatureMarker, Track, TrackKind, VideoAssetInfo, VideoClip,
     VideoFit, VoiceGuideCountStyle, MAX_MIDI_CHANNEL, MAX_MIDI_DATA_VALUE, MIN_MIDI_CHANNEL,

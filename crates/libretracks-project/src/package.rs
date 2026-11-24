@@ -2456,6 +2456,10 @@ mod tests {
                 updated_at: Some("2026-11-23T08:40:00Z".into()),
                 imported_hash: "fnv1a32:0badc0de:20".into(),
             }),
+            // Viaja con el paquete: el seguimiento propio de la canción.
+            follow: Some(libretracks_core::ChartFollow {
+                focus: libretracks_core::FollowFocus::Section,
+            }),
         };
         source.regions[0].chart = Some(chart.clone());
         source.regions[0].cover_image = Some("data:image/jpeg;base64,Y292ZXI=".into());

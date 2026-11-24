@@ -307,6 +307,8 @@ export function ChartEditorModal({
       // Keeps "Update from Planning Center": an edited text no
       // longer matches `importedHash`, and that is how it shows.
       ...(source ? { source } : {}),
+      // The song's own lyrics follow is not the editor's business: kept.
+      ...(chart?.follow ? { follow: chart.follow } : {}),
     });
   };
 

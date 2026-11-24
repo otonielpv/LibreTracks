@@ -50,6 +50,9 @@ import { recordProductEvent } from "../../telemetry/telemetry";
 import { useChartImportStore } from "../../chartSources/chartImportStore";
 import { useChartSourcesAvailable } from "../../chartSources/useChartSourcesAvailable";
 import type { ChartEditorMode } from "./simple/editorMode";
+import { focusLineState, lyricsFocus, resolveFollow, withFollow } from "@libretracks/shared/charts/lyricsFollow";
+import { useLyricsFollow } from "./useLyricsFollow";
+import { LyricsFollowMenu, useGeneralFollowStore } from "./LyricsFollowMenu";
 import { FEATURE_FLAGS } from "@libretracks/shared/featureFlags";
 import "./LiveChartPanel.css";
 
@@ -57,7 +60,6 @@ const FONT_SCALE_KEY = "lt.liveChart.fontScale";
 const SHOW_CHORDS_KEY = "lt.liveChart.showChords";
 const FONT_SCALES = [0.8, 0.9, 1, 1.15, 1.3, 1.5, 1.75, 2];
 /** After the user scrolls by hand the lyrics stop following for this long. */
-const MANUAL_SCROLL_HOLD_MS = 4000;
 
 function readStored<T>(key: string, fallback: T, parse: (value: string) => T | null): T {
   try {
@@ -209,7 +211,6 @@ export const LiveChartPanel = memo(function LiveChartPanel({
     setScrollerElement(element);
   }, []);
   const tailRef = useRef<HTMLDivElement | null>(null);
-  const manualScrollAtRef = useRef(Number.NEGATIVE_INFINITY);
   const [fontScale, setFontScale] = useState(() =>
     readStored(FONT_SCALE_KEY, 1, (value) => {
       const parsed = Number(value);
@@ -406,54 +407,24 @@ export const LiveChartPanel = memo(function LiveChartPanel({
     anchorRef.current = { key, tops };
   }, [scrollerElement, blocks, currentBlock]);
 
-  // After a hand scroll, once the reader lets go for MANUAL_SCROLL_HOLD_MS
-  // the lyrics go back to the line playing, also when no line changes then.
-  const [returnTick, setReturnTick] = useState(0);
-  const returnPendingRef = useRef(false);
-  const returnTimerRef = useRef<number | null>(null);
-  useEffect(
-    () => () => {
-      if (returnTimerRef.current !== null) window.clearTimeout(returnTimerRef.current);
-    },
-    [],
+  // What is "sung now" and what stays in view (useLyricsFollow).
+  const generalFollow = useGeneralFollowStore((state) => state.focus);
+  const followFocus = resolveFollow(chart?.follow, generalFollow);
+  const focus = lyricsFocus({
+    focus: followFocus,
+    currentBlock,
+    currentLine,
+    blockLineCount: (() => {
+      const block = blocks[currentBlock];
+      return block && block.section !== null ? (doc?.sections[block.section]?.lines.length ?? 0) : 0;
+    })(),
+  });
+  const { markManualScroll } = useLyricsFollow(
+    scrollerRef,
+    focus.anchor,
+    currentLine === null || currentBlock < 0 ? null : `${currentBlock}-${currentLine}`,
+    [fontScale, showChords],
   );
-
-  // Follow the current line, unless the user is reading elsewhere.
-  useEffect(() => {
-    const scroller = scrollerRef.current;
-    const returning = returnPendingRef.current;
-    returnPendingRef.current = false;
-    if (!scroller || currentBlock < 0) return;
-    if (performance.now() - manualScrollAtRef.current < MANUAL_SCROLL_HOLD_MS) return;
-    const key = currentLine === null ? `${currentBlock}-head` : `${currentBlock}-${currentLine}`;
-    const target = scroller.querySelector<HTMLElement>(`[data-line-key="${key}"]`);
-    if (!target) return;
-    // From the on-screen positions, not offsetTop: offsetTop is measured
-    // from the nearest positioned ancestor, which is not the scroller, and on
-    // iOS that put the current line out of view.
-    const offset = target.getBoundingClientRect().top - scroller.getBoundingClientRect().top;
-    const top = Math.max(0, scroller.scrollTop + offset - scroller.clientHeight * 0.18);
-    // Reading only goes down: never back up to a line that is already on
-    // screen. Up only to bring back a line above the panel (the reader had
-    // scrolled away by hand).
-    if (!returning && top < scroller.scrollTop && offset >= 0) return;
-    const reduceMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
-    if (typeof scroller.scrollTo === "function") {
-      scroller.scrollTo({ top, behavior: reduceMotion ? "auto" : "smooth" });
-    } else {
-      scroller.scrollTop = top;
-    }
-  }, [currentBlock, currentLine, fontScale, showChords, returnTick]);
-
-  const markManualScroll = () => {
-    manualScrollAtRef.current = performance.now();
-    if (returnTimerRef.current !== null) window.clearTimeout(returnTimerRef.current);
-    returnTimerRef.current = window.setTimeout(() => {
-      returnTimerRef.current = null;
-      returnPendingRef.current = true;
-      setReturnTick((tick) => tick + 1);
-    }, MANUAL_SCROLL_HOLD_MS + 50);
-  };
 
   const changeFont = (step: 1 | -1) => {
     const index = FONT_SCALES.indexOf(fontScale);
@@ -614,6 +585,12 @@ export const LiveChartPanel = memo(function LiveChartPanel({
               >
                 <span className="material-symbols-outlined" aria-hidden="true">music_note</span>
               </button>
+              <LyricsFollowMenu
+                general={generalFollow}
+                song={chart?.follow?.focus ?? null}
+                onGeneral={useGeneralFollowStore.getState().set}
+                onSong={chart && canEdit ? (focus) => void save(withFollow(chart, focus)) : null}
+              />
               {canEdit ? (
               <button
                 type="button"
@@ -761,15 +738,7 @@ export const LiveChartPanel = memo(function LiveChartPanel({
                     line={line}
                     showChords={showChords}
                     lineKey={`${blockIndex}-${lineIndex}`}
-                    state={
-                      !isCurrent || currentLine === null
-                        ? blockIndex < currentBlock ? "past" : "upcoming"
-                        : lineIndex === currentLine
-                          ? "current"
-                          : lineIndex < currentLine
-                            ? "past"
-                            : "upcoming"
-                    }
+                    state={focusLineState(focus, blockIndex, currentBlock, lineIndex)}
                   />
                 ))}
               </div>
