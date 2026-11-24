@@ -121,26 +121,39 @@ export function parseChordPro(source: string): ChartDoc {
 export type LyricLinePlace = { raw: number; section: number; line: number };
 
 /** `parseChordPro`, also saying which raw line of `source` became which
- * section/line — so the editor can put a line's change time next to it. */
-export function parseChordProWithPlaces(source: string): { doc: ChartDoc; places: LyricLinePlace[] } {
+ * section/line — so the editor can put a line's change time next to it — and
+ * the raw line where each section starts (its header, or its first line when
+ * it has none), so one section can be rewritten leaving the rest untouched. */
+export function parseChordProWithPlaces(source: string): {
+  doc: ChartDoc;
+  places: LyricLinePlace[];
+  sectionStarts: number[];
+} {
   const places: LyricLinePlace[] = [];
-  const doc = readChordPro(source, (place) => places.push(place));
-  return { doc, places };
+  const sectionStarts: number[] = [];
+  const doc = readChordPro(source, (place) => places.push(place), (raw) => sectionStarts.push(raw));
+  return { doc, places, sectionStarts };
 }
 
-function readChordPro(source: string, onLyricLine?: (place: LyricLinePlace) => void): ChartDoc {
+function readChordPro(
+  source: string,
+  onLyricLine?: (place: LyricLinePlace) => void,
+  onSection?: (raw: number) => void,
+): ChartDoc {
   const doc: ChartDoc = { title: null, artist: null, key: null, sections: [] };
   let current: ChartSection | null = null;
+  let raw = 0;
   const open = (label: string) => {
     current = section(label);
     doc.sections.push(current);
+    onSection?.(raw);
     return current;
   };
   const target = () => current ?? open("");
 
   let inTab = false;
   const rawLines = source.replace(/\r\n?/g, "\n").split("\n");
-  for (let raw = 0; raw < rawLines.length; raw += 1) {
+  for (raw = 0; raw < rawLines.length; raw += 1) {
     const rawLine = rawLines[raw];
     const line = rawLine.replace(/\s+$/, "");
     const directive = /^\s*\{\s*([a-z_]+)\s*(?::\s*(.*?))?\s*\}\s*$/i.exec(line);
