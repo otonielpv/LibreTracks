@@ -15,6 +15,8 @@ import { useTransportStore as transportStore } from "../features/transport/store
 import { useSongStore } from "../features/transport/songStore";
 import { useChartEditorStore } from "../features/transport/charts/chartEditorStore";
 import { useGeneralFollowStore } from "../features/transport/charts/LyricsFollowMenu";
+import { useChartStyleStore } from "../features/transport/charts/ChartStyleMenu";
+import { DEFAULT_CHART_STYLE } from "../features/transport/charts/chartStyle";
 import {
   DEFAULT_VIEW_MODE,
   TIMELINE_DEFAULT_FOLLOW_PLAYHEAD_ENABLED,
@@ -392,6 +394,7 @@ beforeEach(async () => {
   resetTestDesktopApiMock();
   useMeterStore.setState(INITIAL_METER_STATE);
   useGeneralFollowStore.setState({ focus: 1 });
+  useChartStyleStore.setState({ style: DEFAULT_CHART_STYLE });
   useChartSourceStore.setState({ ...INITIAL_CHART_SOURCE_STATE });
   useChartImportStore.setState({ session: null });
   usePlanImportStore.setState({ open: false });

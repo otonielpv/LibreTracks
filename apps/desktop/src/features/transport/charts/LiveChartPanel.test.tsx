@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { SongChart, SongRegionSummary, SongView } from "@libretracks/shared/models";
@@ -420,6 +420,26 @@ describe("LiveChartPanel", () => {
     fireEvent.click(screen.getByRole("button", { name: "liveChart.showChords" }));
     expect(container.querySelectorAll(".lt-chart-chord")).toHaveLength(0);
     expect(window.localStorage.getItem("lt.liveChart.showChords")).toBe("false");
+  });
+
+  it("draws lyrics and chords with this device's fonts and chord colour", () => {
+    const { container } = renderPanel(region(linked), { current: 0 });
+    const panel = container.querySelector<HTMLElement>(".lt-live-chart")!;
+    expect(panel.style.getPropertyValue("--lt-chart-chord-color")).toBe("");
+    fireEvent.click(screen.getByRole("button", { name: "chartStyle.title" }));
+    fireEvent.click(within(screen.getByRole("radiogroup", { name: "chartStyle.lyricFont" })).getByRole("radio", { name: "chartStyle.font.serif" }));
+    fireEvent.click(within(screen.getByRole("radiogroup", { name: "chartStyle.chordFont" })).getByRole("radio", { name: "chartStyle.font.mono" }));
+    fireEvent.click(screen.getByRole("radio", { name: "#5c9dff" }));
+    expect(panel.style.getPropertyValue("--lt-chart-lyric-font")).toContain("serif");
+    expect(panel.style.getPropertyValue("--lt-chart-chord-font")).toContain("monospace");
+    expect(panel.style.getPropertyValue("--lt-chart-chord-color")).toBe("#5c9dff");
+    expect(JSON.parse(window.localStorage.getItem("lt.liveChart.style")!)).toMatchObject({
+      lyricFont: "serif",
+      chordFont: "mono",
+      chordColor: "#5c9dff",
+    });
+    fireEvent.click(screen.getByRole("button", { name: "chartStyle.reset" }));
+    expect(panel.style.getPropertyValue("--lt-chart-chord-color")).toBe("");
   });
 
   it("an imported file opens in the editor to adjust it to the sequence, not linked blind", async () => {

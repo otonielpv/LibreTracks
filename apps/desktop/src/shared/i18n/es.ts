@@ -3510,6 +3510,31 @@ const es = {
     addChordLine: "Línea de acordes",
     write: "Escribir letra",
   },
+  chartStyle: {
+    title: "Estilo de letra y acordes",
+    lyricFont: "Tipografía de la letra",
+    chordFont: "Tipografía de los acordes",
+    chordColor: "Color de los acordes",
+    bold: "Negrita",
+    reset: "Restablecer",
+    font: {
+      inter: "Inter",
+      grotesk: "Grotesk",
+      system: "Sistema",
+      serif: "Serif",
+      mono: "Mono",
+    },
+    color: {
+      default: "Naranja (por defecto)",
+      accent: "Color de acento",
+      custom: "Otro color…",
+    },
+    preview: {
+      a: "Sublime ",
+      b: "gracia del ",
+      c: "Señor",
+    },
+  },
   lyricsFollow: {
     title: "Seguimiento",
     allSongs: "En todas las canciones",
