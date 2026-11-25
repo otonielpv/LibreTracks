@@ -9,6 +9,7 @@ import { ONE_SHOT_PADS_PER_BANK, type OneShotBank } from "@libretracks/shared/mo
 import { MidiMappable } from "../midi/MidiMappable";
 import { useTimelineUIStore } from "../uiStore";
 import type { RhythmHandlers } from "./rhythmHandlers";
+import { rhythmDisplayColor } from "./padColor";
 
 const BANK_LETTERS = ["A", "B", "C", "D"] as const;
 
@@ -111,7 +112,7 @@ function OneShotGridImpl({
                 key={index}
                 type="button"
                 className="lt-rhythm-pad is-editing"
-                style={{ ["--lt-rhythm-pad-color" as string]: pad.color || undefined }}
+                style={{ ["--lt-rhythm-pad-color" as string]: rhythmDisplayColor(pad.color) }}
                 data-testid={`rhythm-pad-${index}`}
                 onPointerDown={(event) => {
                   event.currentTarget.releasePointerCapture?.(event.pointerId);
@@ -143,7 +144,7 @@ function OneShotGridImpl({
             <button
               type="button"
               className={sounding ? "lt-rhythm-pad is-sounding" : "lt-rhythm-pad"}
-              style={{ ["--lt-rhythm-pad-color" as string]: pad.color || undefined }}
+              style={{ ["--lt-rhythm-pad-color" as string]: rhythmDisplayColor(pad.color) }}
               aria-label={pad.name || t("rhythm.padLabel", { number: index + 1 })}
               data-testid={`rhythm-pad-${index}`}
               onPointerDown={(event) => {

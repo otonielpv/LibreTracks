@@ -10,6 +10,7 @@ import { ensureBank, renameBank, setPad } from "./oneShotOps";
 import { SamplePicker } from "./SamplePicker";
 import { RhythmVolumeFader } from "./RhythmVolumeFader";
 import type { RhythmLayoutClass } from "./useRhythmLayout";
+import { selectedAccentHex } from "../../../shared/theme";
 
 type OneShotPadEditorProps = {
   set: OneShotSet;
@@ -75,7 +76,7 @@ export function OneShotPadEditor({
               : {
                   id: `pad-${bankIndex}-${padIndex}-${Date.now().toString(36)}`,
                   name,
-                  color: "#57f1db",
+                  color: selectedAccentHex(),
                   sample,
                   gainDb: 0,
                   mode: "oneShot",
@@ -92,7 +93,7 @@ export function OneShotPadEditor({
           </label>
           <label className="lt-rhythm-field">
             <span className="lt-rhythm-field__label">{t("rhythm.pads.color")}</span>
-            <input type="color" value={pad.color || "#57f1db"} onChange={(event) => update({ color: event.target.value })} />
+            <input type="color" value={pad.color || selectedAccentHex()} onChange={(event) => update({ color: event.target.value })} />
           </label>
           <label className="lt-rhythm-field">
             <span className="lt-rhythm-field__label">{t("rhythm.volume")}</span>

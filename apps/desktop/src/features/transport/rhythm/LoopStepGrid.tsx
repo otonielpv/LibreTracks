@@ -13,6 +13,7 @@ import type { DrumKit, LoopPattern } from "@libretracks/shared/models";
 import { cancelGatedFrame, markFrameActivity, requestGatedFrame } from "../frameGate";
 import { cycleVelocity, paintSteps, STEP_NORMAL, stepsPerBar } from "./patternOps";
 import { rhythmStepRef } from "./rhythmStore";
+import { rhythmDisplayColor } from "./padColor";
 
 export const LONG_PRESS_MS = 400;
 
@@ -168,7 +169,7 @@ export function LoopStepGrid({
             key={row.soundId}
             className="lt-step-row"
             data-testid={`step-row-${rowIndex}`}
-            style={{ ["--lt-step-color" as string]: sound?.color || "var(--lt-accent)" }}
+            style={{ ["--lt-step-color" as string]: rhythmDisplayColor(sound?.color) ?? "var(--lt-accent)" }}
           >
             <span className="lt-step-row__label" title={name}>
               <span className="lt-step-row__color" />
