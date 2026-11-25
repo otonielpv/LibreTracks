@@ -3,13 +3,13 @@
    sombras ni blur caros: corre también en teléfonos de gama baja. */
 
 .lt-setlist-view {
-  --lt-setlist-bg: #090b0a;
-  --lt-setlist-surface: #151817;
-  --lt-setlist-surface-raised: #1c201f;
-  --lt-setlist-border: rgb(186 202 197 / 0.13);
-  --lt-setlist-text: #e9f1ee;
-  --lt-setlist-text-muted: rgb(233 241 238 / 0.62);
-  --lt-setlist-accent: #57f1db;
+  --lt-setlist-bg: rgb(var(--lt-c-090b0a, 9 11 10));
+  --lt-setlist-surface: rgb(var(--lt-c-151817, 21 24 23));
+  --lt-setlist-surface-raised: rgb(var(--lt-c-1c201f, 28 32 31));
+  --lt-setlist-border: rgb(var(--lt-c-bacac5, 186 202 197) / 0.13);
+  --lt-setlist-text: rgb(var(--lt-c-e9f1ee, 233 241 238));
+  --lt-setlist-text-muted: rgb(var(--lt-c-e9f1ee, 233 241 238) / 0.62);
+  --lt-setlist-accent: var(--lt-accent);
   --lt-setlist-gap: 0.5rem;
   --lt-setlist-pad: clamp(0.5rem, 1vw, 0.85rem);
   flex: 1 1 auto;
@@ -234,12 +234,12 @@
 }
 
 .lt-setlist-song-tile.is-playing {
-  background: rgb(87 241 219 / 0.1);
+  background: rgb(var(--lt-accent-rgb) / 0.1);
 }
 
 .lt-setlist-song-tile.is-queued {
   border-style: dashed;
-  border-color: #f2c45a;
+  border-color: rgb(var(--lt-c-f2c45a, 242 196 90));
 }
 
 .lt-setlist-song-tile.is-drop-target {
@@ -272,8 +272,8 @@
   right: 0;
   bottom: 0;
   padding: 0.05rem 0.2rem;
-  background: #171d1b;
-  color: #ffffff;
+  background: rgb(var(--lt-c-171d1b, 23 29 27));
+  color: rgb(var(--lt-c-ffffff, 255 255 255));
   font-size: 0.65rem;
   line-height: 1.1;
   border-radius: 2px 0 2px 0;
@@ -329,14 +329,14 @@
 }
 
 .lt-setlist-song-button:hover {
-  background: rgb(255 255 255 / 0.08);
+  background: rgb(var(--lt-c-ffffff, 255 255 255) / 0.08);
 }
 
 .lt-setlist-song-progress {
   position: absolute;
   inset: auto 0 0 0;
   height: 3px;
-  background: rgb(255 255 255 / 0.08);
+  background: rgb(var(--lt-c-ffffff, 255 255 255) / 0.08);
 }
 
 .lt-setlist-song-progress-fill {
@@ -430,7 +430,7 @@
 }
 
 .lt-setlist-add-song-button:hover {
-  background: rgb(255 255 255 / 0.08);
+  background: rgb(var(--lt-c-ffffff, 255 255 255) / 0.08);
 }
 
 /* Móvil: objetivos de 44 px. */
@@ -482,7 +482,7 @@ html.lt-mobile .lt-setlist-add-song-button {
 }
 
 .lt-setlist-map-block {
-  --lt-setlist-block-color: #7c8a86;
+  --lt-setlist-block-color: rgb(var(--lt-c-7c8a86, 124 138 134));
   position: absolute;
   top: 0;
   bottom: 0;
@@ -510,7 +510,7 @@ html.lt-mobile .lt-setlist-add-song-button {
   align-items: center;
   gap: 0.35rem;
   padding: 0 0.4rem;
-  background: color-mix(in srgb, var(--lt-setlist-block-color) 45%, #111514);
+  background: color-mix(in srgb, var(--lt-setlist-block-color) 45%, rgb(var(--lt-c-111514, 17 21 20)));
   white-space: nowrap;
   cursor: pointer;
   pointer-events: auto;
@@ -534,17 +534,17 @@ html.lt-mobile .lt-setlist-add-song-button {
   position: absolute;
   top: 0;
   bottom: 0;
-  border-left: 1px solid rgb(255 255 255 / 0.24);
+  border-left: 1px solid rgb(var(--lt-c-ffffff, 255 255 255) / 0.24);
 }
 
 .lt-setlist-bar-ruler-tick.is-beat {
   top: 0.3rem;
-  border-color: rgb(255 255 255 / 0.18);
+  border-color: rgb(var(--lt-c-ffffff, 255 255 255) / 0.18);
 }
 
 .lt-setlist-bar-ruler-tick.is-subdivision {
   top: 0.65rem;
-  border-color: rgb(255 255 255 / 0.12);
+  border-color: rgb(var(--lt-c-ffffff, 255 255 255) / 0.12);
 }
 
 .lt-setlist-bar-ruler-label {
@@ -553,7 +553,7 @@ html.lt-mobile .lt-setlist-add-song-button {
   left: 0.2rem;
   padding: 0 0.15rem;
   border-radius: 2px;
-  background: rgb(19 19 19 / 0.78);
+  background: rgb(var(--lt-c-131313, 19 19 19) / 0.78);
   color: var(--lt-setlist-text);
   font-size: 0.68rem;
   line-height: 1rem;
@@ -585,7 +585,7 @@ html.lt-mobile .lt-setlist-add-song-button {
 }
 
 .lt-setlist-map-block.is-active .lt-setlist-map-label {
-  background: color-mix(in srgb, var(--lt-setlist-block-color) 70%, #111514);
+  background: color-mix(in srgb, var(--lt-setlist-block-color) 70%, rgb(var(--lt-c-111514, 17 21 20)));
 }
 
 .lt-setlist-map-block.is-next .lt-setlist-map-label {
@@ -593,7 +593,7 @@ html.lt-mobile .lt-setlist-add-song-button {
 }
 
 .lt-setlist-map-block.is-pending .lt-setlist-map-label {
-  box-shadow: inset 0 0 0 2px #f2c45a;
+  box-shadow: inset 0 0 0 2px rgb(var(--lt-c-f2c45a, 242 196 90));
 }
 
 .lt-setlist-map-block.is-looping {
@@ -615,7 +615,7 @@ html.lt-mobile .lt-setlist-add-song-button {
 }
 
 .lt-setlist-map-flag {
-  color: #f2c45a;
+  color: rgb(var(--lt-c-f2c45a, 242 196 90));
 }
 
 .lt-setlist-map-digit {
@@ -631,7 +631,7 @@ html.lt-mobile .lt-setlist-add-song-button {
   position: absolute;
   inset: auto 0 0 0;
   height: 3px;
-  background: rgb(255 255 255 / 0.12);
+  background: rgb(var(--lt-c-ffffff, 255 255 255) / 0.12);
 }
 
 .lt-setlist-map-progress-fill {
@@ -737,8 +737,8 @@ html.lt-mobile .lt-setlist-add-song-button {
 .lt-setlist-overview-playhead.is-dragging {
   width: 3px;
   margin-left: -1.5px;
-  background: #ffe2ab;
-  box-shadow: 0 0 8px rgb(255 226 171 / 0.55);
+  background: rgb(var(--lt-c-ffe2ab, 255 226 171));
+  box-shadow: 0 0 8px rgb(var(--lt-c-ffe2ab, 255 226 171) / 0.55);
 }
 
 .lt-setlist-playhead-handle {
@@ -820,7 +820,7 @@ html.lt-mobile .lt-setlist-add-song-button {
 }
 
 .lt-setlist-mixer-resize:hover {
-  background: rgb(87 241 219 / 0.25);
+  background: rgb(var(--lt-accent-rgb) / 0.25);
 }
 
 /* Con el dedo, 6 px no se aciertan: un asa más alta con una marca visible,
@@ -837,7 +837,7 @@ html.lt-mobile .lt-setlist-mixer-resize::after {
   width: 40px;
   height: 3px;
   transform: translateX(-50%);
-  background: rgb(186 202 197 / 0.35);
+  background: rgb(var(--lt-c-bacac5, 186 202 197) / 0.35);
 }
 
 html.lt-mobile .lt-setlist-mixer-resize ~ .lt-setlist-mixer {
@@ -901,8 +901,8 @@ html.lt-mobile .lt-setlist-mixer-resize ~ .lt-setlist-mixer {
   margin: 0;
   padding: 0.35rem 0.6rem;
   border-radius: 0.4rem;
-  background: rgb(242 196 90 / 0.12);
-  color: #f2d68a;
+  background: rgb(var(--lt-c-f2c45a, 242 196 90) / 0.12);
+  color: rgb(var(--lt-c-f2d68a, 242 214 138));
   font-size: 0.8rem;
 }
 
@@ -978,9 +978,9 @@ html.lt-mobile .lt-setlist-mixer-resize ~ .lt-setlist-mixer {
 }
 
 .lt-setlist-edit-button.is-active {
-  border-color: #f2c45a;
-  background: rgb(242 196 90 / 0.16);
-  color: #f2d68a;
+  border-color: rgb(var(--lt-c-f2c45a, 242 196 90));
+  background: rgb(var(--lt-c-f2c45a, 242 196 90) / 0.16);
+  color: rgb(var(--lt-c-f2d68a, 242 214 138));
 }
 
 .lt-setlist-tabs > .lt-setlist-edit-button {
@@ -994,12 +994,12 @@ html.lt-mobile .lt-setlist-mixer-resize ~ .lt-setlist-mixer {
 }
 
 .lt-setlist-songs.is-editing .lt-setlist-add-song {
-  border-color: #f2c45a;
+  border-color: rgb(var(--lt-c-f2c45a, 242 196 90));
   border-style: solid;
 }
 
 .lt-setlist-map.is-editing .lt-setlist-map-block.is-selected {
-  outline: 2px solid #f2c45a;
+  outline: 2px solid rgb(var(--lt-c-f2c45a, 242 196 90));
   outline-offset: -2px;
 }
 
@@ -1007,7 +1007,7 @@ html.lt-mobile .lt-setlist-mixer-resize ~ .lt-setlist-mixer {
  * view looks as before for everyone else. White dashed, unlike the pending
  * jump's yellow: it is a choice, not something scheduled. */
 .lt-setlist-map-block.is-cursor {
-  outline: 2px dashed rgb(255 255 255 / 0.9);
+  outline: 2px dashed rgb(var(--lt-c-ffffff, 255 255 255) / 0.9);
   outline-offset: -3px;
 }
 
@@ -1171,7 +1171,7 @@ html.lt-mobile .lt-setlist-edit-button {
 }
 
 .lt-setlist-section-handle {
-  --lt-setlist-block-color: #7c8a86;
+  --lt-setlist-block-color: rgb(var(--lt-c-7c8a86, 124 138 134));
   position: absolute;
   top: 0;
   bottom: 0;
@@ -1205,7 +1205,7 @@ html.lt-mobile .lt-setlist-edit-button {
   padding: 0.1rem 0.35rem;
   border-radius: 0 0.3rem 0.3rem 0;
   background: var(--lt-setlist-block-color);
-  color: #0b0d0c;
+  color: rgb(var(--lt-c-0b0d0c, 11 13 12));
   font-size: 0.7rem;
   font-weight: 700;
   white-space: nowrap;
@@ -1215,7 +1215,7 @@ html.lt-mobile .lt-setlist-edit-button {
 }
 
 .lt-setlist-section-handle.is-selected .lt-setlist-section-flag {
-  outline: 2px solid #f2c45a;
+  outline: 2px solid rgb(var(--lt-c-f2c45a, 242 196 90));
 }
 
 /* Móvil: zona de agarre de 44 px; la onda no arrastra (hace scroll). */
@@ -1296,7 +1296,7 @@ html.lt-mobile .lt-setlist-edit-button {
 }
 
 .lt-setlist-sections-item.is-selected {
-  background: rgb(242 196 90 / 0.14);
+  background: rgb(var(--lt-c-f2c45a, 242 196 90) / 0.14);
 }
 
 .lt-setlist-sections-swatch {
@@ -1451,7 +1451,7 @@ html.lt-mobile .lt-setlist-edit-button {
   width: 0.55rem;
   height: 0.55rem;
   border-radius: 999px;
-  background: var(--lt-track-color, #7c8a86);
+  background: var(--lt-track-color, rgb(var(--lt-c-7c8a86, 124 138 134)));
 }
 
 .lt-setlist-track-kind,
@@ -1494,11 +1494,11 @@ html.lt-mobile .lt-setlist-track-row {
   top: auto;
   bottom: 0;
   border-radius: 0.3rem 0.3rem 0.3rem 0;
-  background: #f2c45a;
+  background: rgb(var(--lt-c-f2c45a, 242 196 90));
 }
 
 .lt-setlist-section-handle.is-cue::before {
-  background: #f2c45a;
+  background: rgb(var(--lt-c-f2c45a, 242 196 90));
   opacity: 0.8;
 }
 
@@ -1650,7 +1650,7 @@ html.lt-mobile .lt-setlist-track-row {
 }
 
 .lt-setlist-lanes-section {
-  --lt-setlist-block-color: #7c8a86;
+  --lt-setlist-block-color: rgb(var(--lt-c-7c8a86, 124 138 134));
   position: absolute;
   top: 0;
   padding: 0 0.3rem;
@@ -1668,7 +1668,7 @@ html.lt-mobile .lt-setlist-track-row {
 }
 
 .lt-setlist-lane.is-drop-target {
-  background: rgb(87 241 219 / 0.08);
+  background: rgb(var(--lt-accent-rgb) / 0.08);
 }
 
 .lt-setlist-lane-clip {
@@ -1676,9 +1676,9 @@ html.lt-mobile .lt-setlist-track-row {
   top: 3px;
   bottom: 3px;
   min-width: 2px;
-  border: 1px solid color-mix(in srgb, var(--lt-track-color, #7c8a86) 70%, transparent);
+  border: 1px solid color-mix(in srgb, var(--lt-track-color, rgb(var(--lt-c-7c8a86, 124 138 134))) 70%, transparent);
   border-radius: 0.3rem;
-  background: color-mix(in srgb, var(--lt-track-color, #7c8a86) 30%, #111514);
+  background: color-mix(in srgb, var(--lt-track-color, rgb(var(--lt-c-7c8a86, 124 138 134))) 30%, rgb(var(--lt-c-111514, 17 21 20)));
   overflow: hidden;
   cursor: grab;
   touch-action: none;
@@ -1686,8 +1686,8 @@ html.lt-mobile .lt-setlist-track-row {
 }
 
 .lt-setlist-lane-clip.is-selected {
-  border-color: #f2c45a;
-  box-shadow: inset 0 0 0 1px #f2c45a;
+  border-color: rgb(var(--lt-c-f2c45a, 242 196 90));
+  box-shadow: inset 0 0 0 1px rgb(var(--lt-c-f2c45a, 242 196 90));
 }
 
 .lt-setlist-lane-clip-wave {
@@ -1894,7 +1894,7 @@ html.lt-mobile .lt-setlist-lane-clip.is-selected .lt-setlist-lane-trim.is-end {
 
 .lt-setlist-drawer-tab.is-active {
   border-color: var(--lt-setlist-accent);
-  background: rgb(87 241 219 / 0.12);
+  background: rgb(var(--lt-accent-rgb) / 0.12);
   color: var(--lt-setlist-text);
 }
 
@@ -2005,10 +2005,10 @@ html.lt-mobile .lt-setlist-lane-clip.is-selected .lt-setlist-lane-trim.is-end {
   gap: 0.15rem;
   max-width: 10rem;
   padding: 0.05rem 0.35rem 0.05rem 0.2rem;
-  border-left: 2px solid #f2c45a;
+  border-left: 2px solid rgb(var(--lt-c-f2c45a, 242 196 90));
   border-radius: 0 0.3rem 0.3rem 0;
-  background: rgb(242 196 90 / 0.85);
-  color: #1b1607;
+  background: rgb(var(--lt-c-f2c45a, 242 196 90) / 0.85);
+  color: rgb(var(--lt-c-1b1607, 27 22 7));
   font-size: 0.7rem;
   font-weight: 700;
   pointer-events: none;
@@ -2209,7 +2209,7 @@ html.lt-mobile .lt-setlist-lane-clip.is-selected .lt-setlist-lane-trim.is-end {
 
 .lt-setlist-map-block.is-pending {
   animation: lt-setlist-pending-blink 0.9s ease-in-out infinite;
-  background: rgb(242 196 90 / 0.22);
+  background: rgb(var(--lt-c-f2c45a, 242 196 90) / 0.22);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -2229,7 +2229,7 @@ html.lt-mobile .lt-setlist-lane-clip.is-selected .lt-setlist-lane-trim.is-end {
   inset: 2px;
   border: 2px dashed var(--lt-setlist-accent);
   border-radius: 0.5rem;
-  background: rgb(242 196 90 / 0.08);
+  background: rgb(var(--lt-c-f2c45a, 242 196 90) / 0.08);
   pointer-events: none;
   z-index: 5;
 }
@@ -2254,9 +2254,9 @@ html.lt-mobile .lt-setlist-lane-clip.is-selected .lt-setlist-lane-trim.is-end {
 .lt-audio-route-combobox.is-large .lt-audio-route-trigger {
   height: 2.5rem;
   padding: 0 0.75rem;
-  border-color: rgb(87 241 219 / 0.32);
+  border-color: rgb(var(--lt-accent-rgb) / 0.32);
   border-radius: 3px;
-  background: #0a0a0a;
+  background: rgb(var(--lt-c-0a0a0a, 10 10 10));
   font-size: 0.92rem;
 }
 
@@ -2412,7 +2412,7 @@ html.lt-mobile .lt-setlist-lane-clip.is-selected .lt-setlist-lane-trim.is-end {
 }
 
 .lt-setlist-arrangement-card:hover {
-  border-color: rgb(255 255 255 / 0.22);
+  border-color: rgb(var(--lt-c-ffffff, 255 255 255) / 0.22);
 }
 
 .lt-setlist-arrangement-card.is-selected {
@@ -2445,8 +2445,8 @@ html.lt-mobile .lt-setlist-lane-clip.is-selected .lt-setlist-lane-trim.is-end {
   flex: 0 0 auto;
   padding: 0.15rem 0.5rem;
   border-radius: 999px;
-  background: rgb(87 241 219 / 0.16);
-  color: #57f1db;
+  background: rgb(var(--lt-accent-rgb) / 0.16);
+  color: var(--lt-accent);
   font-size: 0.72rem;
   font-weight: 700;
   text-transform: uppercase;
@@ -2498,7 +2498,7 @@ html.lt-mobile .lt-setlist-lane-clip.is-selected .lt-setlist-lane-trim.is-end {
 }
 
 .lt-setlist-arrangement-action:hover:not(:disabled) {
-  border-color: rgb(255 255 255 / 0.25);
+  border-color: rgb(var(--lt-c-ffffff, 255 255 255) / 0.25);
 }
 
 .lt-setlist-arrangement-action:disabled {
@@ -2507,7 +2507,7 @@ html.lt-mobile .lt-setlist-lane-clip.is-selected .lt-setlist-lane-trim.is-end {
 }
 
 .lt-setlist-arrangement-action.is-danger:not(:disabled) {
-  color: #ff9b8f;
+  color: rgb(var(--lt-c-ff9b8f, 255 155 143));
 }
 
 .lt-setlist-arrangement-footer {
@@ -2527,7 +2527,7 @@ html.lt-mobile .lt-setlist-lane-clip.is-selected .lt-setlist-lane-trim.is-end {
 
 .lt-setlist-arrangement-error {
   margin: 0;
-  color: #ff9b8f;
+  color: rgb(var(--lt-c-ff9b8f, 255 155 143));
   font-size: 0.85rem;
   overflow-wrap: anywhere;
 }
@@ -3064,7 +3064,7 @@ html.lt-mobile .lt-setlist-lane-clip.is-selected .lt-setlist-lane-trim.is-end {
 .lt-setlist-view.is-short .lt-setlist-map-action {
   flex: 0 0 auto;
   pointer-events: auto;
-  background: rgb(19 19 19 / 0.92);
+  background: rgb(var(--lt-c-131313, 19 19 19) / 0.92);
 }
 
 .lt-setlist-transition {
@@ -3135,13 +3135,13 @@ html.lt-mobile .lt-setlist-lane-clip.is-selected .lt-setlist-lane-trim.is-end {
 
 .lt-setlist-map-action {
   pointer-events: auto;
-  background: rgb(19 19 19 / 0.92);
+  background: rgb(var(--lt-c-131313, 19 19 19) / 0.92);
 }
 
 /* ---- Automatismos (paso 12) ---- */
 
 .lt-setlist-lane-row.is-automation {
-  background: rgb(255 210 122 / 0.04);
+  background: rgb(var(--lt-c-ffd27a, 255 210 122) / 0.04);
 }
 
 .lt-setlist-lane-row.is-automation.is-disabled .lt-setlist-automation-cell {
@@ -3182,14 +3182,14 @@ html.lt-mobile .lt-setlist-lane-clip.is-selected .lt-setlist-lane-trim.is-end {
   width: 0.9rem;
   height: 0.9rem;
   border: 1px solid rgb(0 0 0 / 0.5);
-  background: #ffd27a;
+  background: rgb(var(--lt-c-ffd27a, 255 210 122));
   transform: rotate(45deg);
 }
 
 .lt-setlist-cue.is-off .lt-setlist-cue-diamond,
 .lt-setlist-automation-item.is-off .lt-setlist-cue-diamond {
   background: transparent;
-  border-color: #ffd27a;
+  border-color: rgb(var(--lt-c-ffd27a, 255 210 122));
 }
 
 .lt-setlist-cue-label {
@@ -3358,7 +3358,7 @@ html.lt-mobile .lt-setlist-add-song.is-short .lt-setlist-add-song-button {
   top: 0;
   bottom: 0;
   padding-left: 0.2rem;
-  border-left: 1px solid rgb(186 202 197 / 0.25);
+  border-left: 1px solid rgb(var(--lt-c-bacac5, 186 202 197) / 0.25);
   color: var(--lt-setlist-text-muted);
   font-size: 0.7rem;
   font-variant-numeric: tabular-nums;
@@ -3369,18 +3369,18 @@ html.lt-mobile .lt-setlist-add-song.is-short .lt-setlist-add-song-button {
   position: absolute;
   top: 0;
   bottom: 0;
-  border-left: 1px solid rgb(186 202 197 / 0.18);
+  border-left: 1px solid rgb(var(--lt-c-bacac5, 186 202 197) / 0.18);
   pointer-events: none;
 }
 
 .lt-setlist-scrub-subtick.is-beat {
   top: 0.35rem;
-  border-color: rgb(186 202 197 / 0.14);
+  border-color: rgb(var(--lt-c-bacac5, 186 202 197) / 0.14);
 }
 
 .lt-setlist-scrub-subtick.is-subdivision {
   top: 0.7rem;
-  border-color: rgb(186 202 197 / 0.1);
+  border-color: rgb(var(--lt-c-bacac5, 186 202 197) / 0.1);
 }
 
 .lt-setlist-scrub-section-guide {
@@ -3395,7 +3395,7 @@ html.lt-mobile .lt-setlist-add-song.is-short .lt-setlist-add-song-button {
   padding: 0 0.35rem;
   overflow: hidden;
   border-left: 2px solid var(--lt-setlist-block-color);
-  background: rgb(9 11 10 / 0.88);
+  background: rgb(var(--lt-c-090b0a, 9 11 10) / 0.88);
   color: var(--lt-setlist-block-color);
   font-size: 0.7rem;
   font-weight: 700;
@@ -3434,7 +3434,7 @@ html.lt-mobile .lt-setlist-add-song.is-short .lt-setlist-add-song-button {
   border-left: 2px solid var(--lt-setlist-block-color);
   border-radius: 0 0.35rem 0.35rem 0;
   background: var(--lt-setlist-block-color);
-  color: #0b0d0c;
+  color: rgb(var(--lt-c-0b0d0c, 11 13 12));
   font: inherit;
   font-size: 0.78rem;
   font-weight: 700;
@@ -3478,7 +3478,7 @@ html.lt-mobile .lt-setlist-add-song.is-short .lt-setlist-add-song-button {
   transform: translateX(-50%);
   padding: 0.1rem 0.5rem;
   border-radius: 999px;
-  background: rgb(19 19 19 / 0.92);
+  background: rgb(var(--lt-c-131313, 19 19 19) / 0.92);
   color: var(--lt-setlist-accent);
   font-size: 0.8rem;
   font-weight: 700;
@@ -3595,7 +3595,7 @@ html.lt-mobile .lt-setlist-add-song.is-short .lt-setlist-add-song-button {
 
 /* Un clip MIDI: un paquete de mensajes en un instante (sin duración). */
 .lt-setlist-midi-clip {
-  --lt-midi-clip-color: #b18cf2;
+  --lt-midi-clip-color: rgb(var(--lt-c-b18cf2, 177 140 242));
   position: absolute;
   top: 4px;
   bottom: 4px;
@@ -3609,7 +3609,7 @@ html.lt-mobile .lt-setlist-add-song.is-short .lt-setlist-add-song-button {
   border: 1px solid rgb(0 0 0 / 0.35);
   border-left: 3px solid var(--lt-midi-clip-color);
   border-radius: 0.35rem;
-  background: rgb(177 140 242 / 0.16);
+  background: rgb(var(--lt-c-b18cf2, 177 140 242) / 0.16);
   color: var(--lt-setlist-text);
   font: inherit;
   text-align: left;
@@ -3634,7 +3634,7 @@ html.lt-mobile .lt-setlist-add-song.is-short .lt-setlist-add-song-button {
   right: 100%;
   bottom: 3px;
   height: 0;
-  border-top: 1px dashed var(--lt-midi-clip-color, #ffd27a);
+  border-top: 1px dashed var(--lt-midi-clip-color, rgb(var(--lt-c-ffd27a, 255 210 122)));
   pointer-events: none;
 }
 
@@ -3644,18 +3644,18 @@ html.lt-mobile .lt-setlist-add-song.is-short .lt-setlist-add-song-button {
   left: 0;
   top: -5px;
   height: 7px;
-  border-left: 1px solid var(--lt-midi-clip-color, #ffd27a);
+  border-left: 1px solid var(--lt-midi-clip-color, rgb(var(--lt-c-ffd27a, 255 210 122)));
 }
 
 /* A cue's anchor is its diamond's centre, not the button's edge. */
 .lt-setlist-cue .lt-setlist-lead-tail {
   right: calc(100% - 0.45rem);
   bottom: 50%;
-  border-top-color: #ffd27a;
+  border-top-color: rgb(var(--lt-c-ffd27a, 255 210 122));
 }
 
 .lt-setlist-cue .lt-setlist-lead-tail::before {
-  border-left-color: #ffd27a;
+  border-left-color: rgb(var(--lt-c-ffd27a, 255 210 122));
 }
 
 .lt-setlist-midi-clip:focus-visible {
@@ -3718,23 +3718,23 @@ html.lt-mobile .lt-setlist-add-song.is-short .lt-setlist-add-song-button {
 }
 
 .lt-compact-midi-icon {
-  color: #b18cf2;
+  color: rgb(var(--lt-c-b18cf2, 177 140 242));
   font-size: 1.6rem;
 }
 
 .lt-compact-midi-power {
   width: 2.5rem;
   height: 2.5rem;
-  border: 1px solid rgba(186, 202, 197, 0.25);
+  border: 1px solid rgb(var(--lt-c-bacac5, 186 202 197) / 0.25);
   border-radius: 999px;
   background: transparent;
-  color: rgba(186, 202, 197, 0.7);
+  color: rgb(var(--lt-c-bacac5, 186 202 197) / 0.7);
   cursor: pointer;
 }
 
 .lt-compact-midi-power.is-active {
-  border-color: #57f1db;
-  color: #57f1db;
+  border-color: var(--lt-accent);
+  color: var(--lt-accent);
 }
 
 .lt-compact-midi-route {
@@ -3743,10 +3743,10 @@ html.lt-mobile .lt-setlist-add-song.is-short .lt-setlist-add-song-button {
   align-items: center;
   max-width: 100%;
   padding: 0.25rem 0.4rem;
-  border: 1px solid rgba(186, 202, 197, 0.2);
+  border: 1px solid rgb(var(--lt-c-bacac5, 186 202 197) / 0.2);
   border-radius: 0.3rem;
-  background: #0e0e0e;
-  color: #d8fff7;
+  background: rgb(var(--lt-c-0e0e0e, 14 14 14));
+  color: var(--lt-accent-soft);
   font: 600 10px/1.3 "Space Grotesk", sans-serif;
   cursor: pointer;
 }
@@ -3759,7 +3759,7 @@ html.lt-mobile .lt-setlist-add-song.is-short .lt-setlist-add-song-button {
 }
 
 .lt-compact-midi-channel {
-  color: #57f1db;
+  color: var(--lt-accent);
 }
 
 /* Todos los modos de Editar en una fila, sean seis o siete (Letra con su
@@ -3801,7 +3801,7 @@ html.lt-mobile .lt-setlist-add-song.is-short .lt-setlist-add-song-button {
 }
 
 .lt-setlist-video-clip {
-  --lt-video-clip-color: #f28c6b;
+  --lt-video-clip-color: rgb(var(--lt-c-f28c6b, 242 140 107));
   position: absolute;
   top: 3px;
   bottom: 3px;
@@ -3810,7 +3810,7 @@ html.lt-mobile .lt-setlist-add-song.is-short .lt-setlist-add-song-button {
   border: 1px solid rgb(0 0 0 / 0.4);
   border-top: 3px solid var(--lt-video-clip-color);
   border-radius: 0.3rem;
-  background: #101418;
+  background: rgb(var(--lt-c-101418, 16 20 24));
   cursor: grab;
   touch-action: none;
 }
@@ -3853,7 +3853,7 @@ html.lt-mobile .lt-setlist-video-clip.is-selected .lt-setlist-lane-trim {
 /* ---- Tempo y compás (paso 15) ---- */
 
 .lt-setlist-lane-row.is-tempo {
-  background: rgb(87 241 219 / 0.03);
+  background: rgb(var(--lt-accent-rgb) / 0.03);
 }
 
 .lt-setlist-tempo-cell {
@@ -3882,7 +3882,7 @@ html.lt-mobile .lt-setlist-video-clip.is-selected .lt-setlist-lane-trim {
   border: 0;
   border-left: 2px solid var(--lt-setlist-accent);
   border-radius: 0 0.25rem 0.25rem 0;
-  background: rgb(19 19 19 / 0.85);
+  background: rgb(var(--lt-c-131313, 19 19 19) / 0.85);
   color: var(--lt-setlist-accent);
   font: inherit;
   font-size: 0.68rem;
@@ -3902,8 +3902,8 @@ html.lt-mobile .lt-setlist-video-clip.is-selected .lt-setlist-lane-trim {
 .lt-setlist-meter-marker {
   top: auto;
   bottom: 1px;
-  border-left-color: #f2c45a;
-  color: #f2c45a;
+  border-left-color: rgb(var(--lt-c-f2c45a, 242 196 90));
+  color: rgb(var(--lt-c-f2c45a, 242 196 90));
 }
 
 html.lt-mobile .lt-setlist-tempo-marker,
@@ -3946,7 +3946,7 @@ html.lt-mobile .lt-setlist-meter-marker {
 }
 
 .lt-setlist-lyrics-resize:hover {
-  background: rgb(87 241 219 / 0.25);
+  background: rgb(var(--lt-accent-rgb) / 0.25);
 }
 
 .lt-setlist-zone.is-lyrics {
@@ -3982,10 +3982,10 @@ html.lt-mobile .lt-setlist-meter-marker {
   height: 1.9rem;
   margin-left: 0.4rem;
   padding: 0 0.6rem 0 0.3rem;
-  border: 1px solid #57f1db;
+  border: 1px solid var(--lt-accent);
   border-radius: 999px;
-  background: rgb(87 241 219 / 0.12);
-  color: #57f1db;
+  background: rgb(var(--lt-accent-rgb) / 0.12);
+  color: var(--lt-accent);
   font: inherit;
   font-size: 0.8rem;
   font-weight: 700;
@@ -4045,7 +4045,7 @@ html.lt-mobile .lt-setlist-meter-marker {
   min-width: 2.25rem;
   justify-content: center;
   padding: 0 0.4rem;
-  background: rgb(19 19 19 / 0.92);
+  background: rgb(var(--lt-c-131313, 19 19 19) / 0.92);
 }
 
 .lt-setlist-zoom-controls .lt-setlist-map-action:disabled {
@@ -4084,7 +4084,7 @@ html.lt-mobile .lt-setlist-meter-marker {
   padding: 0 0.4rem 0 0.2rem;
   border: 0;
   border-radius: 0.35rem;
-  background: rgb(19 19 19 / 0.88);
+  background: rgb(var(--lt-c-131313, 19 19 19) / 0.88);
   color: var(--lt-setlist-text);
   font: inherit;
   font-size: 0.75rem;
@@ -4098,7 +4098,7 @@ html.lt-mobile .lt-setlist-meter-marker {
 
 .lt-setlist-scrub-automation {
   top: 3rem;
-  color: #ffd27a;
+  color: rgb(var(--lt-c-ffd27a, 255 210 122));
 }
 
 .lt-setlist-scrub-automation.is-off {
@@ -4120,7 +4120,7 @@ html.lt-mobile .lt-setlist-meter-marker {
 
 .lt-setlist-scrub-midi {
   top: calc(3rem + var(--lt-midi-row, 0) * 1.8rem);
-  color: #c9a8ff;
+  color: rgb(var(--lt-c-c9a8ff, 201 168 255));
 }
 
 .lt-setlist-scrub-midi .material-symbols-outlined {
@@ -4128,7 +4128,7 @@ html.lt-mobile .lt-setlist-meter-marker {
 }
 
 .lt-setlist-midi-icon {
-  color: #c9a8ff;
+  color: rgb(var(--lt-c-c9a8ff, 201 168 255));
 }
 
 /* Dentro de la capa del zoom la onda va en la misma celda que los bloques
@@ -4352,7 +4352,7 @@ button.lt-setlist-track-chip-name {
 
 .lt-setlist-wave-dock .lt-setlist-pane-toggle,
 .lt-setlist-wave-dock .lt-setlist-edit-button {
-  background: rgb(19 19 19 / 0.9);
+  background: rgb(var(--lt-c-131313, 19 19 19) / 0.9);
 }
 
 .lt-setlist-wave-dock-toggle {
@@ -4363,7 +4363,7 @@ button.lt-setlist-track-chip-name {
   padding: 0;
   border: 1px solid var(--lt-setlist-border);
   border-radius: 0.3rem;
-  background: rgb(19 19 19 / 0.9);
+  background: rgb(var(--lt-c-131313, 19 19 19) / 0.9);
   color: var(--lt-setlist-text);
   cursor: pointer;
 }
@@ -4388,8 +4388,8 @@ button.lt-setlist-track-chip-name {
   border-radius: 0.2rem;
   background: repeating-linear-gradient(
     -45deg,
-    rgb(87 241 219 / 0.14) 0 8px,
-    rgb(87 241 219 / 0.04) 8px 16px
+    rgb(var(--lt-accent-rgb) / 0.14) 0 8px,
+    rgb(var(--lt-accent-rgb) / 0.04) 8px 16px
   );
   pointer-events: none;
   animation: lt-setlist-vamp-pulse 1.6s ease-in-out infinite;
@@ -4406,7 +4406,7 @@ button.lt-setlist-track-chip-name {
   padding: 0.15rem 0.5rem;
   border-radius: 0.3rem;
   background: var(--lt-setlist-accent);
-  color: #06201c;
+  color: rgb(var(--lt-c-06201c, 6 32 28));
   font-size: 0.8rem;
   font-weight: 800;
   white-space: nowrap;
@@ -4418,7 +4418,7 @@ button.lt-setlist-track-chip-name {
 
 @keyframes lt-setlist-vamp-pulse {
   50% {
-    box-shadow: 0 0 0 2px rgb(87 241 219 / 0.35), inset 0 0 1.25rem rgb(87 241 219 / 0.25);
+    box-shadow: 0 0 0 2px rgb(var(--lt-accent-rgb) / 0.35), inset 0 0 1.25rem rgb(var(--lt-accent-rgb) / 0.25);
   }
 }
 
@@ -4449,7 +4449,7 @@ button.lt-setlist-track-chip-name {
 
 .lt-setlist-mixer.is-short > .lt-setlist-mixer-header .lt-setlist-tab.is-active {
   border-color: var(--lt-setlist-accent);
-  background: rgb(87 241 219 / 0.16);
+  background: rgb(var(--lt-accent-rgb) / 0.16);
   color: var(--lt-setlist-accent);
 }
 
@@ -4596,7 +4596,7 @@ button.lt-setlist-track-chip-name {
   border: 0;
   border-left: 2px solid currentColor;
   border-radius: 0 0.25rem 0.25rem 0;
-  background: rgb(19 19 19 / 0.88);
+  background: rgb(var(--lt-c-131313, 19 19 19) / 0.88);
   font: inherit;
   font-size: 0.72rem;
   font-weight: 700;
@@ -4609,15 +4609,15 @@ button.lt-setlist-track-chip-name {
 }
 
 .lt-setlist-scrub-timing.is-tempo {
-  color: #ffb86b;
+  color: rgb(var(--lt-c-ffb86b, 255 184 107));
 }
 
 .lt-setlist-scrub-timing.is-meter {
-  color: #8fd3ff;
+  color: rgb(var(--lt-c-8fd3ff, 143 211 255));
 }
 
 .lt-setlist-scrub-timing.is-key {
-  color: #c9a7ff;
+  color: rgb(var(--lt-c-c9a7ff, 201 167 255));
 }
 
 /* Vídeo sobre la onda del editor: una barra por clip, de su duración. */
@@ -4643,10 +4643,10 @@ button.lt-setlist-track-chip-name {
   min-height: 1.6rem;
   padding: 0 0.35rem;
   overflow: hidden;
-  border: 1px solid rgb(255 138 101 / 0.8);
+  border: 1px solid rgb(var(--lt-c-ff8a65, 255 138 101) / 0.8);
   border-radius: 0.25rem;
-  background: rgb(255 138 101 / 0.22);
-  color: #ffd2c2;
+  background: rgb(var(--lt-c-ff8a65, 255 138 101) / 0.22);
+  color: rgb(var(--lt-c-ffd2c2, 255 210 194));
   font: inherit;
   font-size: 0.72rem;
   font-weight: 700;
@@ -4699,9 +4699,9 @@ button.lt-setlist-track-chip-name {
   width: 10px;
   min-height: 1.2rem;
   padding: 0;
-  border: 1px solid rgb(9 11 10 / 0.9);
+  border: 1px solid rgb(var(--lt-c-090b0a, 9 11 10) / 0.9);
   border-radius: 2px;
-  background: #e9f1ee;
+  background: rgb(var(--lt-c-e9f1ee, 233 241 238));
   opacity: 0.92;
   cursor: ew-resize;
   touch-action: none;
@@ -4730,7 +4730,7 @@ button.lt-setlist-track-chip-name {
   height: 12px;
   min-height: 0;
   border-radius: 50%;
-  background: #57f1db;
+  background: var(--lt-accent);
 }
 
 .lt-setlist-scrub-video-handle.is-fade-in {
@@ -4772,7 +4772,7 @@ button.lt-setlist-track-chip-name {
 }
 
 .lt-setlist-video-icon {
-  color: #ff8a65;
+  color: rgb(var(--lt-c-ff8a65, 255 138 101));
 }
 
 html.lt-mobile .lt-setlist-scrub-video-handle {
@@ -4817,7 +4817,7 @@ html.lt-mobile .lt-setlist-video-item .lt-setlist-song-button {
 }
 
 .lt-setlist-songs-resize:hover {
-  background: rgb(87 241 219 / 0.25);
+  background: rgb(var(--lt-accent-rgb) / 0.25);
 }
 
 /* The resized song row stays on one horizontally scrolling line. */
@@ -4864,7 +4864,7 @@ html.lt-mobile .lt-setlist-video-item .lt-setlist-song-button {
   /* Sin relleno: las zonas seguras las aparta el propio panel por dentro
      (.lt-live-chart.is-expanded en LiveChartPanel.css), así su fondo llega a
      los bordes del iPhone. */
-  background: var(--lt-setlist-bg, #0e1112);
+  background: var(--lt-setlist-bg, rgb(var(--lt-c-0e1112, 14 17 18)));
 }
 
 /* Cambio de nota sobre la banda de la onda. */
@@ -4876,10 +4876,10 @@ html.lt-mobile .lt-setlist-video-item .lt-setlist-song-button {
   align-items: center;
   gap: 0.1rem;
   padding: 0 0.3rem 0 0.15rem;
-  border-left: 2px solid #c9a7ff;
+  border-left: 2px solid rgb(var(--lt-c-c9a7ff, 201 167 255));
   border-radius: 0 0.25rem 0.25rem 0;
-  background: rgb(19 19 19 / 0.88);
-  color: #c9a7ff;
+  background: rgb(var(--lt-c-131313, 19 19 19) / 0.88);
+  color: rgb(var(--lt-c-c9a7ff, 201 167 255));
   font-size: 0.75rem;
   font-weight: 800;
   pointer-events: none;
@@ -4950,7 +4950,7 @@ html.lt-mobile .lt-setlist-video-item .lt-setlist-song-button {
   align-self: stretch;
   min-height: 0;
   overflow: hidden;
-  background: #27332f;
+  background: rgb(var(--lt-c-27332f, 39 51 47));
 }
 
 .lt-setlist-view .lt-setlist-song-tile .lt-setlist-song-artwork .lt-song-cover {
@@ -4964,7 +4964,7 @@ html.lt-mobile .lt-setlist-video-item .lt-setlist-song-button {
 }
 
 .lt-setlist-cover-placeholder {
-  color: #8caaa0;
+  color: rgb(var(--lt-c-8caaa0, 140 170 160));
   font-size: 2.5rem;
 }
 
@@ -4972,7 +4972,7 @@ html.lt-mobile .lt-setlist-video-item .lt-setlist-song-button {
   inset: auto auto 0.3rem 0.35rem;
   padding: 0.1rem 0.3rem;
   border-radius: 2px;
-  background: rgb(9 11 10 / 0.85);
+  background: rgb(var(--lt-c-090b0a, 9 11 10) / 0.85);
   font-variant-numeric: tabular-nums;
 }
 
@@ -5017,7 +5017,7 @@ html.lt-mobile .lt-setlist-video-item .lt-setlist-song-button {
   right: 0.25rem;
   z-index: 1;
   border-radius: 3px;
-  background: rgb(9 11 10 / 0.8);
+  background: rgb(var(--lt-c-090b0a, 9 11 10) / 0.8);
 }
 
 .lt-setlist-view .lt-setlist-song-tile .lt-setlist-song-grip {
@@ -5026,13 +5026,13 @@ html.lt-mobile .lt-setlist-video-item .lt-setlist-song-button {
   left: 0.25rem;
   z-index: 1;
   border-radius: 3px;
-  background: rgb(9 11 10 / 0.8);
+  background: rgb(var(--lt-c-090b0a, 9 11 10) / 0.8);
 }
 
 .lt-setlist-view .lt-setlist-song-tile .lt-setlist-song-play {
   border-radius: 3px;
-  background: rgb(9 11 10 / 0.8);
-  color: #48da88;
+  background: rgb(var(--lt-c-090b0a, 9 11 10) / 0.8);
+  color: rgb(var(--lt-c-48da88, 72 218 136));
 }
 
 .lt-setlist-view .lt-setlist-song-tile .lt-setlist-song-play .material-symbols-outlined {
@@ -5041,8 +5041,8 @@ html.lt-mobile .lt-setlist-video-item .lt-setlist-song-button {
 }
 
 .lt-setlist-view .lt-setlist-song-tile .lt-setlist-song-play:hover:not(:disabled) {
-  background: rgb(72 218 136 / 0.2);
-  color: #80edac;
+  background: rgb(var(--lt-c-48da88, 72 218 136) / 0.2);
+  color: rgb(var(--lt-c-80edac, 128 237 172));
 }
 
 .lt-setlist-view .lt-setlist-song-tile .lt-setlist-song-play:disabled {
@@ -5050,7 +5050,7 @@ html.lt-mobile .lt-setlist-video-item .lt-setlist-song-button {
 }
 
 .lt-setlist-view .lt-setlist-song-tile.is-playing {
-  border-color: #4a9d6f;
+  border-color: rgb(var(--lt-c-4a9d6f, 74 157 111));
   box-shadow: none;
 }
 
@@ -5069,7 +5069,7 @@ html.lt-mobile .lt-setlist-video-item .lt-setlist-song-button {
   align-items: center;
   gap: 2px;
   height: 0.8rem;
-  color: #48da88;
+  color: rgb(var(--lt-c-48da88, 72 218 136));
 }
 
 .lt-setlist-playing-indicator > span {
@@ -5143,7 +5143,7 @@ html.lt-mobile .lt-setlist-video-item .lt-setlist-song-button {
   position: relative;
   border-style: solid;
   border-color: var(--lt-setlist-accent);
-  background: rgb(87 241 219 / 0.14);
+  background: rgb(var(--lt-accent-rgb) / 0.14);
 }
 
 .lt-setlist-add-song[data-drop-label]::after {
@@ -5154,7 +5154,7 @@ html.lt-mobile .lt-setlist-video-item .lt-setlist-song-button {
   place-items: center;
   padding: 0 0.5rem;
   border-radius: inherit;
-  background: rgb(14 17 18 / 0.92);
+  background: rgb(var(--lt-c-0e1112, 14 17 18) / 0.92);
   color: var(--lt-setlist-accent);
   font-size: 0.85rem;
   font-weight: 800;
@@ -5352,5 +5352,5 @@ html.lt-mobile .lt-setlist-view:not(.is-short) .lt-setlist-song-tile .lt-setlist
 .lt-setlist-view.is-short .lt-setlist-zone {
   border: 0;
   border-radius: 0;
-  box-shadow: 0 0 0 1px var(--lt-setlist-border-solid, #222826);
+  box-shadow: 0 0 0 1px var(--lt-setlist-border-solid, rgb(var(--lt-c-222826, 34 40 38)));
 }

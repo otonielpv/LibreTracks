@@ -12,7 +12,7 @@
 
 .lt-song-fade-ramps polygon {
   fill: rgb(0 0 0 / 0.38);
-  stroke: rgb(255 226 171 / 0.75);
+  stroke: rgb(var(--lt-c-ffe2ab, 255 226 171) / 0.75);
   stroke-width: 1;
   vector-effect: non-scaling-stroke;
 }
@@ -26,7 +26,7 @@
   /* Inset from the edge so it does not sit on the resize handle (6px). */
   margin: 0 6px;
   border-radius: 1px;
-  background: #ffe2ab;
+  background: rgb(var(--lt-c-ffe2ab, 255 226 171));
   box-shadow: 0 0 0 1px rgb(0 0 0 / 0.55);
   cursor: ew-resize;
   opacity: 0;

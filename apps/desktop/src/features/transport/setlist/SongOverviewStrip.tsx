@@ -35,6 +35,7 @@ import {
 } from "./songOverviewPeaks";
 import { createSongTimeScale } from "./songTimeScale";
 import type { SetlistLayoutClass } from "./useSetlistLayout";
+import { themedRgba, useThemeId } from "../../../shared/theme";
 
 type SongOverviewStripProps = {
   region: SongRegionSummary;
@@ -88,8 +89,9 @@ export function drawWindowFor(
   const start = Math.max(0, Math.min(layerWidth - width, view.offset - view.width));
   return { start, width };
 }
-const WAVE_COLOR = "rgb(186 214 207 / 0.75)";
-const SECTION_COLOR = "rgb(233 241 238 / 0.35)";
+// Colores del diseño oscuro; se pasan al tema al pintar.
+const waveColor = () => themedRgba(186, 214, 207, 0.75);
+const sectionColor = () => themedRgba(233, 241, 238, 0.35);
 
 /** Local x inside `element`, robust to the app's CSS zoom (the rect is in
  * zoomed pixels, offsetWidth in layout pixels). */
@@ -205,6 +207,7 @@ function SongOverviewStripComponent({
     [region.endSeconds, region.startSeconds, sectionMarkers],
   );
 
+  const themeId = useThemeId();
   useLayoutEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas || size.width <= 0 || size.height <= 0) return;
@@ -227,17 +230,17 @@ function SongOverviewStripComponent({
     });
     const mid = canvas.height / 2;
     context.clearRect(0, 0, canvas.width, canvas.height);
-    context.fillStyle = WAVE_COLOR;
+    context.fillStyle = waveColor();
     const barWidth = canvas.width / Math.max(1, peaks.length);
     for (let index = 0; index < peaks.length; index += 1) {
       const half = Math.max(0.5, peaks[index] * mid * 0.92);
       context.fillRect(index * barWidth, mid - half, Math.max(1, barWidth), half * 2);
     }
-    context.fillStyle = SECTION_COLOR;
+    context.fillStyle = sectionColor();
     for (const start of sectionStarts) {
       context.fillRect(Math.round(scale.secondsToPx(start)), 0, Math.max(1, pixelRatio), canvas.height);
     }
-  }, [peaks, pixelRatio, windowStartSeconds, windowEndSeconds, range.width, sectionStarts, size]);
+  }, [peaks, pixelRatio, windowStartSeconds, windowEndSeconds, range.width, sectionStarts, size, themeId]);
 
   // The playhead, by rAF. Hidden outside the song.
   const sourcesRef = useRef({ region, width: size.width, positionSecondsRef, zoomWindow, range });

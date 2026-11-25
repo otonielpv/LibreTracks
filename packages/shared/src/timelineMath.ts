@@ -34,6 +34,14 @@ export type TimelineRegion = {
 
 export type TimelineGrid = {
   bars: number[];
+  /** Numero de compas (1-based, global) de cada entrada de `bars`. */
+  barNumbers?: number[];
+  /** Solo se dibuja la linea de los compases multiplo de este paso (1, 2, 4…)
+   * para que, al alejar, la rejilla no se convierta en un muro de lineas. */
+  barLineStep?: number;
+  /** Multiplicador de opacidad de las lineas (ajuste "Intensidad de la linea
+   * de la rejilla"). Lo pone la vista; 1 si falta. */
+  lineIntensity?: number;
   beats: number[];
   subdivisions: number[];
   markers: Array<{
@@ -551,6 +559,23 @@ export function zoomCameraAtViewportX(params: {
  */
 export const MIN_BEAT_GRID_PIXELS = 16;
 
+/** Separacion minima en pixeles entre dos lineas de compas dibujadas. Por
+ * debajo se salta compases (de 2 en 2, de 4 en 4…), como hace Live al alejar. */
+export const MIN_BAR_GRID_PIXELS = 12;
+
+/** Paso de compases (potencia de 2) para que las lineas no queden a menos de
+ * MIN_BAR_GRID_PIXELS. Solo afecta al dibujo, no al snap. */
+export function timelineBarLineStep(barPixels: number): number {
+  if (!Number.isFinite(barPixels) || barPixels <= 0) {
+    return 1;
+  }
+  let step = 1;
+  while (barPixels * step < MIN_BAR_GRID_PIXELS && step < 1024) {
+    step *= 2;
+  }
+  return step;
+}
+
 /** "beat" si su linea se dibuja a este zoom; "bar" si solo se ven compases. */
 export function timelineGridResolution(
   beatDurationSeconds: number,
@@ -591,6 +616,7 @@ export function buildVisibleTimelineGrid(params: TimelineGridParams): TimelineGr
   );
 
   const bars: number[] = [];
+  const barNumbers: number[] = [];
   const beats: number[] = [];
   const markers: TimelineGrid["markers"] = [];
 
@@ -636,6 +662,7 @@ export function buildVisibleTimelineGrid(params: TimelineGridParams): TimelineGr
 
       if (isBarStart) {
         bars.push(seconds);
+        barNumbers.push(barNumber);
       } else {
         beats.push(seconds);
       }
@@ -644,6 +671,8 @@ export function buildVisibleTimelineGrid(params: TimelineGridParams): TimelineGr
 
   return {
     bars,
+    barNumbers,
+    barLineStep: timelineBarLineStep(barPixels),
     beats,
     subdivisions: [],
     markers,

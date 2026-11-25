@@ -35,8 +35,8 @@ describe("colores de las marcas en la vista Live", () => {
     expect(rule(".lt-live-cue-row.is-active")).toMatch(
       /background:[^;]*var\(--lt-live-marker-color\)/,
     );
-    expect(rule(".lt-live-cue-row.is-active")).toContain("border-color: #57f1db");
-    expect(rule(".lt-live-cue-row.is-pending")).toContain("border-color: #f4c95d");
+    expect(rule(".lt-live-cue-row.is-active")).toContain("border-color: var(--lt-accent)");
+    expect(rule(".lt-live-cue-row.is-pending")).toContain("border-color: rgb(var(--lt-c-f4c95d, 244 201 93))");
     expect(rule(".lt-live-cue-row.is-pending")).not.toContain("background");
   });
 

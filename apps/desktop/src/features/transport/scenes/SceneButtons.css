@@ -23,24 +23,24 @@
   max-width: 11rem;
   min-height: 1.75rem;
   padding: 0.2rem 0.55rem 0.2rem 0.25rem;
-  border: 1px solid rgb(255 122 182 / 0.3);
+  border: 1px solid rgb(var(--lt-c-ff7ab6, 255 122 182) / 0.3);
   border-radius: 0.3rem;
-  background: rgb(255 122 182 / 0.06);
-  color: #f3c7dc;
+  background: rgb(var(--lt-c-ff7ab6, 255 122 182) / 0.06);
+  color: rgb(var(--lt-c-f3c7dc, 243 199 220));
   font: 700 0.72rem/1 "Space Grotesk", sans-serif;
   white-space: nowrap;
   cursor: pointer;
 }
 
 .lt-scene-button:hover:not(:disabled) {
-  border-color: rgb(255 122 182 / 0.6);
+  border-color: rgb(var(--lt-c-ff7ab6, 255 122 182) / 0.6);
 }
 
 .lt-scene-button.is-active {
-  border-color: #ff7ab6;
-  background: #ff7ab6;
-  color: #1a0d13;
-  box-shadow: 0 0 10px rgb(255 122 182 / 0.35);
+  border-color: rgb(var(--lt-c-ff7ab6, 255 122 182));
+  background: rgb(var(--lt-c-ff7ab6, 255 122 182));
+  color: rgb(var(--lt-c-1a0d13, 26 13 19));
+  box-shadow: 0 0 10px rgb(var(--lt-c-ff7ab6, 255 122 182) / 0.35);
 }
 
 .lt-scene-button:disabled {
@@ -54,12 +54,12 @@
   min-width: 1.25rem;
   height: 1.25rem;
   border-radius: 0.2rem;
-  background: rgb(255 122 182 / 0.18);
+  background: rgb(var(--lt-c-ff7ab6, 255 122 182) / 0.18);
   font-size: 0.68rem;
 }
 
 .lt-scene-button.is-active .lt-scene-button-number {
-  background: rgb(26 13 19 / 0.2);
+  background: rgb(var(--lt-c-1a0d13, 26 13 19) / 0.2);
 }
 
 .lt-scene-button-name {
@@ -83,7 +83,7 @@
 .lt-compact-view > .lt-compact-scenes {
   flex: 0 0 auto;
   padding: 0.3rem 0.5rem;
-  border-top: 1px solid rgb(255 255 255 / 0.06);
+  border-top: 1px solid rgb(var(--lt-c-ffffff, 255 255 255) / 0.06);
 }
 
 /* Compact, phone: inside the mixer toolbar, to the right of the toggle. */
@@ -116,9 +116,9 @@ html.lt-mobile .lt-compact-view > .lt-compact-mixer-toolbar {
 
 .lt-scene-menu-button.is-active,
 .lt-scene-menu-button.is-active.is-active {
-  border-color: rgb(255 122 182 / 0.7);
-  background: rgb(255 122 182 / 0.18);
-  color: #ffd3e7;
+  border-color: rgb(var(--lt-c-ff7ab6, 255 122 182) / 0.7);
+  background: rgb(var(--lt-c-ff7ab6, 255 122 182) / 0.18);
+  color: rgb(var(--lt-c-ffd3e7, 255 211 231));
 }
 
 /* Inside its popover the row becomes a list, one scene per line. */

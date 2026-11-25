@@ -1,6 +1,6 @@
 /* Network sessions (docs/plans/completed/network-sessions). Same visual language as the
    rest of LibreTracks: Space Grotesk uppercase labels, 2px corners, teal
-   accent #57f1db on near-black. No color-mix (macOS 12 Safari 15 lacks it). */
+   accent var(--lt-accent) on near-black. No color-mix (macOS 12 Safari 15 lacks it). */
 
 /* ── Buttons ─────────────────────────────────────────────────────────── */
 
@@ -11,10 +11,10 @@
   gap: 0.4rem;
   min-height: 2.25rem;
   padding: 0.55rem 0.95rem;
-  border: 1px solid rgb(255 255 255 / 0.12);
+  border: 1px solid rgb(var(--lt-c-ffffff, 255 255 255) / 0.12);
   border-radius: 2px;
-  background: rgb(255 255 255 / 0.04);
-  color: #e5e2e1;
+  background: rgb(var(--lt-c-ffffff, 255 255 255) / 0.04);
+  color: rgb(var(--lt-c-e5e2e1, 229 226 225));
   font: 700 10px/1 "Space Grotesk", sans-serif;
   letter-spacing: 0.12em;
   text-transform: uppercase;
@@ -23,24 +23,24 @@
 }
 
 .lt-network-button:hover:not(:disabled) {
-  border-color: rgb(87 241 219 / 0.4);
-  color: #57f1db;
+  border-color: rgb(var(--lt-accent-rgb) / 0.4);
+  color: var(--lt-accent);
 }
 
 .lt-network-button.is-primary {
-  border-color: #57f1db;
-  background: #57f1db;
-  color: #0b1413;
+  border-color: var(--lt-accent);
+  background: var(--lt-accent);
+  color: rgb(var(--lt-c-0b1413, 11 20 19));
 }
 
 .lt-network-button.is-primary:hover:not(:disabled) {
-  background: #7af5e4;
-  color: #0b1413;
+  background: rgb(var(--lt-c-7af5e4, 122 245 228));
+  color: rgb(var(--lt-c-0b1413, 11 20 19));
 }
 
 .lt-network-button.is-danger:hover:not(:disabled) {
-  border-color: rgb(255 120 120 / 0.55);
-  color: #ff9a9a;
+  border-color: rgb(var(--lt-c-ff7878, 255 120 120) / 0.55);
+  color: rgb(var(--lt-c-ff9a9a, 255 154 154));
 }
 
 .lt-network-button.is-icon {
@@ -60,10 +60,10 @@
 .lt-network-select {
   min-height: 2.25rem;
   padding: 0 0.6rem;
-  border: 1px solid rgb(255 255 255 / 0.12);
+  border: 1px solid rgb(var(--lt-c-ffffff, 255 255 255) / 0.12);
   border-radius: 2px;
-  background: #151818;
-  color: #e5e2e1;
+  background: rgb(var(--lt-c-151818, 21 24 24));
+  color: rgb(var(--lt-c-e5e2e1, 229 226 225));
   font: 600 11px/1 "Space Grotesk", sans-serif;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -102,10 +102,10 @@
   align-items: center;
   gap: 0.4rem;
   padding: 0.55rem 0.9rem;
-  border: 1px solid rgb(255 255 255 / 0.08);
+  border: 1px solid rgb(var(--lt-c-ffffff, 255 255 255) / 0.08);
   border-radius: 2px;
   background: transparent;
-  color: rgb(186 202 197 / 0.7);
+  color: rgb(var(--lt-c-bacac5, 186 202 197) / 0.7);
   font: 700 10px/1 "Space Grotesk", sans-serif;
   letter-spacing: 0.14em;
   text-transform: uppercase;
@@ -117,14 +117,14 @@
 }
 
 .lt-network-tab:hover {
-  color: #57f1db;
+  color: var(--lt-accent);
 }
 
 .lt-network-tab.is-active {
-  border-color: rgb(87 241 219 / 0.45);
-  background: rgb(87 241 219 / 0.08);
-  color: #57f1db;
-  box-shadow: inset 0 -2px 0 #57f1db;
+  border-color: rgb(var(--lt-accent-rgb) / 0.45);
+  background: rgb(var(--lt-accent-rgb) / 0.08);
+  color: var(--lt-accent);
+  box-shadow: inset 0 -2px 0 var(--lt-accent);
 }
 
 .lt-network-modal-body {
@@ -169,13 +169,13 @@
   gap: 0.6rem;
   margin: 0;
   padding: 0.85rem;
-  border: 1px solid rgb(255 255 255 / 0.07);
+  border: 1px solid rgb(var(--lt-c-ffffff, 255 255 255) / 0.07);
   border-radius: 2px;
-  background: rgb(255 255 255 / 0.025);
+  background: rgb(var(--lt-c-ffffff, 255 255 255) / 0.025);
 }
 
 .lt-network-note {
-  color: rgb(214 226 224 / 0.75);
+  color: rgb(var(--lt-c-d6e2e0, 214 226 224) / 0.75);
   font-size: 0.85rem;
 }
 
@@ -201,10 +201,10 @@
 .lt-network-error {
   margin: 0;
   padding: 0.6rem 0.8rem;
-  border: 1px solid rgb(255 120 120 / 0.35);
+  border: 1px solid rgb(var(--lt-c-ff7878, 255 120 120) / 0.35);
   border-radius: 2px;
-  background: rgb(255 92 92 / 0.1);
-  color: #ffb0b0;
+  background: rgb(var(--lt-c-ff5c5c, 255 92 92) / 0.1);
+  color: rgb(var(--lt-c-ffb0b0, 255 176 176));
   font-size: 0.85rem;
 }
 
@@ -226,12 +226,12 @@
   width: 128px;
   height: 128px;
   border-radius: 2px;
-  background: #fff;
+  background: rgb(var(--lt-c-ffffff, 255 255 255));
   image-rendering: pixelated;
 }
 
 .lt-network-address-value {
-  color: #57f1db;
+  color: var(--lt-accent);
   font: 700 1.35rem/1.1 "Space Grotesk", sans-serif;
   font-variant-numeric: tabular-nums;
   user-select: all;
@@ -239,7 +239,7 @@
 
 .lt-network-heading {
   margin: 0;
-  color: rgb(186 202 197 / 0.75);
+  color: rgb(var(--lt-c-bacac5, 186 202 197) / 0.75);
   font: 700 10px/1 "Space Grotesk", sans-serif;
   letter-spacing: 0.14em;
   text-transform: uppercase;
@@ -259,9 +259,9 @@
   align-items: center;
   gap: 0.6rem;
   padding: 0.5rem 0.6rem;
-  border: 1px solid rgb(255 255 255 / 0.05);
+  border: 1px solid rgb(var(--lt-c-ffffff, 255 255 255) / 0.05);
   border-radius: 2px;
-  background: rgb(255 255 255 / 0.03);
+  background: rgb(var(--lt-c-ffffff, 255 255 255) / 0.03);
 }
 
 .lt-network-row-name {
@@ -274,7 +274,7 @@
 }
 
 .lt-network-row-name small {
-  color: rgb(214 226 224 / 0.6);
+  color: rgb(var(--lt-c-d6e2e0, 214 226 224) / 0.6);
 }
 
 .lt-network-joined {
@@ -288,7 +288,7 @@
   height: 8px;
   margin-right: 8px;
   border-radius: 50%;
-  background: #57f1db;
+  background: var(--lt-accent);
   animation: lt-network-pulse 1.2s ease-in-out infinite;
 }
 
@@ -303,14 +303,14 @@
 }
 
 .lt-network-warning {
-  color: #ffc400;
+  color: rgb(var(--lt-c-ffc400, 255 196 0));
 }
 
 .lt-network-hints {
   padding: 0.6rem 0.8rem;
-  border: 1px solid rgb(255 196 0 / 0.25);
+  border: 1px solid rgb(var(--lt-c-ffc400, 255 196 0) / 0.25);
   border-radius: 2px;
-  background: rgb(255 196 0 / 0.07);
+  background: rgb(var(--lt-c-ffc400, 255 196 0) / 0.07);
   font-size: 0.85rem;
 }
 
@@ -335,9 +335,9 @@
   align-items: center;
   gap: 4px;
   padding: 2px 10px;
-  border: 1px solid rgb(255 255 255 / 0.18);
+  border: 1px solid rgb(var(--lt-c-ffffff, 255 255 255) / 0.18);
   border-radius: 2px;
-  background: rgb(255 255 255 / 0.06);
+  background: rgb(var(--lt-c-ffffff, 255 255 255) / 0.06);
   color: inherit;
   font: 600 10px/1.6 "Space Grotesk", sans-serif;
   letter-spacing: 0.08em;
@@ -351,13 +351,13 @@
 }
 
 .lt-network-badge.is-pending {
-  border-color: rgb(255 196 0 / 0.5);
+  border-color: rgb(var(--lt-c-ffc400, 255 196 0) / 0.5);
 }
 
 .lt-network-badge.is-error {
-  border-color: rgb(255 92 92 / 0.6);
-  background: rgb(255 92 92 / 0.16);
-  color: #ffb0b0;
+  border-color: rgb(var(--lt-c-ff5c5c, 255 92 92) / 0.6);
+  background: rgb(var(--lt-c-ff5c5c, 255 92 92) / 0.16);
+  color: rgb(var(--lt-c-ffb0b0, 255 176 176));
 }
 
 /* ── Personal chords bar (guest, inside the lyrics panel) ────────────── */
@@ -368,8 +368,8 @@
   gap: 0.75rem;
   flex-wrap: wrap;
   padding: 0.4rem 0.75rem;
-  border-bottom: 1px solid rgb(255 255 255 / 0.06);
-  background: rgb(87 241 219 / 0.04);
+  border-bottom: 1px solid rgb(var(--lt-c-ffffff, 255 255 255) / 0.06);
+  background: rgb(var(--lt-accent-rgb) / 0.04);
 }
 
 .lt-personal-chords-stepper {
@@ -379,7 +379,7 @@
 }
 
 .lt-personal-chords-label {
-  color: rgb(186 202 197 / 0.7);
+  color: rgb(var(--lt-c-bacac5, 186 202 197) / 0.7);
   font: 700 9px/1 "Space Grotesk", sans-serif;
   letter-spacing: 0.14em;
   text-transform: uppercase;
@@ -388,10 +388,10 @@
 .lt-personal-chords-stepper button {
   width: 1.9rem;
   height: 1.9rem;
-  border: 1px solid rgb(255 255 255 / 0.12);
+  border: 1px solid rgb(var(--lt-c-ffffff, 255 255 255) / 0.12);
   border-radius: 2px;
-  background: rgb(255 255 255 / 0.04);
-  color: #e5e2e1;
+  background: rgb(var(--lt-c-ffffff, 255 255 255) / 0.04);
+  color: rgb(var(--lt-c-e5e2e1, 229 226 225));
   font: 700 14px/1 "Space Grotesk", sans-serif;
   cursor: pointer;
 }
@@ -403,7 +403,7 @@
 
 .lt-personal-chords-stepper output {
   min-width: 2.2ch;
-  color: #57f1db;
+  color: var(--lt-accent);
   font: 700 0.95rem/1 "Space Grotesk", sans-serif;
   font-variant-numeric: tabular-nums;
   text-align: center;
@@ -427,16 +427,16 @@
   width: 0.5rem;
   height: 0.5rem;
   border-radius: 50%;
-  background: #57f1db;
-  box-shadow: 0 0 0 2px #0e0e0e;
+  background: var(--lt-accent);
+  box-shadow: 0 0 0 2px rgb(var(--lt-c-0e0e0e, 14 14 14));
 }
 
 .lt-network-nav-dot.is-pending {
-  background: #ffc400;
+  background: rgb(var(--lt-c-ffc400, 255 196 0));
 }
 
 .lt-network-nav-dot.is-error {
-  background: #ff6b6b;
+  background: rgb(var(--lt-c-ff6b6b, 255 107 107));
 }
 
 /* Phones and tablets: the topbar has no room for the pill and it ended up

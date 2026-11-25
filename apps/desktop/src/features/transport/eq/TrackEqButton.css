@@ -32,12 +32,12 @@
 }
 
 .lt-compact-mixer-toggle.is-eq.is-active {
-  background: rgb(87 241 219 / 0.85);
-  border-color: rgb(87 241 219 / 0.85);
-  color: #0e0e0e;
+  background: rgb(var(--lt-accent-rgb) / 0.85);
+  border-color: rgb(var(--lt-accent-rgb) / 0.85);
+  color: rgb(var(--lt-c-0e0e0e, 14 14 14));
 }
 
 .lt-mobile-selection-action.lt-track-eq-button.is-active {
-  color: #57f1db;
-  border-color: rgb(87 241 219 / 0.6);
+  color: var(--lt-accent);
+  border-color: rgb(var(--lt-accent-rgb) / 0.6);
 }

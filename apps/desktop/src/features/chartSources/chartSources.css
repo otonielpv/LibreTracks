@@ -66,7 +66,7 @@
   align-items: center;
   gap: 8px;
   min-height: 44px;
-  border-bottom: 1px solid var(--lt-border, rgba(255, 255, 255, 0.08));
+  border-bottom: 1px solid var(--lt-border, rgb(var(--lt-c-ffffff, 255 255 255) / 0.08));
 }
 
 /* Column names over the rows: the song's markers and the sheet's sections. */
@@ -104,15 +104,15 @@
 }
 
 .lt-chart-import-badge.is-medium {
-  color: var(--lt-warning, #e0a43a);
+  color: var(--lt-warning, rgb(var(--lt-c-e0a43a, 224 164 58)));
 }
 
 .lt-chart-import-badge.is-low {
-  color: var(--lt-danger, #e5534b);
+  color: var(--lt-danger, rgb(var(--lt-c-e5534b, 229 83 75)));
 }
 
 .lt-chart-import-warning {
-  color: var(--lt-warning, #e0a43a);
+  color: var(--lt-warning, rgb(var(--lt-c-e0a43a, 224 164 58)));
 }
 
 .lt-chart-import-key {
@@ -176,9 +176,9 @@
 .lt-chart-import-search input,
 .lt-plan-import-field select {
   border-radius: 2px;
-  border: 1px solid rgb(87 241 219 / 0.18);
-  background: rgb(28 31 32 / 0.98);
-  color: #f3f0ef;
+  border: 1px solid rgb(var(--lt-accent-rgb) / 0.18);
+  background: rgb(var(--lt-c-1c1f20, 28 31 32) / 0.98);
+  color: rgb(var(--lt-c-f3f0ef, 243 240 239));
   padding: 0.45rem 0.6rem;
   font: 500 0.85rem/1.2 "Space Grotesk", sans-serif;
 }
@@ -186,15 +186,15 @@
 .lt-chart-import-search input:focus,
 .lt-plan-import-field select:focus {
   outline: none;
-  border-color: rgb(87 241 219 / 0.5);
+  border-color: rgb(var(--lt-accent-rgb) / 0.5);
 }
 
 .lt-chart-import-search button,
 .lt-chart-import-connect button {
   border-radius: 2px;
-  border: 1px solid rgb(87 241 219 / 0.24);
-  background: rgb(87 241 219 / 0.1);
-  color: #57f1db;
+  border: 1px solid rgb(var(--lt-accent-rgb) / 0.24);
+  background: rgb(var(--lt-accent-rgb) / 0.1);
+  color: var(--lt-accent);
   padding: 0.5rem 0.9rem;
   font: 700 0.78rem/1 "Space Grotesk", sans-serif;
   cursor: pointer;
@@ -211,25 +211,25 @@
   margin: 0;
   padding: 0.5rem 0.75rem;
   border: 0;
-  border-bottom: 1px solid rgb(255 255 255 / 0.06);
+  border-bottom: 1px solid rgb(var(--lt-c-ffffff, 255 255 255) / 0.06);
   border-radius: 0;
   background: none;
-  color: #f3f0ef;
+  color: rgb(var(--lt-c-f3f0ef, 243 240 239));
   font: 500 0.88rem/1.25 "Space Grotesk", sans-serif;
   cursor: pointer;
 }
 
 .lt-chart-import-list > li > button:hover,
 .lt-chart-import-arrangements button:not(:disabled):hover {
-  background: rgb(87 241 219 / 0.08);
+  background: rgb(var(--lt-accent-rgb) / 0.08);
 }
 
 .lt-chart-import-list > li > button.is-active {
-  color: #57f1db;
+  color: var(--lt-accent);
 }
 
 .lt-chart-import-list > li > button span {
-  color: rgb(229 226 225 / 0.6);
+  color: rgb(var(--lt-c-e5e2e1, 229 226 225) / 0.6);
   font-size: 0.8rem;
 }
 
@@ -239,13 +239,13 @@
 }
 
 .lt-plan-import-field {
-  color: rgb(229 226 225 / 0.7);
+  color: rgb(var(--lt-c-e5e2e1, 229 226 225) / 0.7);
   font: 600 0.75rem/1.2 "Space Grotesk", sans-serif;
 }
 
 .lt-chart-import-legend {
   margin: 0;
-  color: rgb(229 226 225 / 0.6);
+  color: rgb(var(--lt-c-e5e2e1, 229 226 225) / 0.6);
   font: 500 0.76rem/1.4 "Space Grotesk", sans-serif;
 }
 
@@ -253,9 +253,9 @@
   margin-right: 0.5rem;
   min-height: 30px;
   border-radius: 2px;
-  border: 1px solid rgb(87 241 219 / 0.18);
-  background: rgb(28 31 32 / 0.98);
-  color: #57f1db;
+  border: 1px solid rgb(var(--lt-accent-rgb) / 0.18);
+  background: rgb(var(--lt-c-1c1f20, 28 31 32) / 0.98);
+  color: var(--lt-accent);
   font: 700 0.75rem/1 "Space Grotesk", sans-serif;
 }
 
@@ -266,9 +266,9 @@
 
 .lt-pco-save-input {
   border-radius: 2px;
-  border: 1px solid rgb(87 241 219 / 0.18);
-  background: rgb(28 31 32 / 0.98);
-  color: #f3f0ef;
+  border: 1px solid rgb(var(--lt-accent-rgb) / 0.18);
+  background: rgb(var(--lt-c-1c1f20, 28 31 32) / 0.98);
+  color: rgb(var(--lt-c-f3f0ef, 243 240 239));
   padding: 0.45rem 0.6rem;
   font: 500 0.85rem/1.2 "Space Grotesk", sans-serif;
   min-height: 40px;
@@ -310,6 +310,6 @@
 .lt-pco-save-repeats legend {
   padding: 0;
   margin-bottom: 4px;
-  color: rgb(229 226 225 / 0.7);
+  color: rgb(var(--lt-c-e5e2e1, 229 226 225) / 0.7);
   font: 600 0.75rem/1.2 "Space Grotesk", sans-serif;
 }

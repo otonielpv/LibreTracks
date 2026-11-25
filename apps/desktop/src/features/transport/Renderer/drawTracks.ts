@@ -1,3 +1,4 @@
+import { accentRgba, themedHex, themedHexColor, themedRgb, themedRgba } from "../../../shared/theme";
 import type { SongView, VideoAssetSummary, WaveformSummaryDto } from "../desktopApi";
 import { getPendingClipLabel, type TimelineClipSummary, type TimelineTrackSummary } from "../library/pendingAudioImports";
 import { clipDisplayName } from "../helpers";
@@ -129,8 +130,9 @@ function getSongDrawIndex(song: SongView): SongDrawIndex {
 
 /** The flat colour the track area is painted with, and the backdrop that
  * anything wanting to mask the grid must blend against. */
-const TRACK_BACKDROP_RGB = [14, 14, 14] as const;
-const TRACK_BACKDROP = `rgb(${TRACK_BACKDROP_RGB[0]}, ${TRACK_BACKDROP_RGB[1]}, ${TRACK_BACKDROP_RGB[2]})`;
+// Es el #0e0e0e del diseño oscuro pasado al tema actual.
+const trackBackdropRgb = () => themedRgb(14, 14, 14);
+const trackBackdrop = () => themedRgba(14, 14, 14);
 
 /** How much of its own colour the folder band keeps. The band is the track
  * colour darkened towards black — NOT mixed with grey. Mixing a hue with grey
@@ -205,11 +207,12 @@ function parseHexRgb(hex: string): [number, number, number] | null {
 function blendOnTrackBackdrop(hex: string, alpha: number): string {
   const top = parseHexRgb(hex);
   if (!top) {
-    return TRACK_BACKDROP;
+    return trackBackdrop();
   }
-  const mix = (channel: number, under: number) =>
-    Math.round(channel * alpha + under * (1 - alpha));
-  return `rgb(${mix(top[0], TRACK_BACKDROP_RGB[0])}, ${mix(top[1], TRACK_BACKDROP_RGB[1])}, ${mix(top[2], TRACK_BACKDROP_RGB[2])})`;
+  const under = trackBackdropRgb();
+  const mix = (channel: number, backdrop: number) =>
+    Math.round(channel * alpha + backdrop * (1 - alpha));
+  return `rgb(${mix(top[0], under[0])}, ${mix(top[1], under[1])}, ${mix(top[2], under[2])})`;
 }
 
 /** Scale `hex` towards black by `factor`, returning an OPAQUE colour. Unlike
@@ -218,7 +221,7 @@ function blendOnTrackBackdrop(hex: string, alpha: number): string {
 function darken(hex: string, factor: number): string {
   const rgb = parseHexRgb(hex);
   if (!rgb) {
-    return TRACK_BACKDROP;
+    return trackBackdrop();
   }
   const scale = (channel: number) =>
     Math.max(0, Math.min(255, Math.round(channel * factor)));
@@ -229,7 +232,7 @@ export function drawTrackCanvasBackground(
   context: CanvasRenderingContext2D,
   snapshot: TrackSceneSnapshot,
 ) {
-  context.fillStyle = TRACK_BACKDROP;
+  context.fillStyle = trackBackdrop();
   context.fillRect(0, 0, snapshot.width, snapshot.height);
 }
 
@@ -249,7 +252,7 @@ function drawFolderBandGridHint(
   }
 
   context.save();
-  context.strokeStyle = "rgba(255, 255, 255, 0.07)";
+  context.strokeStyle = themedRgba(255, 255, 255, 0.07);
   context.lineWidth = 1;
   context.beginPath();
   for (const seconds of bars) {
@@ -308,7 +311,7 @@ function drawWaveformPlaceholder(
   context.clip();
 
   // Solid background
-  context.fillStyle = "rgba(229, 226, 225, 0.12)";
+  context.fillStyle = themedRgba(229, 226, 225, 0.12);
   context.fillRect(left, top, width, height);
 
   if (showLabel && width >= PLACEHOLDER_LABEL_MIN_WIDTH_PX) {
@@ -515,14 +518,14 @@ export function drawAutomationLane(
 
     const strokeStyle = cue.enabled
       ? "rgba(255, 122, 182, 0.95)"
-      : "rgba(186, 202, 197, 0.45)";
+      : themedRgba(186, 202, 197, 0.45);
     // Opaque fills: the diamond and the label pill sit over the full-strength
     // timeline grid, and a translucent body let those lines read straight
     // through the cue text.
     const fillStyle = cue.enabled
       ? blendOnTrackBackdrop("#ff7ab6", 0.22)
-      : blendOnTrackBackdrop("#bacac5", 0.12);
-    const textStyle = cue.enabled ? "#ffb3d8" : "rgba(186, 202, 197, 0.75)";
+      : blendOnTrackBackdrop(themedHexColor("#bacac5"), 0.12);
+    const textStyle = cue.enabled ? "#ffb3d8" : themedRgba(186, 202, 197, 0.75);
 
     drawLeadTail(
       context,
@@ -821,7 +824,7 @@ export function drawTrackClipsLayer(
       // the hue and only drops the brightness.
       context.fillStyle = track.color
         ? darken(track.color, FOLDER_BAND_DARKEN)
-        : blendOnTrackBackdrop("#201f1f", 0.5);
+        : blendOnTrackBackdrop(themedHexColor("#201f1f"), 0.5);
       context.fillRect(0, trackTop, snapshot.width, rowHeight);
 
       // Faint bar lines back on top. The band masks the full-strength grid
@@ -855,8 +858,8 @@ export function drawTrackClipsLayer(
       // text only needs to out-contrast the band itself. The band now carries
       // the folder's colour, so the caption is near white — tinting it with the
       // colour too left it barely readable against its own background.
-      const nameColor = track.color ? "rgba(255, 255, 255, 0.92)" : "#bacac5";
-      const countColor = track.color ? "rgba(255, 255, 255, 0.62)" : "#8a9a95";
+      const nameColor = track.color ? "rgba(255, 255, 255, 0.92)" : themedHex("#bacac5");
+      const countColor = track.color ? "rgba(255, 255, 255, 0.62)" : themedHex("#8a9a95");
 
       // Budget the caption against the lane, not the canvas: at low zoom the
       // name would otherwise run the full width and read as a clip.
@@ -955,7 +958,7 @@ export function drawTrackClipsLayer(
 
       context.fillStyle = clip.color ?? track.color ?? "rgba(210, 212, 209, 0.92)";
       context.strokeStyle =
-        isSelected ? "rgba(87, 241, 219, 0.9)" : "rgba(12, 12, 12, 0.28)";
+        isSelected ? accentRgba(0.9) : "rgba(12, 12, 12, 0.28)";
       context.lineWidth = isSelected ? 1.5 : 1;
       context.beginPath();
       context.roundRect(clippedLeft, clipTop, visibleWidth, clipHeight, 2);
@@ -1186,7 +1189,7 @@ export function drawTrackClipsLayer(
     }
   }
 
-  context.strokeStyle = "rgba(229, 226, 225, 0.05)";
+  context.strokeStyle = themedRgba(229, 226, 225, 0.05);
   context.lineWidth = 1;
   for (let index = visibleTrackStart + 1; index <= visibleTrackEnd; index += 1) {
     const y =

@@ -1,3 +1,4 @@
+import { themedHex, themedRgba } from "../../../shared/theme";
 import type { SongView, VideoClipSummary } from "../desktopApi";
 import { secondsToScreenX } from "../timeline/timelineMath";
 import {
@@ -136,7 +137,7 @@ export function drawVideoLane(
     context.beginPath();
     context.roundRect(left, top, width, height, 3);
     context.clip();
-    context.fillStyle = "#101418";
+    context.fillStyle = themedHex("#101418");
     context.fillRect(left, top, width, height);
 
     // Thumbnails, or a neutral stripe pattern until they arrive.
@@ -166,7 +167,7 @@ export function drawVideoLane(
         }
       }
     } else if (imageHeight > 4) {
-      context.strokeStyle = "rgba(255, 255, 255, 0.06)";
+      context.strokeStyle = themedRgba(255, 255, 255, 0.06);
       context.lineWidth = 6;
       const step = 14;
       const firstX = left - ((left % step) + step) % step - imageHeight;
@@ -211,7 +212,7 @@ export function drawVideoLane(
     const textLeft = Math.max(left, 0) + 5;
     const available = right - textLeft - 4;
     if (available > 12) {
-      context.fillStyle = "#07120f";
+      context.fillStyle = themedHex("#07120f");
       context.save();
       context.beginPath();
       context.rect(textLeft, top, available, labelHeight);

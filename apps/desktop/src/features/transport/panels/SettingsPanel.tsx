@@ -14,6 +14,7 @@ import { PlaybackSettingsFields } from "./PlaybackSettingsFields";
 import { SettingsTabSection } from "./SettingsTabSection";
 import { SettingsTabNav, settingsGroupLabel, type SettingsTabItem } from "./SettingsTabNav";
 import { GeneralSettingsTab } from "./GeneralSettingsTab";
+import { ThemeSettingsTab } from "./ThemeSettingsTab";
 import { TimelineSettingsTab } from "./TimelineSettingsTab";
 import { EditingSettingsTab } from "./EditingSettingsTab";
 import { StorageSettingsTab } from "./StorageSettingsTab";
@@ -633,6 +634,8 @@ export function SettingsPanel({
                   disabled={isLoading || isSaving}
                 />
               ) : null}
+
+              {activeTab === "theme" ? <ThemeSettingsTab /> : null}
 
               {activeTab === "timeline" ? (
                 <TimelineSettingsTab

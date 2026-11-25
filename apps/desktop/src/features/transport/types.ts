@@ -168,6 +168,7 @@ export type SettingsTab =
   | "audio"
   | "midi"
   | "general"
+  | "theme"
   | "timeline"
   | "playback"
   | "editing"

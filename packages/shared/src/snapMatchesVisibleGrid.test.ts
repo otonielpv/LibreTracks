@@ -4,6 +4,8 @@ import {
   buildVisibleTimelineGrid,
   snapToTimelineGrid,
   timelineGridResolution,
+  timelineBarLineStep,
+  MIN_BAR_GRID_PIXELS,
 } from "./timelineMath";
 
 /**
@@ -80,5 +82,26 @@ describe("el snap respeta la rejilla visible", () => {
     // Llamadas antiguas sin pixeles por segundo fiables: comportamiento previo.
     expect(snapToTimelineGrid(1.4, BPM, SIG, 7, 0)).toBeCloseTo(1.5, 6);
     expect(snapToTimelineGrid(1.4, BPM, SIG, 7, Number.NaN)).toBeCloseTo(1.5, 6);
+  });
+});
+
+describe("aclarado de lineas de compas al alejar", () => {
+  it("dibuja cada compas mientras quedan separados", () => {
+    // 2 s por compas a 126 px/s = 252 px.
+    expect(gridAt(126).barLineStep).toBe(1);
+  });
+
+  it("salta compases cuando quedarian a menos de MIN_BAR_GRID_PIXELS", () => {
+    // 2 s por compas a 2 px/s = 4 px: hace falta paso 4 para llegar a 12 px.
+    expect(timelineBarLineStep(4)).toBe(4);
+    expect(gridAt(2).barLineStep).toBe(4);
+    expect(timelineBarLineStep(MIN_BAR_GRID_PIXELS)).toBe(1);
+    expect(timelineBarLineStep(MIN_BAR_GRID_PIXELS - 0.1)).toBe(2);
+  });
+
+  it("da el numero de compas de cada linea para filtrar sin bailar al desplazar", () => {
+    const grid = gridAt(126);
+    expect(grid.barNumbers).toHaveLength(grid.bars.length);
+    expect(grid.barNumbers?.slice(0, 3)).toEqual([1, 2, 3]);
   });
 });

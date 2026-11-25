@@ -12,6 +12,7 @@ export function allSettingsTabs(
 ): Array<{ id: SettingsTab; label: string; group?: SettingsTabGroup }> {
   return [
     { id: "general", group: "general", label: t("transport.settingsModal.tabInterface", { defaultValue: "Interface" }) },
+    { id: "theme", group: "general", label: t("transport.settingsModal.tabTheme", { defaultValue: "Theme" }) },
     { id: "timeline", group: "general", label: t("transport.settingsModal.tabTimeline", { defaultValue: "Timeline" }) },
     { id: "playback", group: "general", label: t("transport.settingsModal.tabPlayback", { defaultValue: "Playback" }) },
     { id: "editing", group: "general", label: t("transport.settingsModal.tabEditing", { defaultValue: "Editing" }) },
