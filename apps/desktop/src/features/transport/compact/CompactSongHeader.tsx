@@ -20,6 +20,7 @@ import { ArrangementBadge } from "../structure/ArrangementBadge";
 import { KeySequenceLabel } from "../keyChanges/SoundingKeyLabel";
 import { openStructureEditor } from "../structure/structureEditor";
 import {
+  formatBpm,
   regionEffectiveKey,
   SONG_KEY_OPTIONS,
   type SongRegionSummary,
@@ -242,7 +243,7 @@ export function CompactSongHeaderComponent({
             className="lt-compact-song-bpm"
             title={t("compactView.bpmTitle")}
           >
-            {bpm.toFixed(bpm % 1 === 0 ? 0 : 2)} BPM
+            {formatBpm(bpm)} BPM
           </div>
         ) : null}
         {regionEffectiveKey(region) ? (

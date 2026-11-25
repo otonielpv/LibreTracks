@@ -8785,6 +8785,13 @@ body.lt-song-reordering .lt-compact-column-resize-slot {
   align-items: center;
   gap: 0.4rem;
   min-width: 0;
+  /* Same height as a cover (.lt-song-cover), so songs without a picture
+     line up with the ones that have one. */
+  min-height: 2.5rem;
+}
+
+.lt-mobile .lt-compact-song-name-row {
+  min-height: 1.75rem;
 }
 
 .lt-compact-song-name {

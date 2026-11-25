@@ -44,7 +44,7 @@ function rowProps(overrides: Partial<RowProps> = {}): RowProps {
     selectedRegionId: null,
     activeRegionId: null,
     pendingRegionId: null,
-    bpmByRegion: { a: 72, b: 128, c: 90 },
+    bpmByRegion: { a: 72, b: 128, c: 67.5 },
     layout: "wide",
     positionSecondsRef: { current: 0 },
     transitionMode: "instant",
@@ -120,6 +120,8 @@ describe("SetlistSongRow content", () => {
       expect(first.getByText("72 BPM")).toBeTruthy();
       expect(first.getByText("1:40")).toBeTruthy();
       expect(within(cards[1]).getByText("2:00")).toBeTruthy();
+      // A fractional tempo is shown as is, never rounded (67.5, not 68).
+      expect(within(cards[2]).getByText("67.5 BPM")).toBeTruthy();
     },
   );
 

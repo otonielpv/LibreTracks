@@ -16,6 +16,7 @@ import { useNetworkPermissions } from "../../network/useNetworkPermissions";
 import { appliedArrangementName } from "../structure/arrangementName";
 
 import {
+  formatBpm,
   getEffectiveBpmAt,
   markerColor,
   type AppSettings,
@@ -391,7 +392,7 @@ function LivePerformanceViewComponent({
           <div><small>{t("liveView.title")}</small><strong>{currentRegion?.name ?? song.title}</strong></div>
         </div>
         <div className="lt-live-song-metrics">
-          <span>{currentRegion ? `${getEffectiveBpmAt(song, currentRegion.startSeconds).toFixed(0)} BPM` : `${song.bpm.toFixed(0)} BPM`}</span>
+          <span>{currentRegion ? `${formatBpm(getEffectiveBpmAt(song, currentRegion.startSeconds))} BPM` : `${formatBpm(song.bpm)} BPM`}</span>
           <SoundingKeyLabel region={currentRegion} />
         </div>
         <div className="lt-live-song-progress">
