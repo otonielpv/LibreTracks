@@ -885,6 +885,10 @@ fn resolve_song_regions(song: &Song) -> Result<Vec<ResolvedSongRegion>, AudioEng
         if boundary_seconds <= start_seconds {
             if let Some(next_time_signature) = boundary_time_signature {
                 time_signature = next_time_signature;
+                // A second marker at the same spot: the bar still restarts.
+                if start_seconds > 0.0 {
+                    cumulative_bars_start = bar_count_at_timing_boundary(cumulative_bars_start);
+                }
             }
             continue;
         }
@@ -901,6 +905,11 @@ fn resolve_song_regions(song: &Song) -> Result<Vec<ResolvedSongRegion>, AudioEng
         start_seconds = boundary_seconds;
         if let Some(next_time_signature) = boundary_time_signature {
             time_signature = next_time_signature;
+            // A time signature marker starts a bar, as the metronome and the
+            // timeline grid do (`barCountAtTimingBoundary` in
+            // packages/shared/src/timelineMath.ts, `bar_count_at_timing_boundary`
+            // in models/view.rs). A tempo marker alone keeps the phase going.
+            cumulative_bars_start = bar_count_at_timing_boundary(cumulative_bars_start);
         }
     }
 
@@ -955,7 +964,9 @@ fn cumulative_bar_start_seconds(
     resolved_regions: &[ResolvedSongRegion],
     target_bar_index: usize,
 ) -> f64 {
-    for region in resolved_regions {
+    // Latest region first: a bar line on a time signature marker belongs to
+    // the region it starts, not to the sliver before it.
+    for region in resolved_regions.iter().rev() {
         let local_bar_index = target_bar_index as f64 - region.cumulative_bars_start;
         let start_seconds = region.seconds_after_bars(local_bar_index);
         if local_bar_index >= -f64::EPSILON && start_seconds <= region.end_seconds + f64::EPSILON {
@@ -967,6 +978,21 @@ fn cumulative_bar_start_seconds(
         .last()
         .map(|region| region.end_seconds)
         .unwrap_or(0.0)
+}
+
+/// How far (in bars) a time signature marker may sit from a bar line and still
+/// be on it: markers placed from audio land a few ms off the rounded grid.
+const BAR_BOUNDARY_TOLERANCE: f64 = 0.02;
+
+/// Bar count at a time signature marker: the next whole bar, unless already
+/// within the tolerance of one.
+fn bar_count_at_timing_boundary(cumulative_bars: f64) -> f64 {
+    let nearest = cumulative_bars.round();
+    if (cumulative_bars - nearest).abs() <= BAR_BOUNDARY_TOLERANCE {
+        nearest
+    } else {
+        (cumulative_bars - 1.0e-9).ceil()
+    }
 }
 
 fn quarters_per_bar(time_signature: &str) -> Result<f64, AudioEngineError> {
@@ -1920,6 +1946,52 @@ mod tests {
             .expect("jump should remain pending");
 
         assert!((scheduled.execute_at_seconds - 7.0).abs() < 0.0001);
+    }
+
+    #[test]
+    fn jump_after_bars_restarts_the_bar_at_an_off_grid_time_signature_marker() {
+        // 120 bpm 4/4 = 2 s per bar. A 4/4 marker at 5 s sits mid-bar (bar
+        // 2.5): the metronome and the grid restart the bar there, so the bar
+        // lines after it are 5, 7, 9, 11 and the jump must land on one.
+        let mut song = demo_song();
+        song.bpm = 120.0;
+        song.duration_seconds = 14.0;
+        song.time_signature = "4/4".into();
+        song.time_signature_markers = vec![libretracks_core::TimeSignatureMarker {
+            id: "sig_restart".into(),
+            start_seconds: 5.0,
+            signature: "4/4".into(),
+        }];
+        song.section_markers = vec![Marker {
+            id: "section_target".into(),
+            name: "Target".into(),
+            start_seconds: 12.0,
+            digit: None,
+            kind: MarkerKind::Custom,
+            variant: None,
+            color: None,
+            category_override: None,
+        }];
+
+        let mut engine = AudioEngine::new();
+        engine.load_song(song).expect("song should load");
+        engine.seek(5.5).expect("seek should work");
+        engine.play().expect("play should work");
+
+        let scheduled = engine
+            .schedule_marker_jump(
+                "section_target",
+                JumpTrigger::AfterBars(2),
+                TransitionType::Instant,
+            )
+            .expect("jump should schedule")
+            .expect("jump should remain pending");
+
+        assert!(
+            (scheduled.execute_at_seconds - 9.0).abs() < 0.0001,
+            "got {}",
+            scheduled.execute_at_seconds
+        );
     }
 
     #[test]
