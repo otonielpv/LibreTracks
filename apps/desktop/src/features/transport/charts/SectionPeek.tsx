@@ -61,9 +61,6 @@ export function SectionPeek({ section, name }: { section: ChartSection; name: st
       >
         <span className="material-symbols-outlined" aria-hidden="true">visibility</span>
       </button>
-      <span className="lt-section-peek-first" title={lines[0] ?? undefined}>
-        {lines[0] ?? t("liveChart.peekEmpty")}
-      </span>
       {place ? (
         <span className="lt-section-peek-box" role="tooltip" style={place}>
           <span className="lt-section-peek-head">
