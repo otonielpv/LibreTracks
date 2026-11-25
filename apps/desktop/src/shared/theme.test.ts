@@ -64,7 +64,27 @@ describe("theme", () => {
   it("en tema claro el acento se oscurece para leerse sobre blanco", () => {
     const palette = buildThemePalette({ ...DEFAULT_THEME, base: "light" });
     expect(palette.light).toBe(true);
-    expect(luma(palette.accent)).toBeLessThanOrEqual(0.47);
+    expect(luma(palette.accent)).toBeLessThanOrEqual(0.49);
+    // Y no se apaga a marrón: el naranja sigue siendo un naranja saturado.
+    const orange = buildThemePalette({ ...DEFAULT_THEME, base: "light", accent: "orange" }).accent;
+    expect(orange[0] - orange[2]).toBeGreaterThan(150);
+  });
+
+  it("las bases claras conservan la separación entre pistas, paneles y regla", () => {
+    for (const base of ["light", "midLight"] as const) {
+      const theme = { ...DEFAULT_THEME, base };
+      const lanes = remapThemeRgb([14, 14, 14], theme)[0];
+      const panel = remapThemeRgb([32, 31, 31], theme)[0];
+      const ruler = remapThemeRgb([42, 42, 42], theme)[0];
+      expect(lanes - panel).toBeGreaterThanOrEqual(12);
+      expect(panel - ruler).toBeGreaterThanOrEqual(8);
+    }
+  });
+
+  it("un velo de color translúcido no se invierte en claro", () => {
+    setTheme({ base: "light" });
+    expect(themedRgba(255, 226, 171, 0.2)).toBe("rgba(255, 226, 171, 0.2)");
+    expect(themedRgba(255, 226, 171, 0.9)).not.toBe("rgba(255, 226, 171, 0.9)");
   });
 
   it("cambiar de tema reescribe las variables de la CSS y los colores del canvas", () => {

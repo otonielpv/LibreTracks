@@ -521,7 +521,7 @@ export function drawRulerRegion(
   // the ruler's grid show through the song name. Pre-blending against the
   // backdrop keeps the familiar warm tint while masking whatever is behind.
   context.fillStyle = blendOnRulerBackdrop(
-    themedHexColor("#ffe2ab"),
+    "#ffe2ab",
     isSelected ? 0.34 : 0.2,
   );
   context.strokeStyle = isSelected
@@ -667,7 +667,7 @@ export function drawRulerMarker(
   const fillStyle = options.isArmed
     ? accentRgba(0.22 + options.pulseAlpha * 0.22)
     : options.isSelected
-      ? blendOnRulerBackdrop(themedHexColor("#ffe2ab"), 0.26)
+      ? blendOnRulerBackdrop("#ffe2ab", 0.26)
       : options.isCurrent
         ? blendOnRulerBackdrop(themedHexColor("#e5e2e1"), 0.24)
         : blendOnRulerBackdrop(kindColor, 0.24);
@@ -844,7 +844,7 @@ export function drawRulerTempoMarker(
   // Opaque, for the same reason as the section flags: a translucent body let
   // the grid lines show through the number.
   context.fillStyle = overrideLabel
-    ? blendOnRulerBackdrop(themedHexColor("#ffb86b"), isSelected ? 0.42 : 0.24)
+    ? blendOnRulerBackdrop("#ffb86b", isSelected ? 0.42 : 0.24)
     : blendOnRulerBackdrop(accentHex(), isSelected ? 0.42 : 0.24);
   context.lineWidth = isSelected ? 1.8 : 1.2;
   context.beginPath();

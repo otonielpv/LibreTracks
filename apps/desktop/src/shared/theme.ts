@@ -47,8 +47,13 @@ export const THEME_BASES: readonly ThemeBase[] = [
   { id: "dark", defaultLabel: "Dark (default)", curve: [0, 0.16, 0.6, 1] },
   { id: "deep", defaultLabel: "Deep dark", curve: [0, 0.1, 0.58, 1] },
   { id: "midDark", defaultLabel: "Mid dark", curve: [0.15, 0.27, 0.68, 1] },
-  { id: "midLight", defaultLabel: "Mid light", curve: [0.8, 0.7, 0.24, 0.08] },
-  { id: "light", defaultLabel: "Light", curve: [0.975, 0.89, 0.34, 0.1] },
+  // Las claras no llegan al blanco: con clips saturados encima, un fondo casi
+  // blanco deslumbra y se ve barato (Live tampoco lo hace). El fondo más hondo
+  // del diseño (pistas) queda algo más claro que los paneles.
+  // Entre 0 y 0.16 la pendiente es ~1 para conservar la separación entre
+  // pistas, fondo, paneles y regla que tiene el diseño oscuro.
+  { id: "midLight", defaultLabel: "Mid light", curve: [0.76, 0.6, 0.17, 0.03] },
+  { id: "light", defaultLabel: "Light", curve: [0.93, 0.77, 0.3, 0.08] },
 ];
 
 const CURVE_X = [0, 0.16, 0.6, 1] as const;
@@ -274,12 +279,21 @@ function hslToRgb(h: number, s: number, l: number): Rgb {
 
 const luma = ([r, g, b]: Rgb) => (0.299 * r + 0.587 * g + 0.114 * b) / 255;
 
-/** Escala un color para que su luma no pase de `maxLuma` (acentos en claro). */
-function darkenTo(rgb: Rgb, maxLuma: number): Rgb {
-  const current = luma(rgb);
-  if (current <= maxLuma || current === 0) return rgb;
-  const factor = maxLuma / current;
-  return rgb.map((channel) => Math.round(channel * factor)) as unknown as Rgb;
+/** Acento para fondo claro: mismo tono, saturación contenida y la claridad
+ * que da la luma pedida. Se busca por luma y no por L de HSL porque a igual L
+ * un violeta o un azul se ven mucho más oscuros que un amarillo; y escalar el
+ * RGB, como antes, convertía el naranja en marrón. */
+function accentForLight(rgb: Rgb, targetLuma: number): Rgb {
+  const [h, s] = rgbToHsl(rgb);
+  const saturation = Math.min(0.95, Math.max(s, 0.65));
+  let low = 0;
+  let high = 1;
+  for (let step = 0; step < 20; step += 1) {
+    const mid = (low + high) / 2;
+    if (luma(hslToRgb(h, saturation, mid)) < targetLuma) low = mid;
+    else high = mid;
+  }
+  return hslToRgb(h, saturation, (low + high) / 2);
 }
 
 export type ThemePalette = {
@@ -298,10 +312,10 @@ export function buildThemePalette(settings: ThemeSettings): ThemePalette {
   // Sobre fondo claro el acento se usa como texto y como línea: hay que
   // oscurecerlo para que se lea, y el texto encima pasa a ser claro.
   return {
-    accent: darkenTo(accent.accent, 0.46),
-    accentStrong: darkenTo(accent.accentStrong, 0.38),
-    accentSoft: darkenTo(accent.accent, 0.3),
-    onAccent: [250, 250, 250],
+    accent: accentForLight(accent.accent, 0.47),
+    accentStrong: accentForLight(accent.accentStrong, 0.38),
+    accentSoft: accentForLight(accent.accent, 0.28),
+    onAccent: [255, 255, 255],
     light: true,
   };
 }
@@ -442,10 +456,20 @@ export function accentHex(): string {
   return themedColor("accent", 1, () => palette.accent, true);
 }
 
-/** Un gris/texto del diseño oscuro pasado al tema actual, como rgba(). */
+/** Un color del diseño oscuro pasado al tema actual, como rgba(). Igual que
+ * en la CSS (--lt-t-*), un color con tinte usado como velo (alfa <= 0.5) se
+ * deja como está: sobre fondo claro sigue leyéndose como un velo de ese color. */
 export function themedRgba(r: number, g: number, b: number, alpha = 1): string {
-  return themedColor(`${r},${g},${b}`, alpha, () => remapThemeRgb([r, g, b], current), false);
+  return themedColor(
+    `${r},${g},${b}`,
+    alpha,
+    () => (isTint([r, g, b], alpha) ? [r, g, b] : remapThemeRgb([r, g, b], current)),
+    false,
+  );
 }
+
+const isTint = ([r, g, b]: Rgb, alpha: number) =>
+  alpha <= 0.5 && Math.max(r, g, b) - Math.min(r, g, b) > NEUTRAL_MAX_CHROMA;
 
 /** Igual que themedRgba pero devuelve el triplete, para mezclar a mano. */
 export function themedRgb(r: number, g: number, b: number): Rgb {
