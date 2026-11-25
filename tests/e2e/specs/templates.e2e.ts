@@ -175,9 +175,9 @@ describe("Song templates (isolated sessions)", () => {
     "Way Maker - Keys",
     "Way Maker - Banjo",
   ];
-  const GUITARS = /^(Guitarras|Guitars)$/;
+  const GUITARS = /^(Guitarras eléctricas|Electric guitars)$/;
   const KEYS = /^(Teclados|Keys)$/;
-  const BAND_TARGETS = 9;
+  const BAND_TARGETS = 12;
 
   let workDir = "";
   let stemPaths: string[] = [];

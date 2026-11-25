@@ -91,6 +91,7 @@
     "rename_user_pad",
     "reopen_audio_output",
     "report_ui_render_metric",
+    "request_store_review",
     "reveal_error_log",
     "save_diagnostics_log",
     "save_drum_kit",

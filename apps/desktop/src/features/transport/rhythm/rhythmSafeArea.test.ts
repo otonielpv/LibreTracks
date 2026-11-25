@@ -3,7 +3,7 @@ import { resolve } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-const css = readFileSync(resolve(__dirname, "rhythm.css"), "utf8");
+const css = readFileSync(resolve(__dirname, "rhythm.css"), "utf8").replace(/\r\n/g, "\n");
 
 function rule(selector: string): string {
   const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
