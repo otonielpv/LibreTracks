@@ -1,6 +1,7 @@
 ---
 import SiteLayout from "../../layouts/SiteLayout.astro";
 import GithubReleases from "../../components/GithubReleases.astro";
+import StoreProof from "../../components/StoreProof.astro";
 ---
 
 <SiteLayout
@@ -15,5 +16,6 @@ import GithubReleases from "../../components/GithubReleases.astro";
       <p>Os instaladores vêm da API pública do GitHub Releases durante o build, então esta página sempre mostra a versão publicada mais recente. No celular e no tablet, o LibreTracks é instalado pelas lojas: App Store no iPhone e iPad, Google Play no Android. Os links estão abaixo dos instaladores. A interface do app está em inglês e espanhol.</p>
     </div>
     <GithubReleases lang="pt" />
+    <StoreProof lang="pt" embedded />
   </main>
 </SiteLayout>

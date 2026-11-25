@@ -1,0 +1,264 @@
+---
+/**
+ * Ratings, downloads and real reviews from the App Store and Google Play.
+ *
+ * Ratings (every star score) and reviews (scores with text) are separate on
+ * purpose: the big numbers count ratings, the quotes are reviews. The figures
+ * are rendered at build time from /api/store/stats so they are in the indexed
+ * HTML, then refreshed in the browser because the site is only redeployed at
+ * each release. See src/lib/storeStats.ts.
+ */
+import { loadStoreStats, pickQuotes, type StoreReview } from "../lib/storeStats";
+import { storeLinks } from "../lib/storeLinks";
+import "../styles/store-proof.css";
+
+interface Props {
+  lang: "en" | "es" | "pt";
+  /** How many review quotes to show. */
+  quotes?: number;
+  /** Inside a page that already has its own shell and band (the download page). */
+  embedded?: boolean;
+}
+
+const { lang, quotes = 12, embedded = false } = Astro.props;
+const stats = await loadStoreStats();
+const links = storeLinks(lang);
+const locale = lang === "es" ? "es-ES" : lang === "pt" ? "pt-BR" : "en-US";
+const number = new Intl.NumberFormat(locale, { useGrouping: "always" } as Intl.NumberFormatOptions);
+const decimal = new Intl.NumberFormat(locale, { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+const countries = new Intl.DisplayNames([locale], { type: "region" });
+const picked = pickQuotes(stats.reviews.items, lang, quotes);
+
+const L = (en: string, es: string, pt: string) => (lang === "es" ? es : lang === "pt" ? pt : en);
+const average = decimal.format(stats.ratings.average);
+
+const copy = {
+  eyebrow: L("Rated by musicians", "Valorada por músicos", "Avaliado por músicos"),
+  title: L(
+    `Rated ${average} out of 5 on the App Store and Google Play`,
+    `Valorada con ${average} sobre 5 en App Store y Google Play`,
+    `Nota ${average} de 5 na App Store e no Google Play`,
+  ),
+  ratings: L("ratings", "valoraciones", "avaliações"),
+  downloads: L("downloads", "descargas", "downloads"),
+  reviews: L("written reviews", "reseñas escritas", "avaliações escritas"),
+  storeRatings: (count: number) =>
+    `${number.format(count)} ${count === 1 ? L("rating", "valoración", "avaliação") : L("ratings", "valoraciones", "avaliações")}`,
+  inCountries: (count: number) =>
+    count > 1 ? L(`in ${count} countries`, `en ${count} países`, `em ${count} países`) : "",
+  playUser: L("Google Play user", "Usuario de Google Play", "Usuário do Google Play"),
+  starsLabel: (value: string) => L(`${value} out of 5 stars`, `${value} de 5 estrellas`, `${value} de 5 estrelas`),
+  note: L(
+    "Real ratings from both stores, added up across every country. Downloads are first installs from the App Store and Google Play plus desktop installer downloads from GitHub.",
+    "Valoraciones reales de las dos tiendas, sumando todos los países. Las descargas son primeras instalaciones en App Store y Google Play más las descargas del instalador de escritorio en GitHub.",
+    "Avaliações reais das duas lojas, somando todos os países. Os downloads são primeiras instalações na App Store e no Google Play mais os downloads do instalador para computador no GitHub.",
+  ),
+  seeOn: L("See on", "Ver en", "Ver na"),
+  reviewsLabel: L("Reviews from the stores", "Reseñas de las tiendas", "Avaliações das lojas"),
+  previous: L("Previous reviews", "Reseñas anteriores", "Avaliações anteriores"),
+  next: L("More reviews", "Más reseñas", "Mais avaliações"),
+};
+
+function source(review: StoreReview): string {
+  if (review.store === "play") return "Google Play";
+  const country = review.country ? countries.of(review.country) : undefined;
+  return country ? `App Store · ${country}` : "App Store";
+}
+
+const starPercent = (value: number) => `${Math.max(0, Math.min(100, (value / 5) * 100))}%`;
+---
+
+<section
+  class:list={["store-proof", { band: !embedded, "store-proof-embedded": embedded }]}
+  aria-labelledby="store-proof-title"
+  data-store-proof
+  data-locale={locale}
+>
+  <div class:list={{ "site-shell": !embedded }}>
+    <div class="section-heading store-proof-head">
+      <p class="eyebrow">{copy.eyebrow}</p>
+      <h2 id="store-proof-title">{copy.title}</h2>
+    </div>
+
+    <div class="store-proof-figures">
+      <div class="store-proof-figure store-proof-rating">
+        <span class="store-proof-value" data-stat="ratings.average" data-format="decimal">{average}</span>
+        <span class="store-proof-stars" role="img" aria-label={copy.starsLabel(average)}>
+          <span class="store-proof-stars-fill" style={`width: ${starPercent(stats.ratings.average)}`} data-stat-stars></span>
+        </span>
+        <span class="store-proof-label">
+          <b data-stat="ratings.count">{number.format(stats.ratings.count)}</b> {copy.ratings}
+        </span>
+      </div>
+
+      <div class="store-proof-figure">
+        <span class="store-proof-value" data-stat="downloads.total">{number.format(stats.downloads.total)}</span>
+        <span class="store-proof-label">{copy.downloads}</span>
+      </div>
+
+      <ul class="store-proof-stores">
+        <li>
+          <a href={links.appStore} target="_blank" rel="noopener noreferrer" aria-label={`${copy.seeOn} App Store`}>
+            <span class="store-proof-store">App Store</span>
+            <span class="store-proof-store-score">
+              <b data-stat="ratings.appstore.average" data-format="decimal">{decimal.format(stats.ratings.appstore.average)}</b> ★
+            </span>
+            <span class="store-proof-store-detail">
+              {copy.storeRatings(stats.ratings.appstore.count)} {copy.inCountries(stats.ratings.appstore.countries)}
+            </span>
+          </a>
+        </li>
+        <li>
+          <a href={links.googlePlay} target="_blank" rel="noopener noreferrer" aria-label={`${copy.seeOn} Google Play`}>
+            <span class="store-proof-store">Google Play</span>
+            <span class="store-proof-store-score">
+              <b data-stat="ratings.play.average" data-format="decimal">{decimal.format(stats.ratings.play.average)}</b> ★
+            </span>
+            <span class="store-proof-store-detail">{copy.storeRatings(stats.ratings.play.count)}</span>
+          </a>
+        </li>
+      </ul>
+    </div>
+
+    {picked.length > 0 && (
+      <div class="store-proof-carousel" data-carousel>
+      <ul class="store-proof-quotes" data-carousel-track tabindex="0" aria-label={copy.reviewsLabel}>
+        {picked.map((review) => (
+          <li>
+            <figure>
+              <span class="store-proof-stars store-proof-stars-small" role="img" aria-label={copy.starsLabel(String(review.rating))}>
+                <span class="store-proof-stars-fill" style={`width: ${starPercent(review.rating)}`}></span>
+              </span>
+              <blockquote lang={review.language ?? undefined}>
+                {review.title && <p class="store-proof-quote-title">{review.title}</p>}
+                <p>{review.text}</p>
+              </blockquote>
+              <figcaption>
+                <span class="store-proof-author">{review.author ?? copy.playUser}</span>
+                <span class="store-proof-source">{source(review)}</span>
+              </figcaption>
+            </figure>
+          </li>
+        ))}
+      </ul>
+        <div class="store-proof-carousel-nav">
+          <button type="button" class="store-proof-carousel-button" data-carousel-prev aria-label={copy.previous}>‹</button>
+          <button type="button" class="store-proof-carousel-button" data-carousel-next aria-label={copy.next}>›</button>
+        </div>
+      </div>
+    )}
+
+    <p class="store-proof-note">{copy.note}</p>
+  </div>
+</section>
+
+<script>
+  // The page is static and only redeployed at each release; refresh the
+  // figures from the Function so they follow the stores between releases.
+  type Stats = Record<string, unknown>;
+
+  const read = (stats: Stats, path: string): unknown =>
+    path.split(".").reduce<unknown>((value, key) => (value as Stats | undefined)?.[key], stats);
+
+  async function refresh() {
+    const sections = document.querySelectorAll<HTMLElement>("[data-store-proof]");
+    if (!sections.length) return;
+    try {
+      const response = await fetch("/api/store/stats");
+      if (!response.ok) return;
+      const stats = (await response.json()) as Stats;
+      for (const section of sections) {
+        const locale = section.dataset.locale ?? "en-US";
+        const integer = new Intl.NumberFormat(locale, { useGrouping: "always" } as Intl.NumberFormatOptions);
+        const decimal = new Intl.NumberFormat(locale, { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+        for (const node of section.querySelectorAll<HTMLElement>("[data-stat]")) {
+          const value = read(stats, node.dataset.stat!);
+          // A store that failed to answer reads as zero until its next
+          // refresh; keep the build-time figure then.
+          if (typeof value !== "number" || value <= 0) continue;
+          node.textContent = (node.dataset.format === "decimal" ? decimal : integer).format(value);
+        }
+        const average = read(stats, "ratings.average");
+        const fill = section.querySelector<HTMLElement>("[data-stat-stars]");
+        if (fill && typeof average === "number" && average > 0) fill.style.width = `${(average / 5) * 100}%`;
+      }
+    } catch {
+      // Keep the build-time figures.
+    }
+  }
+
+  refresh();
+
+  // Review carousel: a native horizontal scroller (swipe and trackpad work
+  // as is) with two buttons that move by one card. It advances on its own
+  // every AUTOPLAY_MS, back to the start after the last card, and holds still
+  // while the pointer or focus is on it, for a while after the visitor moves
+  // it by hand, while it is off screen or the tab is hidden, and always for
+  // people who ask for reduced motion.
+  const AUTOPLAY_MS = 6000;
+  const RESUME_AFTER_TOUCH_MS = 15000;
+  const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+
+  for (const carousel of document.querySelectorAll<HTMLElement>("[data-carousel]")) {
+    const track = carousel.querySelector<HTMLElement>("[data-carousel-track]");
+    const prev = carousel.querySelector<HTMLButtonElement>("[data-carousel-prev]");
+    const next = carousel.querySelector<HTMLButtonElement>("[data-carousel-next]");
+    if (!track || !prev || !next) continue;
+    const step = () => {
+      const card = track.querySelector<HTMLElement>("li");
+      const gap = parseFloat(getComputedStyle(track).columnGap) || 0;
+      return card ? card.offsetWidth + gap : track.clientWidth;
+    };
+    const update = () => {
+      prev.disabled = track.scrollLeft <= 2;
+      next.disabled = track.scrollLeft + track.clientWidth >= track.scrollWidth - 2;
+      carousel.toggleAttribute("data-static", prev.disabled && next.disabled);
+    };
+    let hovered = false;
+    let focused = false;
+    let visible = false;
+    let touchedAt = 0;
+    const touched = () => {
+      touchedAt = Date.now();
+    };
+
+    prev.addEventListener("click", () => {
+      touched();
+      track.scrollBy({ left: -step(), behavior: "smooth" });
+    });
+    next.addEventListener("click", () => {
+      touched();
+      track.scrollBy({ left: step(), behavior: "smooth" });
+    });
+    track.addEventListener("scroll", update, { passive: true });
+    track.addEventListener("pointerdown", touched, { passive: true });
+    track.addEventListener("wheel", touched, { passive: true });
+    track.addEventListener("keydown", touched);
+    carousel.addEventListener("pointerenter", (event) => {
+      if (event.pointerType === "mouse") hovered = true;
+    });
+    carousel.addEventListener("pointerleave", () => {
+      hovered = false;
+    });
+    carousel.addEventListener("focusin", () => {
+      focused = true;
+    });
+    carousel.addEventListener("focusout", () => {
+      focused = carousel.contains(document.activeElement);
+    });
+    new IntersectionObserver(([entry]) => {
+      visible = entry.isIntersecting;
+    }, { threshold: 0.5 }).observe(track);
+    window.addEventListener("resize", update);
+    update();
+
+    window.setInterval(() => {
+      if (reducedMotion.matches || hovered || focused || !visible || document.hidden) return;
+      if (carousel.hasAttribute("data-static")) return;
+      if (Date.now() - touchedAt < RESUME_AFTER_TOUCH_MS) return;
+      const atEnd = track.scrollLeft + track.clientWidth >= track.scrollWidth - 2;
+      if (atEnd) track.scrollTo({ left: 0, behavior: "smooth" });
+      else track.scrollBy({ left: step(), behavior: "smooth" });
+    }, AUTOPLAY_MS);
+  }
+</script>

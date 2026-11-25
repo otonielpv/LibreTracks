@@ -13,9 +13,11 @@ interface Props {
   schema?: boolean;
   /** Additional page-specific JSON-LD objects. */
   structuredData?: Record<string, unknown> | Record<string, unknown>[];
+  /** AggregateRating for the SoftwareApplication schema; only on pages that show the rating. */
+  aggregateRating?: Record<string, unknown>;
 }
 
-const { title, description, lang = "en", noIndex = false, image, schema = false, structuredData } = Astro.props;
+const { title, description, lang = "en", noIndex = false, image, schema = false, structuredData, aggregateRating } = Astro.props;
 const isSpanish = lang === "es";
 const isPortuguese = lang === "pt";
 // Pick the copy for the page language.
@@ -114,6 +116,7 @@ const softwareSchema = {
     name: "otonielpv",
     url: "https://github.com/otonielpv",
   },
+  ...(aggregateRating ? { aggregateRating } : {}),
 };
 
 // Google picks the site name it shows above the URL in search results from this

@@ -1,6 +1,8 @@
 ---
 import SiteLayout from "../layouts/SiteLayout.astro";
 import StoreBadges from "./StoreBadges.astro";
+import StoreProof from "./StoreProof.astro";
+import { loadStoreStats } from "../lib/storeStats";
 import "../styles/home.css";
 
 // The locales used to be hand-synced copies of the same 200-line page.
@@ -10,6 +12,28 @@ interface Props {
 }
 
 const { lang } = Astro.props;
+const storeStats = await loadStoreStats();
+const proofLocale = lang === "es" ? "es-ES" : lang === "pt" ? "pt-BR" : "en-US";
+const proofNumber = new Intl.NumberFormat(proofLocale, { useGrouping: "always" } as Intl.NumberFormatOptions);
+const proofAverage = new Intl.NumberFormat(proofLocale, { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(storeStats.ratings.average);
+const proofWords = lang === "es"
+  ? { ratings: "valoraciones", downloads: "descargas", stars: "de 5 estrellas" }
+  : lang === "pt"
+  ? { ratings: "avaliações", downloads: "downloads", stars: "de 5 estrelas" }
+  : { ratings: "ratings", downloads: "downloads", stars: "out of 5 stars" };
+// Google shows stars in results only when the rating is visible on the page;
+// this page shows it in the hero line and in StoreProof. ratingCount counts
+// every rating, reviewCount only the ones with text.
+const aggregateRating = storeStats.ratings.count > 0
+  ? {
+      "@type": "AggregateRating",
+      ratingValue: Number(storeStats.ratings.average.toFixed(1)),
+      bestRating: 5,
+      worstRating: 1,
+      ratingCount: storeStats.ratings.count,
+      reviewCount: storeStats.reviews.count,
+    }
+  : undefined;
 const es = lang === "es";
 const pt = lang === "pt";
 const prefix = es ? "/es" : pt ? "/pt" : "";
@@ -277,7 +301,7 @@ const t = pt
 
 ---
 
-<SiteLayout title={t.title} description={t.description} lang={lang} schema>
+<SiteLayout title={t.title} description={t.description} lang={lang} schema aggregateRating={aggregateRating}>
   <main class="home">
     <section class="home-hero">
       <div class="site-shell home-hero-grid">
@@ -292,6 +316,18 @@ const t = pt
             <a class="button-link" href={t.guidesPath}>{t.howTo}</a>
           </div>
           <StoreBadges lang={lang} />
+          {storeStats.ratings.count > 0 && (
+            <a class="home-proof" href="#store-proof-title" data-store-proof data-locale={proofLocale}>
+              <span class="store-proof-stars home-proof-stars" role="img" aria-label={`${proofAverage} ${proofWords.stars}`}>
+                <span class="store-proof-stars-fill" style={`width: ${(storeStats.ratings.average / 5) * 100}%`} data-stat-stars></span>
+              </span>
+              <b data-stat="ratings.average" data-format="decimal">{proofAverage}</b>
+              <span>·</span>
+              <span><b data-stat="ratings.count">{proofNumber.format(storeStats.ratings.count)}</b> {proofWords.ratings}</span>
+              <span>·</span>
+              <span><b data-stat="downloads.total">{proofNumber.format(storeStats.downloads.total)}</b> {proofWords.downloads}</span>
+            </a>
+          )}
         </div>
         <div class="home-stage">
           <img
@@ -311,6 +347,8 @@ const t = pt
         </div>
       </div>
     </section>
+
+    <StoreProof lang={lang} />
 
     <section class="home-readouts" aria-label={t.badge}>
       <dl class="site-shell">
