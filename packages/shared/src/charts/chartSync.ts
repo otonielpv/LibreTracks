@@ -99,6 +99,17 @@ export function chartLinkPasses(link: ChartLink | null | undefined): number {
   return Math.min(16, Math.floor(link.repeat));
 }
 
+/** The links with `markerId`'s section played `passes` times in a row
+ * (1 drops the field). Both editors write passes through here. */
+export function withChartLinkPasses(links: readonly ChartLink[], markerId: string, passes: number): ChartLink[] {
+  const base = chartLinkMarkerId(markerId);
+  return links.map((link) => {
+    if (link.markerId !== base) return link;
+    const { repeat: _previous, ...rest } = link;
+    return passes > 1 ? { ...rest, repeat: passes } : rest;
+  });
+}
+
 export const NO_CHART_PLAYBACK: ChartPlayback = {
   markerId: null,
   section: null,

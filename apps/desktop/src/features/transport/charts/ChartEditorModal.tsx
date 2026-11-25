@@ -13,7 +13,7 @@ import { useDismissOnBack } from "../mobile/backNavigation";
 import { usePortraitWhileOpen } from "../mobile/usePortraitWhileOpen";
 import { useVisibleViewportHeight } from "./useVisibleViewportHeight";
 import { parseChordPro } from "@libretracks/shared/charts/chordChart";
-import { autoLinkChart, chartLinkFor, remapChartLinks } from "@libretracks/shared/charts/chartSync";
+import { autoLinkChart, chartLinkFor, remapChartLinks, withChartLinkPasses } from "@libretracks/shared/charts/chartSync";
 import { chartTextHash } from "@libretracks/shared/charts/importedChart";
 import {
   addChartTimes,
@@ -184,13 +184,7 @@ export function ChartEditorModal({
   /** Times the section plays inside the marker (a long chorus sung twice):
    * its lines run once per pass. */
   const setPasses = (markerId: string, passes: number) => {
-    setLinks((current) =>
-      current.map((link) => {
-        if (link.markerId !== markerId) return link;
-        const { repeat: _previous, ...rest } = link;
-        return passes > 1 ? { ...rest, repeat: passes } : rest;
-      }),
-    );
+    setLinks((current) => withChartLinkPasses(current, markerId, passes));
   };
 
   /** Back to the even spread: the section's links lose their times and the

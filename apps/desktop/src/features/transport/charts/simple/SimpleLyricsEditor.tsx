@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next";
 import type { MarkerKind, SectionMarkerSummary, SongChart } from "@libretracks/shared/models";
 import { addPart, applyPartEdit, chartPartEntries, chartParts, QUICK_PART_NAMES } from "@libretracks/shared/charts/chartParts";
 import { parseChordPro } from "@libretracks/shared/charts/chordChart";
-import { chartLinkFor } from "@libretracks/shared/charts/chartSync";
+import { chartLinkFor, withChartLinkPasses } from "@libretracks/shared/charts/chartSync";
 import { plainToSectionLines, sectionToPlain } from "@libretracks/shared/charts/plainChart";
 
 import { ChordView } from "./ChordPicker";
@@ -60,6 +60,14 @@ export function SimpleLyricsEditor({
     return byKey;
   }, [entries, chart?.links]);
   const selectedPasses = entry ? (passes[entry.key] ?? 1) : 1;
+  /** The selected marker's link, when its passes can be set (same rule as
+   * Advanced: recorded line times were tapped along one real pass). */
+  const selectedLink = entry?.markerId && chart ? chartLinkFor(chart.links, entry.markerId) : null;
+  const canSetPasses = Boolean(selectedLink && entry?.sung && (selectedLink.lineBeats?.length ?? 0) <= 1);
+  const setPasses = (count: number) => {
+    if (!chart || !entry?.markerId) return;
+    emit({ ...chart, links: withChartLinkPasses(chart.links, entry.markerId, count) });
+  };
   const selected = entry ? (parts.find((part) => part.key === entry.partKey) ?? null) : null;
   const [draft, setDraft] = useState<{ key: string | null; text: string }>(() => ({ key: selectedKey, text: selected?.plain ?? "" }));
   const [clearedTimes, setClearedTimes] = useState(false);
@@ -165,9 +173,21 @@ export function SimpleLyricsEditor({
             </button>
           ))}
         </div>
-        {selected && selectedPasses > 1 ? (
+        {selected && canSetPasses ? (
           <p className="lt-simple-lyrics-passes" role="note">
-            <span className="lt-simple-lyrics-passes-badge" aria-hidden="true">×{selectedPasses}</span>
+            <select
+              className="lt-simple-lyrics-passes-select"
+              value={selectedPasses}
+              aria-label={t("liveChart.passesFor", { marker: entry?.label || "…" })}
+              title={t("liveChart.passesHelp")}
+              onChange={(event) => setPasses(Number(event.target.value))}
+            >
+              {[1, 2, 3, 4].map((count) => (
+                <option key={count} value={count}>
+                  ×{count}
+                </option>
+              ))}
+            </select>
             {t("simpleLyrics.passesNote", { count: selectedPasses })}
           </p>
         ) : null}

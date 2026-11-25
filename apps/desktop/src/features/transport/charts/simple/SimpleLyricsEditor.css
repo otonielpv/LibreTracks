@@ -390,8 +390,7 @@
 }
 
 /* "×2": the part is sung twice in a row in its marker, written once. */
-.lt-simple-lyrics-part-passes,
-.lt-simple-lyrics-passes-badge {
+.lt-simple-lyrics-part-passes {
   flex: none;
   padding: 0.1rem 0.3rem;
   border: 1px solid rgb(var(--lt-accent-rgb) / 0.4);
@@ -407,4 +406,14 @@
   margin: 0;
   color: rgb(var(--lt-c-e5e2e1, 229 226 225) / 0.8);
   font: 500 0.75rem/1.4 "Space Grotesk", sans-serif;
+}
+
+.lt-simple-lyrics-passes-select {
+  flex: none;
+  border-radius: 2px;
+  border: 1px solid rgb(var(--lt-accent-rgb) / 0.3);
+  background: rgb(var(--lt-c-1c1f20, 28 31 32) / 0.98);
+  color: var(--lt-accent);
+  padding: 0.25rem 0.3rem;
+  font: 700 0.72rem/1 "Space Grotesk", sans-serif;
 }

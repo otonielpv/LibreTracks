@@ -281,11 +281,30 @@ describe("simple lyrics editor", () => {
     const rows = partButtons(/Coro/);
     expect(within(rows[0]).queryByText("×2")).toBeNull();
     expect(within(rows[1]).getByText("×2")).toBeTruthy();
-    expect(screen.queryByRole("note")).toBeNull();
+    expect(screen.getByRole("note").textContent).toContain("simpleLyrics.passesNote:1");
     fireEvent.click(rows[1]);
     expect(screen.getByRole("note").textContent).toContain("simpleLyrics.passesNote:2");
-    fireEvent.click(rows[0]);
-    expect(screen.queryByRole("note")).toBeNull();
+  });
+
+  it("the ×N selector sets the passes of that marker only, and ×1 drops them", async () => {
+    const chart: SongChart = {
+      ...PC_CHART,
+      links: PC_CHART.links.map((link) => (link.markerId === "c2" ? { ...link, repeat: 2 } : link)),
+    };
+    const { onSave } = renderEditor(chart);
+    fireEvent.click(partButtons(/Coro/)[1]);
+    const select = screen.getByRole("combobox", { name: /liveChart\.passesFor/ }) as HTMLSelectElement;
+    expect(select.value).toBe("2");
+    fireEvent.change(select, { target: { value: "1" } });
+    expect(within(partButtons(/Coro/)[1]).queryByText("×2")).toBeNull();
+    fireEvent.click(partButtons(/Coro/)[2]);
+    fireEvent.change(screen.getByRole("combobox", { name: /liveChart\.passesFor/ }), { target: { value: "3" } });
+    expect(within(partButtons(/Coro/)[2]).getByText("×3")).toBeTruthy();
+    await save();
+    const links = onSave.mock.calls.at(-1)![0]!.links;
+    expect(links.find((link) => link.markerId === "c2")?.repeat).toBeUndefined();
+    expect(links.find((link) => link.markerId === "c3")?.repeat).toBe(3);
+    expect(links.find((link) => link.markerId === "c1")?.repeat).toBeUndefined();
   });
 
   it("the advanced editor's eye shows the whole linked section and its line count", () => {
