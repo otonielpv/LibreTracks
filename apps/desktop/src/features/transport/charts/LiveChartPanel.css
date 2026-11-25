@@ -1264,3 +1264,109 @@
   opacity: 0.4;
   cursor: default;
 }
+
+/* Installed fonts: a button with the chosen one, opening a searchable list. */
+.lt-chart-style-system {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.lt-chart-style-system-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-height: 2rem;
+  padding: 0 0.5rem;
+  border: 1px solid rgb(var(--lt-c-ffffff, 255 255 255) / 0.1);
+  border-radius: 6px;
+  background: rgb(var(--lt-c-ffffff, 255 255 255) / 0.04);
+  color: rgb(var(--lt-accent-soft-rgb) / 0.8);
+  font-size: 0.82rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.lt-chart-style-system-toggle:hover {
+  color: var(--lt-accent-soft);
+  background: rgb(var(--lt-c-ffffff, 255 255 255) / 0.08);
+}
+
+.lt-chart-style-system-toggle.is-active {
+  border-color: var(--lt-accent);
+  color: var(--lt-accent);
+}
+
+.lt-chart-style-system-toggle .material-symbols-outlined {
+  flex: none;
+  font-size: 16px;
+}
+
+.lt-chart-style-system-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lt-chart-style-system-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.lt-chart-style-system-search {
+  min-height: 1.9rem;
+  padding: 0 0.5rem;
+  border: 1px solid rgb(var(--lt-c-ffffff, 255 255 255) / 0.14);
+  border-radius: 4px;
+  background: rgb(var(--lt-c-0a0a0a, 10 10 10) / 0.4);
+  color: var(--lt-accent-soft);
+  font-size: 0.8rem;
+}
+
+.lt-chart-style-system-list {
+  max-height: 12rem;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+  overscroll-behavior: contain;
+}
+
+.lt-chart-style-system-list button {
+  display: block;
+  width: 100%;
+  padding: 0.35rem 0.5rem;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: rgb(var(--lt-accent-soft-rgb) / 0.85);
+  font-size: 0.95rem;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+
+.lt-chart-style-system-list button:hover {
+  background: rgb(var(--lt-c-ffffff, 255 255 255) / 0.08);
+  color: var(--lt-accent-soft);
+}
+
+.lt-chart-style-system-list button.is-active {
+  background: rgb(var(--lt-accent-rgb) / 0.18);
+  color: var(--lt-accent);
+}
+
+.lt-chart-style-system-note {
+  margin: 0;
+  color: rgb(var(--lt-accent-soft-rgb) / 0.6);
+  font-size: 0.76rem;
+}
+
+.lt-mobile .lt-chart-style-system-list button {
+  padding: 0.55rem 0.5rem;
+}

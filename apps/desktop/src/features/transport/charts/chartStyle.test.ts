@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { chartStyleVars, DEFAULT_CHART_STYLE, isDefaultChartStyle, parseChartStyle } from "./chartStyle";
+import { chartFontFamily, chartStyleVars, DEFAULT_CHART_STYLE, isDefaultChartStyle, parseChartStyle } from "./chartStyle";
 
 describe("chartStyle", () => {
   it("reads the stored style leniently: bad fields keep their default", () => {
@@ -30,5 +30,13 @@ describe("chartStyle", () => {
       "--lt-chart-chord-weight": "500",
     });
     expect(chartStyleVars({ ...DEFAULT_CHART_STYLE, chordColor: "#ff5c5c" })).toEqual({ "--lt-chart-chord-color": "#ff5c5c" });
+  });
+
+  it("keeps an installed font by name and draws it with the app's font behind", () => {
+    expect(parseChartStyle('{"lyricFont":"family:Fira Sans"}').lyricFont).toBe("family:Fira Sans");
+    expect(parseChartStyle('{"lyricFont":"family:   "}').lyricFont).toBe("inter");
+    expect(parseChartStyle('{"lyricFont":"family:x;}body{color:red"}').lyricFont).toBe("inter");
+    expect(chartFontFamily("family:Fira Sans")).toBe('"Fira Sans", Inter, sans-serif');
+    expect(chartFontFamily('family:Odd "Name"')).toBe('"Odd \\"Name\\"", Inter, sans-serif');
   });
 });

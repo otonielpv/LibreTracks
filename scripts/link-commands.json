@@ -63,6 +63,7 @@
     "list_library_folder_audio",
     "list_rhythm_samples",
     "list_session_templates",
+    "list_system_fonts",
     "midi_controller_resend_feedback",
     "midi_controller_scenes",
     "midi_controller_sync",

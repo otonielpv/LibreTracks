@@ -3485,6 +3485,11 @@ const en = {
     chordColor: "Chord color",
     bold: "Bold",
     reset: "Reset",
+    systemFonts: "Installed font…",
+    searchFonts: "Search fonts",
+    loadingFonts: "Looking for installed fonts…",
+    noSystemFonts: "No installed fonts were found on this device.",
+    noFontMatch: "No font matches.",
     font: {
       inter: "Inter",
       grotesk: "Grotesk",

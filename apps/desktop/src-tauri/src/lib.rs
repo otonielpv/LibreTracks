@@ -381,6 +381,7 @@ pub fn run() {
             commands::system::allow_remote_through_firewall,
             commands::system::get_midi_inputs,
             commands::system::get_midi_outputs,
+            commands::fonts::list_system_fonts,
             commands::system::get_midi_capabilities,
             commands::system::get_midi_status,
             commands::system::scan_bluetooth_midi,

@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { create } from "zustand";
 
@@ -11,10 +11,116 @@ import {
   DEFAULT_CHART_STYLE,
   isDefaultChartStyle,
   parseChartStyle,
+  chartFontFamily,
+  systemFamilyOf,
+  systemFont,
   type ChartFont,
   type ChartStyle,
   type ChordColor,
 } from "./chartStyle";
+import { listSystemFonts } from "../desktopApi";
+
+/** Installed families, asked for once per run (the scan is cached in Rust). */
+let systemFontsRequest: Promise<string[]> | null = null;
+function loadSystemFonts(): Promise<string[]> {
+  systemFontsRequest ??= listSystemFonts().catch(() => []);
+  return systemFontsRequest;
+}
+
+/** Only for tests: forget the cached list. */
+export function resetSystemFontsCache() {
+  systemFontsRequest = null;
+}
+
+const MAX_LISTED_FONTS = 300;
+
+/** "Font installed on this device": a button showing the chosen one, which
+ * opens a searchable list, each name drawn in its own font. */
+function SystemFontPicker({
+  label,
+  value,
+  onPick,
+}: {
+  label: string;
+  value: ChartFont;
+  onPick: (font: ChartFont) => void;
+}) {
+  const { t } = useTranslation();
+  const [open, setOpen] = useState(false);
+  const [fonts, setFonts] = useState<string[] | null>(null);
+  const [query, setQuery] = useState("");
+  const chosen = systemFamilyOf(value);
+  useEffect(() => {
+    if (!open || fonts !== null) return;
+    let alive = true;
+    void loadSystemFonts().then((names) => {
+      if (alive) setFonts(names);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [open, fonts]);
+  const matches = useMemo(() => {
+    const needle = query.trim().toLowerCase();
+    const all = fonts ?? [];
+    return (needle ? all.filter((name) => name.toLowerCase().includes(needle)) : all).slice(0, MAX_LISTED_FONTS);
+  }, [fonts, query]);
+  const listLabel = `${label}: ${t("chartStyle.systemFonts")}`;
+  return (
+    <div className="lt-chart-style-system">
+      <button
+        type="button"
+        className={`lt-chart-style-system-toggle${chosen ? " is-active" : ""}`}
+        aria-expanded={open}
+        aria-label={listLabel}
+        onClick={() => setOpen((current) => !current)}
+        style={chosen ? { fontFamily: chartFontFamily(value) } : undefined}
+      >
+        <span className="material-symbols-outlined" aria-hidden="true">font_download</span>
+        <span className="lt-chart-style-system-name">{chosen ?? t("chartStyle.systemFonts")}</span>
+        <span className="material-symbols-outlined" aria-hidden="true">{open ? "expand_less" : "expand_more"}</span>
+      </button>
+      {open ? (
+        <div className="lt-chart-style-system-panel">
+          <input
+            type="search"
+            className="lt-chart-style-system-search"
+            placeholder={t("chartStyle.searchFonts")}
+            aria-label={t("chartStyle.searchFonts")}
+            value={query}
+            autoFocus
+            onChange={(event) => setQuery(event.target.value)}
+          />
+          {fonts === null ? (
+            <p className="lt-chart-style-system-note">{t("chartStyle.loadingFonts")}</p>
+          ) : fonts.length === 0 ? (
+            <p className="lt-chart-style-system-note">{t("chartStyle.noSystemFonts")}</p>
+          ) : matches.length === 0 ? (
+            <p className="lt-chart-style-system-note">{t("chartStyle.noFontMatch")}</p>
+          ) : (
+            <ul className="lt-chart-style-system-list" role="listbox" aria-label={listLabel}>
+              {matches.map((name) => (
+                <li key={name} role="option" aria-selected={name === chosen}>
+                  <button
+                    type="button"
+                    className={name === chosen ? "is-active" : undefined}
+                    style={{ fontFamily: chartFontFamily(systemFont(name)) }}
+                    onClick={() => {
+                      onPick(systemFont(name));
+                      setOpen(false);
+                    }}
+                  >
+                    {name}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      ) : null}
+    </div>
+  );
+}
 
 export const CHART_STYLE_KEY = "lt.liveChart.style";
 
@@ -59,6 +165,7 @@ export function ChartStyleMenu() {
   const customColor = style.chordColor.startsWith("#") && !CHORD_COLOR_SWATCHES.includes(style.chordColor as `#${string}`);
 
   const fontPicker = (label: string, value: ChartFont, onPick: (font: ChartFont) => void) => (
+    <>
     <div className="lt-chart-style-fonts" role="radiogroup" aria-label={label}>
       {CHART_FONTS.map((font) => (
         <button
@@ -74,6 +181,8 @@ export function ChartStyleMenu() {
         </button>
       ))}
     </div>
+    <SystemFontPicker label={label} value={value} onPick={onPick} />
+    </>
   );
 
   const swatch = (color: ChordColor, label: string, background: string) => (

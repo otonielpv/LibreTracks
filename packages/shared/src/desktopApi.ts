@@ -2689,6 +2689,18 @@ export async function setAutomationTrackEnabled(
 }
 
 /** MIDI output ports available to send to (lighting desks, lyric software). */
+/** Font families installed on this device (names only, sorted). Empty
+ * outside the app or when the scan fails: the UI keeps its own fonts. */
+export async function listSystemFonts(): Promise<string[]> {
+  if (!isTauriApp) return [];
+  try {
+    const names = await invokeCommand<string[]>("list_system_fonts");
+    return Array.isArray(names) ? names : [];
+  } catch {
+    return [];
+  }
+}
+
 export async function getMidiOutputs(): Promise<string[]> {
   return invokeCommand<string[]>("get_midi_outputs");
 }
