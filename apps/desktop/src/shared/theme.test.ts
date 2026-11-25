@@ -8,6 +8,7 @@ import {
   accentHex,
   accentRgba,
   buildThemePalette,
+  flushThemeForTests,
   getTheme,
   remapThemeRgb,
   resetThemeForTests,
@@ -68,6 +69,7 @@ describe("theme", () => {
 
   it("cambiar de tema reescribe las variables de la CSS y los colores del canvas", () => {
     setTheme({ base: "light", accent: "orange" });
+    flushThemeForTests();
     const style = document.documentElement.style;
     const remapped = remapThemeRgb([14, 14, 14], getTheme()).join(" ");
     expect(style.getPropertyValue("--lt-c-0e0e0e")).toBe(remapped);
@@ -82,6 +84,7 @@ describe("theme", () => {
 
     // Volver al de por defecto quita las variables: manda el valor de reserva.
     setTheme(DEFAULT_THEME);
+    flushThemeForTests();
     expect(style.getPropertyValue("--lt-c-0e0e0e")).toBe("");
   });
 
