@@ -31,6 +31,9 @@ pub const PHRASES: &[(&[&str], &str)] = &[
     (&["coro"], "chorus"),
     (&["chorus"], "chorus"),
     (&["refrao"], "chorus"),
+    // A Spanish sheet's "Estribillo" is its chorus; the Refrain marker is
+    // its own part (only "Refrain" and "Refrán" name it).
+    (&["estribillo"], "chorus"),
     (&["post", "coro"], "post_chorus"),
     (&["postcoro"], "post_chorus"),
     (&["post", "chorus"], "post_chorus"),
@@ -56,7 +59,6 @@ pub const PHRASES: &[(&[&str], &str)] = &[
     (&["instrumental"], "instrumental"),
     (&["interludio"], "interlude"),
     (&["interlude"], "interlude"),
-    (&["estribillo"], "refrain"),
     (&["refrain"], "refrain"),
     (&["tag"], "tag"),
     (&["repeticion"], "tag"),
@@ -363,11 +365,10 @@ pub const LABEL_PHRASES: &[(&[&str], &str)] = &[
     (&["a", "capela"], "acapella"),
 ];
 
-/// Kinds that name the same part of a song in different sheets: a "Refrain"
-/// marker plays the "Coro" of the chart. A kind not listed is its own family.
+/// Kinds that name the same part of a song in different sheets: an "Outro"
+/// marker plays the "Final" of the chart. A kind not listed is its own family
+/// (a Refrain is not a Chorus: it links to a refrain or to nothing).
 pub const FAMILIES: &[(&str, &str)] = &[
-    ("chorus", "chorus"),
-    ("refrain", "chorus"),
     ("outro", "end"),
     ("ending", "end"),
     ("instrumental", "instrumental"),
@@ -383,10 +384,10 @@ pub fn section_family(kind: &str) -> &str {
         .unwrap_or(kind)
 }
 
-/// How a chord chart reads a kind the vocabulary keeps apart: a Spanish
-/// sheet's "Estribillo" is its chorus (the vocabulary says refrain for the
-/// lyrics programs, which may have both groups). Same family either way.
-pub const CHART_KIND_ALIASES: &[(&str, &str)] = &[("refrain", "chorus")];
+/// How a chord chart reads a kind the vocabulary keeps apart. Empty since a
+/// Refrain stopped being read as the sheet's chorus; kept so the shared JSON
+/// and `chartKind` stay one table.
+pub const CHART_KIND_ALIASES: &[(&str, &str)] = &[];
 
 /// Where a label was written. Abbreviations ("V1", "C", "PC") are only read
 /// in a sequence, where every item is a label: a header or free text "C" is a

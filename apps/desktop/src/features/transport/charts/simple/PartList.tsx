@@ -9,6 +9,8 @@ export const QUICK_PART_KINDS: MarkerKind[] = ["intro", "verse", "pre_chorus", "
 type PartListProps = {
   entries: readonly ChartPartEntry[];
   selectedKey: string | null;
+  /** Times a row sings its part in a row (absent = once). */
+  passes?: Readonly<Record<string, number>>;
   onSelect: (key: string) => void;
   /** Songs without markers: add a part of this kind. */
   onAdd: ((kind: MarkerKind) => void) | null;
@@ -20,7 +22,7 @@ type PartListProps = {
  * timeline), on the side of the simple editor (chips on a phone). Each one
  * has its own lyrics.
  */
-export function PartList({ entries, selectedKey, onSelect, onAdd, quickName }: PartListProps) {
+export function PartList({ entries, selectedKey, passes = {}, onSelect, onAdd, quickName }: PartListProps) {
   const { t } = useTranslation();
   return (
     <nav className="lt-simple-lyrics-parts" aria-label={t("simpleLyrics.parts")}>
@@ -36,6 +38,11 @@ export function PartList({ entries, selectedKey, onSelect, onAdd, quickName }: P
             >
               <span className="lt-simple-lyrics-part-position">{String(entry.position).padStart(2, "0")}</span>
               <span className="lt-simple-lyrics-part-name">{entry.label || "…"}</span>
+              {(passes[entry.key] ?? 1) > 1 ? (
+                <span className="lt-simple-lyrics-part-passes" title={t("simpleLyrics.passesNote", { count: passes[entry.key] })}>
+                  ×{passes[entry.key]}
+                </span>
+              ) : null}
               {entry.section !== null ? (
                 <span className="material-symbols-outlined lt-simple-lyrics-part-done" aria-label={t("simpleLyrics.hasLyrics")}>
                   check

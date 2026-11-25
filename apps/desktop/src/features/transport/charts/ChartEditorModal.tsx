@@ -30,6 +30,7 @@ import { SaveToPlanningCenterDialog } from "../../chartSources/SaveToPlanningCen
 import { useChartSourcesAvailable } from "../../chartSources/useChartSourcesAvailable";
 import { FEATURE_FLAGS } from "@libretracks/shared/featureFlags";
 import { SimpleLyricsEditor } from "./simple/SimpleLyricsEditor";
+import { SectionPeek } from "./SectionPeek";
 import { readEditorMode, storeEditorMode, type ChartEditorMode } from "./simple/editorMode";
 
 type ChartEditorModalProps = {
@@ -488,18 +489,26 @@ export function ChartEditorModal({
                   return (
                     <li key={marker.id}>
                       <span className="lt-chart-editor-marker">{marker.name}</span>
-                      <select
-                        value={link ? String(link.section) : ""}
-                        onChange={(event) => setLink(marker.id, event.target.value)}
-                        aria-label={t("liveChart.sectionFor", { marker: marker.name })}
-                      >
-                        <option value="">{t("liveChart.noLyrics")}</option>
-                        {doc.sections.map((section, index) => (
-                          <option key={index} value={index}>
-                            {section.label || t("liveChart.untitledSection", { number: index + 1 })}
-                          </option>
-                        ))}
-                      </select>
+                      <span className="lt-chart-editor-section">
+                        <select
+                          value={link ? String(link.section) : ""}
+                          onChange={(event) => setLink(marker.id, event.target.value)}
+                          aria-label={t("liveChart.sectionFor", { marker: marker.name })}
+                        >
+                          <option value="">{t("liveChart.noLyrics")}</option>
+                          {doc.sections.map((section, index) => (
+                            <option key={index} value={index}>
+                              {section.label || t("liveChart.untitledSection", { number: index + 1 })}
+                            </option>
+                          ))}
+                        </select>
+                        {link && doc.sections[link.section] ? (
+                          <SectionPeek
+                            section={doc.sections[link.section]}
+                            name={doc.sections[link.section].label || t("liveChart.untitledSection", { number: link.section + 1 })}
+                          />
+                        ) : null}
+                      </span>
                       {link ? (
                         <span className="lt-chart-editor-extra">
                         {!recorded ? (

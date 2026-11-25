@@ -35,12 +35,18 @@ fn the_numbered_group_wins_and_falls_back_to_the_unnumbered_one() {
 
 #[test]
 fn equivalent_sections_match_only_when_nothing_better() {
-    assert_eq!(matched("Estribillo", &[group("Verse"), group("Chorus")]), Some("Chorus"));
+    assert_eq!(matched("Final", &[group("Verse"), group("Outro")]), Some("Outro"));
+    assert_eq!(matched("Final", &[group("Outro"), group("Ending")]), Some("Ending"));
+}
+
+#[test]
+fn refrain_shows_a_refrain_or_nothing_never_the_chorus() {
+    assert_eq!(matched("Refrain", &[group("Verse"), group("Chorus")]), None);
     assert_eq!(
-        matched("Estribillo", &[group("Chorus"), group("Refrain")]),
+        matched("Refrain", &[group("Chorus"), group("Refrain")]),
         Some("Refrain")
     );
-    assert_eq!(matched("Final", &[group("Outro")]), Some("Outro"));
+    assert_eq!(matched("Coro", &[group("Refrain")]), None);
 }
 
 #[test]
