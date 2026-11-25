@@ -3475,7 +3475,7 @@ const es = {
     placeholder: "Escribe la letra de esta parte.\nPara los acordes, ponlos en la línea de encima:\n\nG              D\nSanto es el Señor",
     help: "Los acordes van en la línea de encima de la letra, alineados con espacios. Las líneas en blanco se ignoran. También vale ChordPro ([G]Santo).",
     passesNote_one: "Se canta una vez.",
-    passesNote_other: "Se canta {{count}} veces seguidas en esta marca. Escríbela una sola vez: las líneas se reparten en las {{count}} pasadas.",
+    passesNote_other: "En esta marca la letra se canta {{count}} veces seguidas. Aquí se ve una vez, pero suena {{count}}.",
     textFor: "Letra de {{part}}",
     clearedTimes: "Se han borrado los tiempos grabados de esta parte: ha cambiado su número de líneas.",
     pasteSong: "Pegar canción entera",
