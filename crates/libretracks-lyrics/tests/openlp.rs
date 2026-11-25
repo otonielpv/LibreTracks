@@ -183,7 +183,8 @@ async fn borrows_a_free_screen_to_read_a_song_and_puts_it_back() {
     assert_eq!(
         sent(&log),
         vec![
-            ("core/display".to_string(), json!({"display": "theme"})),
+            // Nothing live: black while the song is read.
+            ("core/display".to_string(), json!({"display": "blank"})),
             ("service/show".to_string(), json!({"id": "U-GRACE"})),
             ("controller/clear/live".to_string(), json!({})),
             // Nothing was live: the screen shows (nothing) again.
@@ -227,11 +228,10 @@ async fn puts_back_the_item_and_slide_that_were_live_on_a_blank_screen() {
     assert_eq!(
         sent(&log),
         vec![
-            ("core/display".to_string(), json!({"display": "theme"})),
+            // The black screen is never touched.
             ("service/show".to_string(), json!({"id": "U-GRACE"})),
             ("service/show".to_string(), json!({"id": "U-WAY"})),
             ("controller/show".to_string(), json!({"id": 1})),
-            ("core/display".to_string(), json!({"display": "blank"})),
         ]
     );
 }
@@ -303,12 +303,13 @@ async fn from_black_the_slide_changes_first_and_the_black_goes_after_its_transit
         .unwrap();
     assert_eq!(state.lock().unwrap().as_deref(), Some("U-GRACE"));
     openlp.send(&section(0)).await.unwrap();
-    // The slide is changed under the hidden text; the screen is not shown
-    // yet, and the order returns without waiting for it.
+    // Unknown screen: black before going live. The slide is changed under
+    // it; the screen is not shown yet, and the order returns without
+    // waiting for it.
     assert_eq!(
         sent(&log),
         vec![
-            ("core/display".to_string(), json!({"display": "theme"})),
+            ("core/display".to_string(), json!({"display": "blank"})),
             ("service/show".to_string(), json!({"id": "U-GRACE"})),
             ("controller/show".to_string(), json!({"id": 0})),
         ]
@@ -371,6 +372,47 @@ async fn hiding_the_text_while_waiting_cancels_the_pending_unblank() {
         !sent(&log).contains(&("core/display".to_string(), json!({"display": "show"}))),
         "{:?}",
         sent(&log)
+    );
+}
+
+#[tokio::test]
+async fn a_black_screen_stays_black_when_the_next_song_is_prepared() {
+    let (connection, log, state) = openlp(Some("U-WAY")).await;
+    let openlp = client(connection);
+    // Song end: black. The next song goes live behind it, still black.
+    openlp.send(&LyricsCommand::Clear).await.unwrap();
+    openlp
+        .send(&LyricsCommand::Prepare {
+            presentation_id: "U-GRACE".into(),
+        })
+        .await
+        .unwrap();
+    assert_eq!(state.lock().unwrap().as_deref(), Some("U-GRACE"));
+    assert_eq!(
+        sent(&log),
+        vec![
+            ("core/display".to_string(), json!({"display": "blank"})),
+            ("service/show".to_string(), json!({"id": "U-GRACE"})),
+        ]
+    );
+
+    // Lyrics up, then another song: only the text goes, the background
+    // stays.
+    openlp.send(&section(0)).await.unwrap();
+    after_transition().await;
+    log.lock().unwrap().clear();
+    openlp
+        .send(&LyricsCommand::Prepare {
+            presentation_id: "U-WAY".into(),
+        })
+        .await
+        .unwrap();
+    assert_eq!(
+        sent(&log),
+        vec![
+            ("core/display".to_string(), json!({"display": "theme"})),
+            ("service/show".to_string(), json!({"id": "U-WAY"})),
+        ]
     );
 }
 

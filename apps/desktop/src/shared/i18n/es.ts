@@ -4308,6 +4308,8 @@ const es = {
         step3: "Si marcaste «Requerir autenticación», escribe abajo usuario:contraseña. Si no, déjalo vacío.",
         step4Title: "Cómo lee las canciones",
         step4: "OpenLP solo enseña las diapositivas de lo que está en vivo. LibreTracks pone cada canción en vivo un instante, con la pantalla sin texto, para leerla, y deja lo que había. Si OpenLP está mostrando letra, espera a que la pantalla quede libre o a que empiece la canción.",
+        step5Title: "Fundidos (opcional)",
+        step5: "Para que la letra vuelva con fundido después de quitar solo la letra, activa en OpenLP › Configuración › Configurar OpenLP › Temas la opción «Item transitions» y reinicia OpenLP: solo la lee al arrancar. Sin ella, la letra aparece de golpe.",
       },
     },
     errors: {

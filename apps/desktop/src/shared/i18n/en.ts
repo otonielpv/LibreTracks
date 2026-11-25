@@ -4276,6 +4276,8 @@ const en = {
         step3: "If you ticked «Require authentication», type user:password below. Otherwise leave it empty.",
         step4Title: "How songs are read",
         step4: "OpenLP only shows the slides of what is live. LibreTracks puts each song live for a moment, with no text on screen, to read it, and puts back what was there. If OpenLP is showing lyrics, it waits until the screen is free or the song starts.",
+        step5Title: "Fades (optional)",
+        step5: "For the lyrics to fade back in after clearing only the text, turn on «Item transitions» in OpenLP › Settings › Configure OpenLP › Themes and restart OpenLP: it only reads it on start. Without it, the lyrics cut in.",
       },
     },
     errors: {

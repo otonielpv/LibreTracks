@@ -14,7 +14,7 @@
 //! user and password gives a token, sent as the bare `Authorization` header.
 
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, AtomicU8, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -40,6 +40,12 @@ const GO_LIVE_POLL: Duration = Duration::from_millis(50);
 /// speed, what OpenLP themes use by default). Lifting it at once showed the
 /// transition half done.
 const UNBLANK_AFTER: Duration = Duration::from_millis(800);
+
+/// What LibreTracks knows the screen shows.
+const SCREEN_UNKNOWN: u8 = 0;
+const SCREEN_TEXT: u8 = 1;
+/// Black or theme, set by LibreTracks: left as it is until a slide shows.
+const SCREEN_HIDDEN: u8 = 2;
 
 /// The service item kinds that carry lyrics.
 const TEXT_PLUGINS: &[&str] = &["songs", "custom"];
@@ -67,7 +73,7 @@ pub struct OpenLpClient {
     cache: Mutex<HashMap<String, LyricsStructure>>,
     /// LibreTracks hid the text (theme or blank): the next slide shows the
     /// screen again. Starts true so the first slide always shows it.
-    text_hidden: AtomicBool,
+    screen: AtomicU8,
     /// Counts every time the text is hidden: a delayed unblank only goes
     /// out if nothing hid the text again while it waited.
     hides: Arc<AtomicU64>,
@@ -167,7 +173,7 @@ impl OpenLpClient {
                 token: Arc::new(Mutex::new(None)),
             },
             cache: Mutex::new(HashMap::new()),
-            text_hidden: AtomicBool::new(true),
+            screen: AtomicU8::new(SCREEN_UNKNOWN),
             hides: Arc::new(AtomicU64::new(0)),
             live: Mutex::new(None),
             may_take_screen: AtomicBool::new(false),
@@ -193,7 +199,20 @@ impl OpenLpClient {
     /// The text is off the screen (theme, blank): the next slide lifts it.
     fn mark_hidden(&self) {
         self.hides.fetch_add(1, Ordering::SeqCst);
-        self.text_hidden.store(true, Ordering::SeqCst);
+        self.screen.store(SCREEN_HIDDEN, Ordering::SeqCst);
+    }
+
+    /// Before putting another item live, which shows its first slide: the
+    /// text goes if it is up (the background stays), a black or theme
+    /// screen LibreTracks set stays as it is, and an unknown one goes black.
+    async fn hide_before_going_live(&self) -> Result<Duration, LyricsError> {
+        let elapsed = match self.screen.load(Ordering::SeqCst) {
+            SCREEN_HIDDEN => Duration::ZERO,
+            SCREEN_TEXT => self.display("theme").await?,
+            _ => self.display("blank").await?,
+        };
+        self.mark_hidden();
+        Ok(elapsed)
     }
 
     /// The live item with all its slides; `Null` when nothing is live
@@ -256,10 +275,18 @@ impl OpenLpClient {
     ) -> Result<LyricsStructure, LyricsError> {
         let previous = live.get("id").and_then(|id| text(Some(id)));
         let previous_slide = selected_slide(live);
-        // A starting song keeps the screen; otherwise it is only borrowed
-        // when no text shows, so hiding the text changes nothing visible.
-        self.display("theme").await?;
-        self.mark_hidden();
+        // A starting song keeps the screen. Otherwise it is only borrowed
+        // when no text shows: a black, theme or desktop screen is left as
+        // it is; with nothing live it goes black while the song is read.
+        let blanked = if take {
+            self.hide_before_going_live().await?;
+            false
+        } else if screen.is_some_and(|screen| screen.no_text) {
+            false
+        } else {
+            self.display("blank").await?;
+            true
+        };
         self.post("service/show", json!({ "id": id })).await?;
         *self.live.lock().unwrap() = Some(id.to_string());
         let mut read = None;
@@ -287,16 +314,10 @@ impl OpenLpClient {
             } else {
                 let _ = self.post("controller/clear/live", json!({})).await;
             }
-            // The display as it was. Unknown only when nothing was live:
-            // showing it shows nothing.
-            let mode = screen.map_or("show", |screen| screen.mode);
-            if mode != "theme" {
-                let _ = self.display(mode).await;
-            }
-            if mode == "show" {
-                self.text_hidden.store(false, Ordering::SeqCst);
-            } else {
-                self.mark_hidden();
+            // Nothing was live: shown again, which shows nothing.
+            if blanked {
+                let _ = self.display("show").await;
+                self.screen.store(SCREEN_UNKNOWN, Ordering::SeqCst);
             }
             *self.live.lock().unwrap() = previous;
         }
@@ -323,7 +344,7 @@ impl OpenLpClient {
         // The slide first, then the screen once its transition is over, in
         // the background so the next orders do not wait. Hiding the text
         // again meanwhile (a short section, a stop) cancels it.
-        if self.text_hidden.swap(false, Ordering::SeqCst) {
+        if self.screen.swap(SCREEN_TEXT, Ordering::SeqCst) != SCREEN_TEXT {
             let api = self.api.clone();
             let hides = Arc::clone(&self.hides);
             let at = hides.load(Ordering::SeqCst);
@@ -452,10 +473,8 @@ impl LyricsClient for OpenLpClient {
                 if self.live.lock().unwrap().as_deref() == Some(presentation_id.as_str()) {
                     return Ok(Duration::ZERO);
                 }
-                // Live with its background, no text yet: the first section
-                // shows it.
-                let mut elapsed = self.display("theme").await?;
-                self.mark_hidden();
+                // Live with no text yet: the first section shows it.
+                let mut elapsed = self.hide_before_going_live().await?;
                 elapsed += self
                     .post("service/show", json!({ "id": presentation_id }))
                     .await?;
