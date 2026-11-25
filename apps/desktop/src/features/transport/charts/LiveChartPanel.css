@@ -544,7 +544,7 @@
 .lt-chart-editor-links li,
 .lt-chart-editor-links-head {
   display: grid;
-  grid-template-columns: minmax(5rem, 0.9fr) minmax(7rem, 1.3fr) 10.5rem;
+  grid-template-columns: minmax(5rem, 9rem) minmax(7rem, 1fr) 10.5rem;
   align-items: center;
   gap: 0.45rem;
 }
