@@ -5420,14 +5420,14 @@ html.lt-ios body {
 /* Bases claras: el tinte al 22 % se lavaba sobre gris claro y, junto a los
    clips opacos, las cabeceras parecían descoloridas. Más color y más largo. */
 html[data-lt-light="1"] .lt-track-header[style*="--lt-track-color"]::after {
-  /* Color plano, no degradado: igual que la cabecera de los clips, así la
-     pista y su clip se leen como la misma cosa. */
-  background: var(--lt-track-color, transparent);
-  opacity: 0.42;
+  /* Mismo degradado que en oscuro, pero más vivo y algo más largo: sobre
+     gris claro el 22 % se lavaba. */
+  background: linear-gradient(90deg, var(--lt-track-color, transparent), transparent 55%);
+  opacity: 0.62;
 }
 
 html[data-lt-light="1"] .lt-track-header.is-selected::after {
-  opacity: 0.62;
+  opacity: 0.8;
 }
 
 html[data-lt-light="1"] .lt-track-header::before {
