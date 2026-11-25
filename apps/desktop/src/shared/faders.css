@@ -24,7 +24,7 @@
   --lt-fader-footprint: var(--lt-fader-box);
   --lt-fader-groove: 4px;
   --lt-fader-groove-bg: rgb(var(--lt-c-070808, 7 8 8));
-  --lt-fader-groove-shadow: inset 0 1px 2px #000, 0 1px 0 rgb(var(--lt-c-ffffff, 255 255 255) / 0.05);
+  --lt-fader-groove-shadow: inset 0 1px 2px rgb(var(--lt-shadow-rgb, 0 0 0) / var(--lt-shadow-alpha, 1)), 0 1px 0 rgb(var(--lt-c-ffffff, 255 255 255) / 0.05);
   /* Cap: ancho a lo largo del recorrido y alto a lo ancho. */
   --lt-fader-cap-w: 11px;
   --lt-fader-cap-h: 18px;
@@ -160,7 +160,7 @@ input[type="range"].lt-fader::-webkit-slider-thumb {
   height: var(--lt-fader-cap-h);
   /* WebKit apoya el pulgar en el borde superior de la ranura: centrarlo. */
   margin-top: calc((var(--lt-fader-groove) - var(--lt-fader-cap-h)) / 2);
-  border: 1px solid #000;
+  border: 1px solid rgb(var(--lt-shadow-rgb, 0 0 0) / var(--lt-shadow-alpha, 1));
   border-radius: 2px;
   background:
     /* Línea índice, con un halo tenue de su color. */
@@ -189,7 +189,7 @@ input[type="range"].lt-fader::-webkit-slider-thumb {
       rgb(var(--lt-c-262a2a, 38 42 42)) 100%
     );
   box-shadow:
-    0 2px 4px rgb(0 0 0 / 0.65),
+    0 2px 4px rgb(var(--lt-shadow-rgb, 0 0 0) / calc(0.65 * var(--lt-shadow-alpha, 1))),
     inset 0 1px 0 rgb(var(--lt-c-ffffff, 255 255 255) / 0.12);
   cursor: ew-resize;
 }
@@ -294,7 +294,7 @@ input[type="range"].lt-fader:active:not(:disabled)::-webkit-slider-thumb {
   border-radius: 1px;
   background: rgb(var(--lt-c-070808, 7 8 8));
   box-shadow:
-    inset 0 1px 2px #000,
+    inset 0 1px 2px rgb(var(--lt-shadow-rgb, 0 0 0) / var(--lt-shadow-alpha, 1)),
     0 1px 0 rgb(var(--lt-c-ffffff, 255 255 255) / 0.05);
   pointer-events: none;
 }
@@ -401,7 +401,7 @@ input[type="range"].lt-fader:active:not(:disabled)::-webkit-slider-thumb {
   border-radius: 1px;
   background: rgb(var(--lt-c-070808, 7 8 8));
   box-shadow:
-    inset 0 1px 2px #000,
+    inset 0 1px 2px rgb(var(--lt-shadow-rgb, 0 0 0) / var(--lt-shadow-alpha, 1)),
     1px 0 0 rgb(var(--lt-c-ffffff, 255 255 255) / 0.05);
   pointer-events: none;
 }
@@ -421,7 +421,7 @@ input[type="range"].lt-fader:active:not(:disabled)::-webkit-slider-thumb {
   /* Big enough to grab with a finger (the iPhone report: the cap was tiny). */
   width: calc(34px * var(--lt-mixer-fader-scale, 1));
   height: calc(22px * var(--lt-mixer-fader-scale, 1));
-  border: 1px solid #000;
+  border: 1px solid rgb(var(--lt-shadow-rgb, 0 0 0) / var(--lt-shadow-alpha, 1));
   border-radius: 3px;
   background:
     linear-gradient(
@@ -431,7 +431,7 @@ input[type="range"].lt-fader:active:not(:disabled)::-webkit-slider-thumb {
         transparent calc(50% + 1px)
       )
       center / calc(100% - 4px) 100% no-repeat,
-    repeating-linear-gradient(to bottom, transparent 0 2px, rgb(0 0 0 / 0.22) 2px 3px),
+    repeating-linear-gradient(to bottom, transparent 0 2px, rgb(var(--lt-shadow-rgb, 0 0 0) / calc(0.22 * var(--lt-shadow-alpha, 1))) 2px 3px),
     linear-gradient(
       to bottom,
       rgb(var(--lt-c-2c3131, 44 49 49)) 0%,
@@ -442,7 +442,7 @@ input[type="range"].lt-fader:active:not(:disabled)::-webkit-slider-thumb {
       rgb(var(--lt-c-262a2a, 38 42 42)) 100%
     );
   box-shadow:
-    0 2px 4px rgb(0 0 0 / 0.65),
+    0 2px 4px rgb(var(--lt-shadow-rgb, 0 0 0) / calc(0.65 * var(--lt-shadow-alpha, 1))),
     inset 0 1px 0 rgb(var(--lt-c-ffffff, 255 255 255) / 0.12);
   pointer-events: none;
 }

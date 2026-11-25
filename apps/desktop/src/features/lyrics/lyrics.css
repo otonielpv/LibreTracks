@@ -354,7 +354,7 @@ button.lt-lyrics-pill.is-connecting { background: rgb(var(--lt-c-3a3f46, 58 63 7
   border-radius: 2px;
   border: 1px solid rgb(var(--lt-accent-rgb) / 0.18);
   background: linear-gradient(180deg, rgb(var(--lt-c-16191a, 22 25 26) / 0.99), rgb(var(--lt-c-0d0f10, 13 15 16) / 0.99));
-  box-shadow: 0 12px 32px rgb(0 0 0 / 0.45);
+  box-shadow: 0 12px 32px rgb(var(--lt-shadow-rgb, 0 0 0) / calc(0.45 * var(--lt-shadow-alpha, 1)));
   display: flex;
   flex-direction: column;
   gap: 0.45rem;

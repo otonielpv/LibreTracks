@@ -274,7 +274,7 @@
   min-width: 220px;
   margin-top: 4px;
   border-radius: 4px;
-  box-shadow: 0 12px 28px rgb(0 0 0 / 0.5);
+  box-shadow: 0 12px 28px rgb(var(--lt-shadow-rgb, 0 0 0) / calc(0.5 * var(--lt-shadow-alpha, 1)));
 }
 
 .lt-loop-editor__save-menu button {
@@ -623,7 +623,7 @@
   place-items: center;
   padding: calc(24px + var(--lt-safe-area-top, 0px)) calc(24px + var(--lt-safe-area-right, 0px))
     calc(24px + var(--lt-safe-area-bottom, 0px)) calc(24px + var(--lt-safe-area-left, 0px));
-  background: rgb(0 0 0 / 0.55);
+  background: rgb(var(--lt-shadow-rgb, 0 0 0) / calc(0.55 * var(--lt-shadow-alpha, 1)));
 }
 
 /* Teléfono: hoja bajo la barra superior (54 px), que sigue visible y se
@@ -648,7 +648,7 @@
   gap: 0;
   background: rgb(var(--lt-c-0d100f, 13 16 15));
   border-radius: 4px;
-  box-shadow: 0 24px 60px rgb(0 0 0 / 0.55);
+  box-shadow: 0 24px 60px rgb(var(--lt-shadow-rgb, 0 0 0) / calc(0.55 * var(--lt-shadow-alpha, 1)));
 }
 
 /* Editor de kit: una tarjeta por sonido. Arriba color, nombre, volumen,
@@ -825,7 +825,7 @@
   color: rgb(var(--lt-c-e9f1ee, 233 241 238));
   border: 1px solid var(--lt-rhythm-border);
   border-radius: 4px;
-  box-shadow: 0 24px 60px rgb(0 0 0 / 0.55);
+  box-shadow: 0 24px 60px rgb(var(--lt-shadow-rgb, 0 0 0) / calc(0.55 * var(--lt-shadow-alpha, 1)));
 }
 
 .lt-loop-editor--short {
@@ -1428,7 +1428,7 @@
   padding: 10px;
   gap: 10px;
   border-radius: 6px;
-  box-shadow: 0 10px 30px rgb(0 0 0 / 0.45);
+  box-shadow: 0 10px 30px rgb(var(--lt-shadow-rgb, 0 0 0) / calc(0.45 * var(--lt-shadow-alpha, 1)));
 }
 
 .lt-rhythm-more__menu .lt-rhythm-field {
@@ -1444,7 +1444,7 @@
   color: rgb(var(--lt-c-e9f1ee, 233 241 238));
   border: 1px solid rgb(var(--lt-c-bacac5, 186 202 197) / 0.16);
   border-radius: 6px;
-  box-shadow: 0 16px 40px rgb(0 0 0 / 0.5);
+  box-shadow: 0 16px 40px rgb(var(--lt-shadow-rgb, 0 0 0) / calc(0.5 * var(--lt-shadow-alpha, 1)));
 }
 
 .lt-rhythm-card.is-sheet,

@@ -1,4 +1,4 @@
-import { accentHex, accentRgba, themedHex, themedHexColor, themedRgb, themedRgba } from "../../../shared/theme";
+import { accentHex, accentRgba, themedHex, themedHexColor, themedRgb, themedRgba, isLightThemeActive, readableTextOn } from "../../../shared/theme";
 import {
   formatBpm,
   isMobileApp,
@@ -654,13 +654,17 @@ export function drawRulerMarker(
   // Armed/selected/current keep their meaningful live-playback colours; only the
   // resting state takes on the marker kind's colour so sections read distinctly.
   const kindColor = markerColor(marker);
+  // En bases claras la bandera va casi sólida con texto oscuro/blanco: el
+  // tinte al 24 % que funciona sobre negro, sobre gris claro se lavaba y el
+  // texto del mismo color apenas se leía.
+  const light = isLightThemeActive();
   const strokeStyle = options.isArmed
     ? accentRgba(options.pulseAlpha)
     : options.isSelected
       ? themedRgba(255, 226, 171, 0.9)
       : options.isCurrent
         ? themedRgba(229, 226, 225, 0.88)
-        : hexToRgba(kindColor, 0.72);
+        : hexToRgba(kindColor, light ? 1 : 0.72);
   // Opaque flag bodies. The tint matches what the old translucent fills looked
   // like over the ruler, but pre-blended, so the grid lines stop reading
   // through the label. Armed keeps a live alpha because it pulses.
@@ -670,14 +674,16 @@ export function drawRulerMarker(
       ? blendOnRulerBackdrop("#ffe2ab", 0.26)
       : options.isCurrent
         ? blendOnRulerBackdrop(themedHexColor("#e5e2e1"), 0.24)
-        : blendOnRulerBackdrop(kindColor, 0.24);
+        : blendOnRulerBackdrop(kindColor, light ? 0.82 : 0.24);
   const textStyle = options.isArmed
     ? accentHex()
     : options.isSelected
       ? themedHex("#ffe2ab")
       : options.isCurrent
         ? themedHex("#e5e2e1")
-        : kindColor;
+        : light
+          ? readableTextOn(kindColor)
+          : kindColor;
 
   context.save();
   context.strokeStyle = strokeStyle;

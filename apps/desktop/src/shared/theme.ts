@@ -135,6 +135,15 @@ export const THEME_TONES: readonly { id: ThemeToneId; defaultLabel: string; offs
   { id: "warm", defaultLabel: "Warm", offset: [9, 3, -7] },
 ];
 
+/** Multiplicador de la opacidad de sombras y bordes negros por base. */
+const SHADOW_ALPHA: Record<ThemeBaseId, number> = {
+  dark: 1,
+  deep: 1,
+  midDark: 0.8,
+  midLight: 0.4,
+  light: 0.22,
+};
+
 export const THEME_BRIGHTNESS_MIN = 0.8;
 export const THEME_BRIGHTNESS_MAX = 1.2;
 
@@ -371,8 +380,14 @@ export function applyThemeToDom(settings: ThemeSettings = current): void {
       style.setProperty(name, rgbVar(remapThemeRgb(hexToRgb(hex), settings)));
     }
   }
+  // Sombras y bordes negros: pensados para separar paneles sobre negro. En una
+  // base clara, a plena opacidad ensucian todo de gris; se rebajan.
+  const shadowAlpha = SHADOW_ALPHA[settings.base];
+  if (shadowAlpha === 1) style.removeProperty("--lt-shadow-alpha");
+  else style.setProperty("--lt-shadow-alpha", String(shadowAlpha));
   style.colorScheme = themePalette.light ? "light" : "dark";
   root.dataset.ltTheme = settings.base;
+  root.dataset.ltLight = themePalette.light ? "1" : "0";
 }
 
 export function getTheme(): ThemeSettings {
@@ -444,6 +459,16 @@ export function useTheme(): ThemeSettings {
 
 // ---------------------------------------------------------------------------
 // Colores para el canvas
+
+/** True si la base actual es clara (medio claro o claro). */
+export function isLightThemeActive(): boolean {
+  return palette.light;
+}
+
+/** Texto legible encima de `hex`: casi negro o blanco según su luma. */
+export function readableTextOn(hex: string): string {
+  return luma(hexToRgb(hex.replace("#", ""))) > 0.55 ? "#1b1b1b" : "#ffffff";
+}
 
 /** Acento del tema para el canvas, p. ej. accentRgba(0.85). */
 export function accentRgba(alpha: number): string {

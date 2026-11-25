@@ -11,7 +11,7 @@
 }
 
 .lt-song-fade-ramps polygon {
-  fill: rgb(0 0 0 / 0.38);
+  fill: rgb(var(--lt-shadow-rgb, 0 0 0) / calc(0.38 * var(--lt-shadow-alpha, 1)));
   stroke: rgb(var(--lt-c-ffe2ab, 255 226 171) / 0.75);
   stroke-width: 1;
   vector-effect: non-scaling-stroke;
@@ -27,7 +27,7 @@
   margin: 0 6px;
   border-radius: 1px;
   background: rgb(var(--lt-c-ffe2ab, 255 226 171));
-  box-shadow: 0 0 0 1px rgb(0 0 0 / 0.55);
+  box-shadow: 0 0 0 1px rgb(var(--lt-shadow-rgb, 0 0 0) / calc(0.55 * var(--lt-shadow-alpha, 1)));
   cursor: ew-resize;
   opacity: 0;
   transition: opacity 80ms ease-out;

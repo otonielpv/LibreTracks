@@ -38,7 +38,7 @@
   border: 1px solid rgb(var(--lt-c-ffffff, 255 255 255) / 0.08);
   border-radius: 2px;
   background:
-    linear-gradient(180deg, rgb(var(--lt-c-ffffff, 255 255 255) / 0.04), rgb(0 0 0 / 0.12)),
+    linear-gradient(180deg, rgb(var(--lt-c-ffffff, 255 255 255) / 0.04), rgb(var(--lt-shadow-rgb, 0 0 0) / calc(0.12 * var(--lt-shadow-alpha, 1)))),
     rgb(var(--lt-c-201f1f, 32 31 31));
   color: rgb(var(--lt-c-bacac5, 186 202 197));
 }

@@ -3181,7 +3181,7 @@ html.lt-mobile .lt-setlist-lane-clip.is-selected .lt-setlist-lane-trim.is-end {
   flex: 0 0 auto;
   width: 0.9rem;
   height: 0.9rem;
-  border: 1px solid rgb(0 0 0 / 0.5);
+  border: 1px solid rgb(var(--lt-shadow-rgb, 0 0 0) / calc(0.5 * var(--lt-shadow-alpha, 1)));
   background: rgb(var(--lt-c-ffd27a, 255 210 122));
   transform: rotate(45deg);
 }
@@ -3606,7 +3606,7 @@ html.lt-mobile .lt-setlist-add-song.is-short .lt-setlist-add-song-button {
   min-width: 4.5rem;
   max-width: 11rem;
   padding: 0 0.45rem;
-  border: 1px solid rgb(0 0 0 / 0.35);
+  border: 1px solid rgb(var(--lt-shadow-rgb, 0 0 0) / calc(0.35 * var(--lt-shadow-alpha, 1)));
   border-left: 3px solid var(--lt-midi-clip-color);
   border-radius: 0.35rem;
   background: rgb(var(--lt-t-b18cf2, 177 140 242) / 0.16);
@@ -3807,7 +3807,7 @@ html.lt-mobile .lt-setlist-add-song.is-short .lt-setlist-add-song-button {
   bottom: 3px;
   min-width: 2px;
   overflow: hidden;
-  border: 1px solid rgb(0 0 0 / 0.4);
+  border: 1px solid rgb(var(--lt-shadow-rgb, 0 0 0) / calc(0.4 * var(--lt-shadow-alpha, 1)));
   border-top: 3px solid var(--lt-video-clip-color);
   border-radius: 0.3rem;
   background: rgb(var(--lt-c-101418, 16 20 24));
@@ -4682,13 +4682,13 @@ button.lt-setlist-track-chip-name {
 .lt-setlist-scrub-video-fade.is-in {
   left: 0;
   width: var(--lt-video-fade-in, 0px);
-  background: linear-gradient(90deg, transparent, rgb(0 0 0 / 0.42));
+  background: linear-gradient(90deg, transparent, rgb(var(--lt-shadow-rgb, 0 0 0) / calc(0.42 * var(--lt-shadow-alpha, 1))));
 }
 
 .lt-setlist-scrub-video-fade.is-out {
   right: 0;
   width: var(--lt-video-fade-out, 0px);
-  background: linear-gradient(90deg, rgb(0 0 0 / 0.42), transparent);
+  background: linear-gradient(90deg, rgb(var(--lt-shadow-rgb, 0 0 0) / calc(0.42 * var(--lt-shadow-alpha, 1))), transparent);
 }
 
 .lt-setlist-scrub-video-handle {
