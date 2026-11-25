@@ -70,6 +70,26 @@ describe("theme", () => {
     expect(orange[0] - orange[2]).toBeGreaterThan(150);
   });
 
+  it("las variantes del turquesa del diseño siguen al acento elegido", () => {
+    const hue = (rgb: readonly number[]) => {
+      const [r, g, b] = rgb.map((v) => v / 255);
+      const max = Math.max(r, g, b);
+      const min = Math.min(r, g, b);
+      const d = max - min;
+      if (d === 0) return 0;
+      const h = max === r ? ((g - b) / d) % 6 : max === g ? (b - r) / d + 2 : (r - g) / d + 4;
+      return (h * 60 + 360) % 360;
+    };
+    // #7fe0d8: el turquesa claro de los chips de BPM y nota en Live.
+    const variant = [127, 224, 216] as const;
+    expect(remapThemeRgb(variant, DEFAULT_THEME)).toEqual(variant);
+    for (const base of ["dark", "light"] as const) {
+      const orange = remapThemeRgb(variant, { ...DEFAULT_THEME, base, accent: "orange" });
+      expect(hue(orange)).toBeGreaterThan(15);
+      expect(hue(orange)).toBeLessThan(45);
+    }
+  });
+
   it("las bases claras conservan la separación entre pistas, paneles y regla", () => {
     for (const base of ["light", "midLight"] as const) {
       const theme = { ...DEFAULT_THEME, base };
