@@ -312,6 +312,8 @@ describe("simple lyrics editor", () => {
     renderEditor({ ...PC_CHART, text }, "advanced");
     const eyes = screen.getAllByRole("button", { name: "liveChart.peekSection:Coro" });
     expect(eyes).toHaveLength(3);
+    // Beside the select: the first line, cut to what fits.
+    expect(eyes[0].parentElement!.querySelector(".lt-section-peek-first")?.textContent).toBe("Santo eres tú");
     fireEvent.mouseEnter(eyes[0].parentElement!);
     const box = screen.getByRole("tooltip");
     expect(box.textContent).toContain("liveChart.peekLines:3");

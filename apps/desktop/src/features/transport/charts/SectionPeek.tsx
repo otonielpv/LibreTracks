@@ -3,6 +3,8 @@ import { useTranslation } from "react-i18next";
 
 import type { ChartLine, ChartSection } from "@libretracks/shared/charts/chordChart";
 
+import "./SectionPeek.css";
+
 /** The words of a line as sung (chords left out), or its comment. */
 function lineText(line: ChartLine): string {
   if (line.kind === "lyrics") return line.segments.map((segment) => segment.text).join("").trim();
@@ -15,16 +17,26 @@ export function sungLines(section: ChartSection): string[] {
 }
 
 /**
- * A small eye next to the section a marker shows: hover (or tap) it and the
- * whole section appears in a little box, with how many lines it has, so the
+ * The first line of the section a marker shows, cut to what fits, and a small
+ * eye: hover (or tap) it and the whole section appears in a little box, with how many lines it has, so the
  * passes (×2, ×3) can be set without scrolling the text.
  */
-export function SectionPeek({ section, name }: { section: ChartSection; name: string }) {
+export function SectionPeek({
+  section,
+  name,
+  firstLine,
+}: {
+  section: ChartSection;
+  name: string;
+  /** Shown beside the eye, cut to what fits; `undefined` = the first sung line. */
+  firstLine?: string | null;
+}) {
   const { t } = useTranslation();
   const buttonRef = useRef<HTMLButtonElement>(null);
   const [place, setPlace] = useState<CSSProperties | null>(null);
   const [pinned, setPinned] = useState(false);
   const lines = sungLines(section);
+  const first = firstLine === undefined ? (lines[0] ?? null) : firstLine;
 
   const show = () => {
     const rect = buttonRef.current?.getBoundingClientRect();
@@ -44,6 +56,9 @@ export function SectionPeek({ section, name }: { section: ChartSection; name: st
 
   return (
     <span className="lt-section-peek" onMouseEnter={show} onMouseLeave={() => (pinned ? null : setPlace(null))}>
+      <span className="lt-section-peek-first" title={first ?? undefined}>
+        {first ?? ""}
+      </span>
       <button
         ref={buttonRef}
         type="button"
