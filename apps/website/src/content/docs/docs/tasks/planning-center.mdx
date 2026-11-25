@@ -64,8 +64,9 @@ lyrics editor and changes nothing until you press **Apply**.
 The song's markers lead: they sit on the audio. For each marker LibreTracks
 looks for the sheet section that belongs there:
 
-- **Different names for the same part**: Chorus, Coro, Estribillo, Refrão and
-  Refrain are the same part; so are Interlude, Instrumental and Turnaround; and
+- **Different names for the same part**: Chorus, Coro, Estribillo and Refrão
+  are the same part (a Refrain marker is a part of its own: it takes a Refrain
+  from the sheet or stays without lyrics); so are Interlude, Instrumental and Turnaround; and
   Ending, Outro and Coda. It reads English, Spanish and Portuguese, Roman
   numerals ("Verse II") and decorations like "Chorus (x2)" or "Final chorus".
 - **Numbers**: a **Verse 2** marker prefers the **Verse 2** section. A marker
@@ -81,7 +82,8 @@ looks for the sheet section that belongs there:
 
 | Your marker | Matches in the sheet |
 | --- | --- |
-| Chorus, Refrain, Estribillo | Chorus, Coro, Refrão |
+| Chorus | Chorus, Coro, Refrão, Estribillo |
+| Refrain | Refrain, Refrán |
 | Interlude, Instrumental | Interlude, Instrumental, Turnaround |
 | Ending, Outro | Ending, Outro, Coda |
 | Pre-Chorus | Pre-Chorus, Pre-Coro |

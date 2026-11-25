@@ -18,7 +18,7 @@ describe("the one vocabulary of section names", () => {
   );
 
   it("joins the names of the same part into families", () => {
-    expect(sectionFamily("refrain")).toBe(sectionFamily("chorus"));
+    expect(sectionFamily("refrain")).not.toBe(sectionFamily("chorus"));
     expect(sectionFamily("turnaround")).toBe(sectionFamily("instrumental"));
     expect(sectionFamily("interlude")).toBe(sectionFamily("instrumental"));
     expect(sectionFamily("ending")).toBe(sectionFamily("outro"));

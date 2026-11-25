@@ -17,6 +17,7 @@
     [["coro"], "chorus"],
     [["chorus"], "chorus"],
     [["refrao"], "chorus"],
+    [["estribillo"], "chorus"],
     [["post", "coro"], "post_chorus"],
     [["postcoro"], "post_chorus"],
     [["post", "chorus"], "post_chorus"],
@@ -42,7 +43,6 @@
     [["instrumental"], "instrumental"],
     [["interludio"], "interlude"],
     [["interlude"], "interlude"],
-    [["estribillo"], "refrain"],
     [["refrain"], "refrain"],
     [["tag"], "tag"],
     [["repeticion"], "tag"],
@@ -164,8 +164,6 @@
   "sectionKinds": ["intro", "verse", "pre_chorus", "chorus", "post_chorus", "bridge", "breakdown", "drop", "solo", "outro", "acapella", "instrumental", "interlude", "refrain", "tag", "vamp", "ending", "exhortation", "rap", "turnaround"],
   "labelKinds": ["acapella", "bass_solo", "breakdown", "bridge", "chorus", "drop", "drum_solo", "ending", "exhortation", "guitar_solo", "instrumental", "interlude", "intro", "outro", "post_chorus", "pre_chorus", "rap", "refrain", "solo", "tag", "turnaround", "vamp", "verse"],
   "families": [
-    ["chorus", "chorus"],
-    ["refrain", "chorus"],
     ["outro", "end"],
     ["ending", "end"],
     ["instrumental", "instrumental"],
@@ -173,7 +171,7 @@
     ["turnaround", "instrumental"]
   ],
   "chartKindAliases": [
-    ["refrain", "chorus"]
+
   ],
   "lyricless": ["intro", "breakdown", "drop", "solo", "outro", "instrumental", "interlude", "vamp", "ending", "exhortation", "turnaround"],
   "numberWords": [

@@ -16,7 +16,8 @@ fn real_group_names_read_as_their_section() {
         ("Pre-Coro", id(PreChorus, None)),
         ("Precoro", id(PreChorus, None)),
         ("Puente", id(Bridge, None)),
-        ("Estribillo", id(Refrain, None)),
+        ("Estribillo", id(Chorus, None)),
+        ("Refrain", id(Refrain, None)),
         ("Verse 1", id(Verse, Some(1))),
         ("Chorus 1", id(Chorus, Some(1))),
         ("Pre-Chorus", id(PreChorus, None)),
@@ -138,7 +139,7 @@ fn written_labels_match_the_shared_cases() {
 
 #[test]
 fn families_join_the_names_of_the_same_part() {
-    assert_eq!(section_family("refrain"), section_family("chorus"));
+    assert_ne!(section_family("refrain"), section_family("chorus"));
     assert_eq!(section_family("interlude"), section_family("instrumental"));
     assert_eq!(section_family("turnaround"), section_family("instrumental"));
     assert_eq!(section_family("ending"), section_family("outro"));

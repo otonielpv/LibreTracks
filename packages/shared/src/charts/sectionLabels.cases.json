@@ -19,7 +19,7 @@
   { "text": "Coro", "context": "header", "kind": "chorus", "number": null },
   { "text": "Coros", "context": "header", "kind": "chorus", "number": null },
   { "text": "Chorus 1", "context": "header", "kind": "chorus", "number": 1 },
-  { "text": "Estribillo", "context": "header", "kind": "refrain", "number": null },
+  { "text": "Estribillo", "context": "header", "kind": "chorus", "number": null },
   { "text": "Refrán", "context": "header", "kind": "refrain", "number": null },
   { "text": "Refrain", "context": "header", "kind": "refrain", "number": null },
   { "text": "Refrão", "context": "header", "kind": "chorus", "number": null },

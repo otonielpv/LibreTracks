@@ -25,15 +25,15 @@ pub struct GroupMatch {
     /// Index into the candidates.
     pub index: usize,
     /// 3 = same section and number; 2 = same section, one side unnumbered;
-    /// 1 = an equivalent section (estribillo ≈ coro).
+    /// 1 = an equivalent section (final ≈ outro).
     pub score: u8,
 }
 
 /// Kinds that hold the same text under another name.
 fn equivalent(a: MarkerKind, b: MarkerKind) -> bool {
     let pair = |x, y| (a == x && b == y) || (a == y && b == x);
-    pair(MarkerKind::Refrain, MarkerKind::Chorus)
-        || pair(MarkerKind::Ending, MarkerKind::Outro)
+    // A Refrain is not a Chorus: it shows a refrain group or nothing.
+    pair(MarkerKind::Ending, MarkerKind::Outro)
         || pair(MarkerKind::Tag, MarkerKind::Vamp)
 }
 

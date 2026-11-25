@@ -271,4 +271,37 @@ describe("simple lyrics editor", () => {
     const advanced = screen.getByRole("textbox", { name: "liveChart.textLabel" }) as HTMLTextAreaElement;
     expect(advanced.style.height).not.toBe("");
   });
+
+  it("a part sung twice in a row (Coro x2 from Planning Center) says ×2 on its row and above the box", () => {
+    const chart: SongChart = {
+      ...PC_CHART,
+      links: PC_CHART.links.map((link) => (link.markerId === "c2" ? { ...link, repeat: 2 } : link)),
+    };
+    renderEditor(chart);
+    const rows = partButtons(/Coro/);
+    expect(within(rows[0]).queryByText("×2")).toBeNull();
+    expect(within(rows[1]).getByText("×2")).toBeTruthy();
+    expect(screen.queryByRole("note")).toBeNull();
+    fireEvent.click(rows[1]);
+    expect(screen.getByRole("note").textContent).toContain("simpleLyrics.passesNote:2");
+    fireEvent.click(rows[0]);
+    expect(screen.queryByRole("note")).toBeNull();
+  });
+
+  it("the advanced editor's eye shows the whole linked section and its line count", () => {
+    const text = PC_TEXT.replace("[C]Santo eres [G]tú", "[C]Santo eres [G]tú\nDigno de [D]honra\nRey de reyes");
+    renderEditor({ ...PC_CHART, text }, "advanced");
+    const eyes = screen.getAllByRole("button", { name: "liveChart.peekSection:Coro" });
+    expect(eyes).toHaveLength(3);
+    fireEvent.mouseEnter(eyes[0].parentElement!);
+    const box = screen.getByRole("tooltip");
+    expect(box.textContent).toContain("liveChart.peekLines:3");
+    expect(within(box).getAllByRole("listitem").map((item) => item.textContent)).toEqual([
+      "Santo eres tú",
+      "Digno de honra",
+      "Rey de reyes",
+    ]);
+    fireEvent.mouseLeave(eyes[0].parentElement!);
+    expect(screen.queryByRole("tooltip")).toBeNull();
+  });
 });

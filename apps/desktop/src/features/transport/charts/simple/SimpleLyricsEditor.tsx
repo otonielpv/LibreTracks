@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import type { MarkerKind, SectionMarkerSummary, SongChart } from "@libretracks/shared/models";
 import { addPart, applyPartEdit, chartPartEntries, chartParts, QUICK_PART_NAMES } from "@libretracks/shared/charts/chartParts";
 import { parseChordPro } from "@libretracks/shared/charts/chordChart";
+import { chartLinkFor } from "@libretracks/shared/charts/chartSync";
 import { plainToSectionLines, sectionToPlain } from "@libretracks/shared/charts/plainChart";
 
 import { ChordView } from "./ChordPicker";
@@ -48,6 +49,17 @@ export function SimpleLyricsEditor({
   const entries = useMemo(() => chartPartEntries(parts, markers), [parts, markers]);
   const [selectedKey, setSelectedKey] = useState<string | null>(() => entries[0]?.key ?? null);
   const entry = entries.find((candidate) => candidate.key === selectedKey) ?? null;
+  /** Times each marker sings its part in a row ("Coro x2" from Planning
+   * Center): the text is written once, so the row and the box say it. */
+  const passes = useMemo(() => {
+    const byKey: Record<string, number> = {};
+    for (const candidate of entries) {
+      const repeat = candidate.markerId ? (chartLinkFor(chart?.links ?? [], candidate.markerId)?.repeat ?? 1) : 1;
+      if (repeat > 1) byKey[candidate.key] = repeat;
+    }
+    return byKey;
+  }, [entries, chart?.links]);
+  const selectedPasses = entry ? (passes[entry.key] ?? 1) : 1;
   const selected = entry ? (parts.find((part) => part.key === entry.partKey) ?? null) : null;
   const [draft, setDraft] = useState<{ key: string | null; text: string }>(() => ({ key: selectedKey, text: selected?.plain ?? "" }));
   const [clearedTimes, setClearedTimes] = useState(false);
@@ -115,6 +127,7 @@ export function SimpleLyricsEditor({
       <PartList
         entries={entries}
         selectedKey={selectedKey}
+        passes={passes}
         onSelect={select}
         onAdd={hasMarkers ? null : add}
         quickName={(kind) => QUICK_PART_NAMES[language][kind] ?? kind}
@@ -152,6 +165,12 @@ export function SimpleLyricsEditor({
             </button>
           ))}
         </div>
+        {selected && selectedPasses > 1 ? (
+          <p className="lt-simple-lyrics-passes" role="note">
+            <span className="lt-simple-lyrics-passes-badge" aria-hidden="true">×{selectedPasses}</span>
+            {t("simpleLyrics.passesNote", { count: selectedPasses })}
+          </p>
+        ) : null}
         {view === "chords" && selected ? (
           <ChordView
             lines={plainToSectionLines(draft.text)}

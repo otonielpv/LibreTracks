@@ -98,7 +98,8 @@ describe("matching a sheet to the song's markers", () => {
   it("C9: families join names of the same part and nothing else", () => {
     expect(sections(sheet("Interludio"), ["Turnaround"])).toEqual([0]);
     expect(sections(sheet("Instrumental"), ["Interludio"])).toEqual([0]);
-    expect(sections(sheet("Coro"), ["Refrán"])).toEqual([0]);
+    expect(sections(sheet("Coro"), ["Refrán"])).toEqual([null]);
+    expect(sections(sheet("Refrain"), ["Refrán"])).toEqual([0]);
     expect(sections(sheet("Coro"), ["Vamp"])).toEqual([null]);
     expect(sections(sheet("Pre-coro"), ["Puente"])).toEqual([null]);
   });
