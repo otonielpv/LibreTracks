@@ -1,4 +1,4 @@
-import { themedHex, themedRgba } from "../../../shared/theme";
+import { themedHex, themedHexColor, themedRgba } from "../../../shared/theme";
 import type { SongView, VideoClipSummary } from "../desktopApi";
 import { secondsToScreenX } from "../timeline/timelineMath";
 import {
@@ -129,7 +129,7 @@ export function drawVideoLane(
     );
     if (right < 0 || left > snapshot.width) continue;
 
-    const accent = clip.color ?? style.trackColor ?? VIDEO_ACCENT;
+    const accent = clip.color ?? style.trackColor ?? themedHexColor(VIDEO_ACCENT);
     const width = Math.max(2, right - left);
 
     // Body.

@@ -99,7 +99,7 @@ function RenderSessionTrackPicker({ groups, selected, onToggle, onSetMany }: {
                 <li key={track.id}>
                   <label className="lt-render-track">
                     <input type="checkbox" checked={selected.has(track.id)} onChange={() => onToggle(track.id)} />
-                    <span className="lt-render-track-swatch" style={{ background: track.color ?? "#57f1db" }} aria-hidden="true" />
+                    <span className="lt-render-track-swatch" style={{ background: track.color ?? "var(--lt-accent)" }} aria-hidden="true" />
                     <span className="lt-render-track-name">{track.name}</span>
                   </label>
                 </li>
@@ -408,7 +408,7 @@ function RenderSongDialog({ regionId, regionName, tracks: songTracks, sessionTra
                                   />
                                   <span
                                     className="lt-render-track-swatch"
-                                    style={{ background: track.color ?? "#57f1db" }}
+                                    style={{ background: track.color ?? "var(--lt-accent)" }}
                                     aria-hidden="true"
                                   />
                                   <span className="lt-render-track-name">{track.name}</span>
