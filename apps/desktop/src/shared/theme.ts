@@ -604,6 +604,13 @@ export function resetThemeForTests(): void {
   listeners.forEach((listener) => listener());
 }
 
+/** Color del acento elegido tal cual (sin ajustar a la base), como "#rrggbb".
+ * Es el color por defecto de lo que el usuario crea (one shots, sonidos). */
+export function selectedAccentHex(): string {
+  const accent = (THEME_ACCENTS.find((item) => item.id === current.accent) ?? THEME_ACCENTS[0]).accent;
+  return `#${accent.map((channel) => channel.toString(16).padStart(2, "0")).join("")}`;
+}
+
 /** Un gris del diseño oscuro pasado al tema, como "#rrggbb" (para funciones
  * que mezclan colores en hex). */
 export function themedHexColor(hex: string): string {

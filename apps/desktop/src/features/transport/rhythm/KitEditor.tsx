@@ -8,6 +8,7 @@ import { DRUM_KIT_MAX_SOUNDS, type DrumKit, type DrumSound, type LoopPattern } f
 
 import { SamplePicker } from "./SamplePicker";
 import { RhythmVolumeFader } from "./RhythmVolumeFader";
+import { selectedAccentHex } from "../../../shared/theme";
 
 /** Patrones de la biblioteca que usan `soundId` de este kit. */
 export function patternsUsingSound(kit: DrumKit, soundId: string, patterns: LoopPattern[]): number {
@@ -88,7 +89,7 @@ export function KitEditor({
               {
                 id: `sound-${Date.now().toString(36)}-${k.sounds.length}`,
                 name: t("rhythm.kit.newSound", { number: k.sounds.length + 1 }),
-                color: "#57f1db",
+                color: selectedAccentHex(),
                 sample: { source: { kind: "builtin" }, file: "" },
                 gainDb: 0,
               },
@@ -167,7 +168,7 @@ export function KitEditor({
                 type="color"
                 className="lt-kit-editor__color"
                 aria-label={t("rhythm.pads.color")}
-                value={sound.color || "#57f1db"}
+                value={sound.color || selectedAccentHex()}
                 onChange={(event) => updateSound(index, { color: event.target.value })}
               />
               <input

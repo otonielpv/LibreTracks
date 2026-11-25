@@ -13,6 +13,7 @@ import { stepsPerBar as patternStepsPerBar } from "./patternOps";
 import type { RhythmHandlers } from "./rhythmHandlers";
 import { LoopStepStrip } from "./LoopStepStrip";
 import type { RhythmLayoutClass } from "./useRhythmLayout";
+import { rhythmDisplayColor } from "./padColor";
 
 export const VARIATION_LETTERS = ["A", "B", "C", "D"] as const;
 
@@ -48,7 +49,7 @@ function LoopRowsImpl({ pattern, kit, rows, layout, handlers }: LoopRowsProps) {
             className={enabled ? "lt-rhythm-row" : "lt-rhythm-row is-off"}
             data-testid={`rhythm-row-${index}`}
           >
-            <span className="lt-rhythm-row__color" style={{ background: sound?.color || undefined }} />
+            <span className="lt-rhythm-row__color" style={{ background: rhythmDisplayColor(sound?.color) }} />
             <MidiMappable target={`loop:row:${index + 1}:toggle`} label={name}>
             <button
               type="button"
