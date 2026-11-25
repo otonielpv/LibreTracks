@@ -901,7 +901,7 @@ html.lt-mobile .lt-setlist-mixer-resize ~ .lt-setlist-mixer {
   margin: 0;
   padding: 0.35rem 0.6rem;
   border-radius: 0.4rem;
-  background: rgb(var(--lt-c-f2c45a, 242 196 90) / 0.12);
+  background: rgb(var(--lt-t-f2c45a, 242 196 90) / 0.12);
   color: rgb(var(--lt-c-f2d68a, 242 214 138));
   font-size: 0.8rem;
 }
@@ -979,7 +979,7 @@ html.lt-mobile .lt-setlist-mixer-resize ~ .lt-setlist-mixer {
 
 .lt-setlist-edit-button.is-active {
   border-color: rgb(var(--lt-c-f2c45a, 242 196 90));
-  background: rgb(var(--lt-c-f2c45a, 242 196 90) / 0.16);
+  background: rgb(var(--lt-t-f2c45a, 242 196 90) / 0.16);
   color: rgb(var(--lt-c-f2d68a, 242 214 138));
 }
 
@@ -1296,7 +1296,7 @@ html.lt-mobile .lt-setlist-edit-button {
 }
 
 .lt-setlist-sections-item.is-selected {
-  background: rgb(var(--lt-c-f2c45a, 242 196 90) / 0.14);
+  background: rgb(var(--lt-t-f2c45a, 242 196 90) / 0.14);
 }
 
 .lt-setlist-sections-swatch {
@@ -2209,7 +2209,7 @@ html.lt-mobile .lt-setlist-lane-clip.is-selected .lt-setlist-lane-trim.is-end {
 
 .lt-setlist-map-block.is-pending {
   animation: lt-setlist-pending-blink 0.9s ease-in-out infinite;
-  background: rgb(var(--lt-c-f2c45a, 242 196 90) / 0.22);
+  background: rgb(var(--lt-t-f2c45a, 242 196 90) / 0.22);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -2229,7 +2229,7 @@ html.lt-mobile .lt-setlist-lane-clip.is-selected .lt-setlist-lane-trim.is-end {
   inset: 2px;
   border: 2px dashed var(--lt-setlist-accent);
   border-radius: 0.5rem;
-  background: rgb(var(--lt-c-f2c45a, 242 196 90) / 0.08);
+  background: rgb(var(--lt-t-f2c45a, 242 196 90) / 0.08);
   pointer-events: none;
   z-index: 5;
 }
@@ -3141,7 +3141,7 @@ html.lt-mobile .lt-setlist-lane-clip.is-selected .lt-setlist-lane-trim.is-end {
 /* ---- Automatismos (paso 12) ---- */
 
 .lt-setlist-lane-row.is-automation {
-  background: rgb(var(--lt-c-ffd27a, 255 210 122) / 0.04);
+  background: rgb(var(--lt-t-ffd27a, 255 210 122) / 0.04);
 }
 
 .lt-setlist-lane-row.is-automation.is-disabled .lt-setlist-automation-cell {
@@ -3609,7 +3609,7 @@ html.lt-mobile .lt-setlist-add-song.is-short .lt-setlist-add-song-button {
   border: 1px solid rgb(0 0 0 / 0.35);
   border-left: 3px solid var(--lt-midi-clip-color);
   border-radius: 0.35rem;
-  background: rgb(var(--lt-c-b18cf2, 177 140 242) / 0.16);
+  background: rgb(var(--lt-t-b18cf2, 177 140 242) / 0.16);
   color: var(--lt-setlist-text);
   font: inherit;
   text-align: left;
@@ -4645,7 +4645,7 @@ button.lt-setlist-track-chip-name {
   overflow: hidden;
   border: 1px solid rgb(var(--lt-c-ff8a65, 255 138 101) / 0.8);
   border-radius: 0.25rem;
-  background: rgb(var(--lt-c-ff8a65, 255 138 101) / 0.22);
+  background: rgb(var(--lt-t-ff8a65, 255 138 101) / 0.22);
   color: rgb(var(--lt-c-ffd2c2, 255 210 194));
   font: inherit;
   font-size: 0.72rem;
@@ -5041,7 +5041,7 @@ html.lt-mobile .lt-setlist-video-item .lt-setlist-song-button {
 }
 
 .lt-setlist-view .lt-setlist-song-tile .lt-setlist-song-play:hover:not(:disabled) {
-  background: rgb(var(--lt-c-48da88, 72 218 136) / 0.2);
+  background: rgb(var(--lt-t-48da88, 72 218 136) / 0.2);
   color: rgb(var(--lt-c-80edac, 128 237 172));
 }
 

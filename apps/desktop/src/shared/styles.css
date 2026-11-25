@@ -70,7 +70,7 @@ body {
   overflow: hidden;
   background:
     radial-gradient(circle at 8% 10%, rgb(var(--lt-accent-rgb) / 0.08), transparent 22%),
-    radial-gradient(circle at 92% 0%, rgb(var(--lt-c-ffe2ab, 255 226 171) / 0.06), transparent 24%),
+    radial-gradient(circle at 92% 0%, rgb(var(--lt-t-ffe2ab, 255 226 171) / 0.06), transparent 24%),
     rgb(var(--lt-c-131313, 19 19 19));
   color: rgb(var(--lt-c-e5e2e1, 229 226 225));
   font-family: Inter, sans-serif;
@@ -793,7 +793,7 @@ html.lt-ios body {
 /* «Fade out y parar» mientras el fade corre: ambar, el mismo aviso que la
    vista Live. Otra pulsacion para en seco. */
 .lt-transport-buttons button.lt-fade-stop.is-active {
-  background: rgb(var(--lt-c-f4c95d, 244 201 93) / 0.16);
+  background: rgb(var(--lt-t-f4c95d, 244 201 93) / 0.16);
   color: rgb(var(--lt-c-f4c95d, 244 201 93));
 }
 
@@ -880,7 +880,7 @@ html.lt-ios body {
   width: min(34rem, 100%);
   margin-bottom: 0.9rem;
   padding: 0.8rem 0.9rem;
-  border: 1px solid rgb(var(--lt-c-f0b43c, 240 180 60) / 0.35);
+  border: 1px solid rgb(var(--lt-t-f0b43c, 240 180 60) / 0.35);
   border-radius: 2px;
   background: linear-gradient(180deg, rgb(var(--lt-c-2e2412, 46 36 18) / 0.96), rgb(var(--lt-c-1a150c, 26 21 12) / 0.98));
 }
@@ -918,9 +918,9 @@ html.lt-ios body {
 .lt-remote-firewall button {
   align-self: flex-start;
   padding: 0.4rem 0.8rem;
-  border: 1px solid rgb(var(--lt-c-f0b43c, 240 180 60) / 0.45);
+  border: 1px solid rgb(var(--lt-t-f0b43c, 240 180 60) / 0.45);
   border-radius: 2px;
-  background: rgb(var(--lt-c-f0b43c, 240 180 60) / 0.12);
+  background: rgb(var(--lt-t-f0b43c, 240 180 60) / 0.12);
   color: rgb(var(--lt-c-f8d692, 248 214 146));
   font: inherit;
   font-size: 0.82rem;
@@ -928,7 +928,7 @@ html.lt-ios body {
 }
 
 .lt-remote-firewall button:hover:not(:disabled) {
-  background: rgb(var(--lt-c-f0b43c, 240 180 60) / 0.2);
+  background: rgb(var(--lt-t-f0b43c, 240 180 60) / 0.2);
 }
 
 .lt-remote-firewall button:disabled {
@@ -1119,7 +1119,7 @@ html.lt-ios body {
 .transport-pill.is-stopped,
 .transport-pill.is-empty {
   color: rgb(var(--lt-c-ffe2ab, 255 226 171));
-  background: rgb(var(--lt-c-ffe2ab, 255 226 171) / 0.16);
+  background: rgb(var(--lt-t-ffe2ab, 255 226 171) / 0.16);
 }
 
 /* Output-device health badge (fallback clock active / device restored). */
@@ -1153,7 +1153,7 @@ html.lt-ios body {
 
 .lt-device-status-pill.is-lost {
   color: rgb(var(--lt-c-ff9d9d, 255 157 157));
-  background: rgb(var(--lt-c-ff7a7a, 255 122 122) / 0.16);
+  background: rgb(var(--lt-t-ff7a7a, 255 122 122) / 0.16);
   animation: lt-device-status-blink 1.6s ease-in-out infinite;
 }
 
@@ -1295,7 +1295,7 @@ html.lt-ios body {
 
 .lt-side-nav button.is-midi-learn:hover,
 .lt-side-nav button.is-midi-learn.is-active {
-  background: rgb(var(--lt-c-ffc157, 255 193 87) / 0.1);
+  background: rgb(var(--lt-t-ffc157, 255 193 87) / 0.1);
   color: rgb(var(--lt-c-ffdca0, 255 220 160));
 }
 
@@ -1431,14 +1431,14 @@ html.lt-ios body {
 }
 
 .lt-dialog-button--danger {
-  border-color: rgb(var(--lt-c-e25858, 226 88 88) / 0.4);
+  border-color: rgb(var(--lt-t-e25858, 226 88 88) / 0.4);
   color: rgb(var(--lt-c-f0a3a3, 240 163 163));
 }
 
 .lt-dialog-button--danger:hover,
 .lt-dialog-button--danger:focus-visible {
   border-color: rgb(var(--lt-c-e25858, 226 88 88) / 0.75);
-  background: rgb(var(--lt-c-e25858, 226 88 88) / 0.12);
+  background: rgb(var(--lt-t-e25858, 226 88 88) / 0.12);
   color: rgb(var(--lt-c-ffd2d2, 255 210 210));
 }
 
@@ -1972,8 +1972,8 @@ html.lt-ios body {
 
 .lt-midi-learn-activate.is-active,
 .lt-midi-learn-relearn.is-active {
-  border-color: rgb(var(--lt-c-ffc107, 255 193 7) / 0.45);
-  background: rgb(var(--lt-c-ffc107, 255 193 7) / 0.12);
+  border-color: rgb(var(--lt-t-ffc107, 255 193 7) / 0.45);
+  background: rgb(var(--lt-t-ffc107, 255 193 7) / 0.12);
   color: rgb(var(--lt-c-ffe3a8, 255 227 168));
 }
 
@@ -2008,8 +2008,8 @@ html.lt-ios body {
 .lt-midi-learn-scenes-hint {
   margin: 0;
   padding: 0.7rem 0.9rem;
-  border-left: 2px solid rgb(var(--lt-c-ff7ab6, 255 122 182) / 0.5);
-  background: rgb(var(--lt-c-ff7ab6, 255 122 182) / 0.06);
+  border-left: 2px solid rgb(var(--lt-t-ff7ab6, 255 122 182) / 0.5);
+  background: rgb(var(--lt-t-ff7ab6, 255 122 182) / 0.06);
   color: rgb(var(--lt-c-bacac5, 186 202 197) / 0.9);
   font: 500 0.82rem/1.4 "Space Grotesk", sans-serif;
 }
@@ -2809,8 +2809,8 @@ html.lt-ios body {
 }
 
 .lt-song-analysis-guide-row.is-unassigned {
-  border-color: rgb(var(--lt-c-ffb74d, 255 183 77) / 0.35);
-  background: rgb(var(--lt-c-ffb74d, 255 183 77) / 0.06);
+  border-color: rgb(var(--lt-t-ffb74d, 255 183 77) / 0.35);
+  background: rgb(var(--lt-t-ffb74d, 255 183 77) / 0.06);
 }
 
 .lt-song-analysis-guide-said {
@@ -2921,7 +2921,7 @@ html.lt-ios body {
 }
 
 .lt-song-analysis-table tr.is-unassigned td {
-  background: rgb(var(--lt-c-ffb74d, 255 183 77) / 0.08);
+  background: rgb(var(--lt-t-ffb74d, 255 183 77) / 0.08);
 }
 
 .lt-song-analysis-tracks {
@@ -2989,7 +2989,7 @@ html.lt-ios body {
 }
 
 .lt-batch-analysis-row.is-failed .lt-batch-analysis-status {
-  background: rgb(var(--lt-c-ff7864, 255 120 100) / 0.14);
+  background: rgb(var(--lt-t-ff7864, 255 120 100) / 0.14);
   color: rgb(var(--lt-c-ff9f8f, 255 159 143));
 }
 
@@ -3084,10 +3084,10 @@ html.lt-ios body {
 }
 
 .lt-automation-action-row {
-  border: 1px solid rgb(var(--lt-c-ff7ab6, 255 122 182) / 0.18);
+  border: 1px solid rgb(var(--lt-t-ff7ab6, 255 122 182) / 0.18);
   border-radius: 4px;
   padding: 0.7rem;
-  background: rgb(var(--lt-c-ff7ab6, 255 122 182) / 0.04);
+  background: rgb(var(--lt-t-ff7ab6, 255 122 182) / 0.04);
   display: flex;
   flex-direction: column;
   gap: 0.55rem;
@@ -3323,8 +3323,8 @@ html.lt-ios body {
 }
 
 .lt-scene-list-item.is-selected {
-  border-color: rgb(var(--lt-c-ff7ab6, 255 122 182) / 0.5);
-  background: rgb(var(--lt-c-ff7ab6, 255 122 182) / 0.08);
+  border-color: rgb(var(--lt-t-ff7ab6, 255 122 182) / 0.5);
+  background: rgb(var(--lt-t-ff7ab6, 255 122 182) / 0.08);
 }
 
 .lt-scene-list-item.is-dragging {
@@ -3352,7 +3352,7 @@ html.lt-ios body {
   min-width: 1.6rem;
   height: 1.6rem;
   border-radius: 2px;
-  background: rgb(var(--lt-c-ff7ab6, 255 122 182) / 0.16);
+  background: rgb(var(--lt-t-ff7ab6, 255 122 182) / 0.16);
   color: rgb(var(--lt-c-ff9bcc, 255 155 204));
   font: 700 0.8rem/1 "Space Grotesk", sans-serif;
 }
@@ -3422,7 +3422,7 @@ html.lt-ios body {
 }
 
 .lt-scene-add.is-template {
-  border-color: rgb(var(--lt-c-ff7ab6, 255 122 182) / 0.3);
+  border-color: rgb(var(--lt-t-ff7ab6, 255 122 182) / 0.3);
   color: rgb(var(--lt-c-ff9bcc, 255 155 204));
 }
 
@@ -3518,7 +3518,7 @@ html.lt-ios body {
   gap: 0.45rem;
   padding: 0.6rem;
   border: 1px solid rgb(var(--lt-c-ffffff, 255 255 255) / 0.07);
-  border-left: 2px solid rgb(var(--lt-c-ff7ab6, 255 122 182) / 0.45);
+  border-left: 2px solid rgb(var(--lt-t-ff7ab6, 255 122 182) / 0.45);
   border-radius: 4px;
   background: rgb(var(--lt-c-0f1213, 15 18 19) / 0.6);
 }
@@ -4220,7 +4220,7 @@ html.lt-ios body {
   padding: 0.5rem 0.7rem;
   border-radius: 12px;
   background: rgb(var(--lt-c-0e121c, 14 18 28) / 0.96);
-  border: 1px solid rgb(var(--lt-c-8aa1ff, 138 161 255) / 0.4);
+  border: 1px solid rgb(var(--lt-t-8aa1ff, 138 161 255) / 0.4);
   box-shadow: 0 16px 40px rgb(0 0 0 / 0.45);
   color: rgb(var(--lt-c-f5f7ff, 245 247 255));
   max-width: 17rem;
@@ -4241,7 +4241,7 @@ html.lt-ios body {
   height: 28px;
   flex-shrink: 0;
   border-radius: 8px;
-  background: rgb(var(--lt-c-8aa1ff, 138 161 255) / 0.18);
+  background: rgb(var(--lt-t-8aa1ff, 138 161 255) / 0.18);
 }
 
 .lt-library-drag-ghost[data-folder-target="true"] .lt-library-drag-ghost-badge {
@@ -4384,10 +4384,10 @@ html.lt-ios body {
 }
 
 .lt-library-asset.is-missing {
-  border-color: rgb(var(--lt-c-ff8a65, 255 138 101) / 0.5);
+  border-color: rgb(var(--lt-t-ff8a65, 255 138 101) / 0.5);
   border-style: dashed;
   background:
-    linear-gradient(135deg, rgb(var(--lt-c-ff8a65, 255 138 101) / 0.16), rgb(var(--lt-c-ffb4ab, 255 180 171) / 0.06)),
+    linear-gradient(135deg, rgb(var(--lt-t-ff8a65, 255 138 101) / 0.16), rgb(var(--lt-t-ffb4ab, 255 180 171) / 0.06)),
     rgb(var(--lt-c-2a1814, 42 24 20) / 0.86);
   color: rgb(var(--lt-c-ffb4ab, 255 180 171));
 }
@@ -4395,7 +4395,7 @@ html.lt-ios body {
 .lt-library-asset.is-missing:hover {
   border-color: rgb(var(--lt-c-ffb45c, 255 180 92) / 0.78);
   background:
-    linear-gradient(135deg, rgb(var(--lt-c-ff8a65, 255 138 101) / 0.22), rgb(var(--lt-c-ffb4ab, 255 180 171) / 0.09)),
+    linear-gradient(135deg, rgb(var(--lt-t-ff8a65, 255 138 101) / 0.22), rgb(var(--lt-t-ffb4ab, 255 180 171) / 0.09)),
     rgb(var(--lt-c-341d16, 52 29 22) / 0.94);
 }
 
@@ -4482,7 +4482,7 @@ html.lt-ios body {
 }
 
 .lt-library-asset-delete:hover:not(:disabled) {
-  border-color: rgb(var(--lt-c-ff6d5b, 255 109 91) / 0.38);
+  border-color: rgb(var(--lt-t-ff6d5b, 255 109 91) / 0.38);
   background: rgb(var(--lt-c-531818, 83 24 24) / 0.62);
   color: rgb(var(--lt-c-ffe4df, 255 228 223));
 }
@@ -4514,7 +4514,7 @@ html.lt-ios body {
   padding: 2rem;
   background:
     radial-gradient(circle at top, rgb(var(--lt-accent-rgb) / 0.12), transparent 30%),
-    radial-gradient(circle at 80% 20%, rgb(var(--lt-c-ffe2ab, 255 226 171) / 0.10), transparent 24%),
+    radial-gradient(circle at 80% 20%, rgb(var(--lt-t-ffe2ab, 255 226 171) / 0.10), transparent 24%),
     linear-gradient(180deg, rgb(var(--lt-c-111111, 17 17 17)) 0%, rgb(var(--lt-c-0b0b0b, 11 11 11)) 100%);
 }
 
@@ -5451,8 +5451,8 @@ html.lt-ios body {
 .lt-track-header.is-automation {
   background:
     linear-gradient(180deg, rgb(var(--lt-c-281a21, 40 26 33) / 0.98) 0%, rgb(var(--lt-c-1e151a, 30 21 26) / 0.98) 100%);
-  border-right-color: rgb(var(--lt-c-ff7ab6, 255 122 182) / 0.22);
-  border-bottom-color: rgb(var(--lt-c-ff7ab6, 255 122 182) / 0.18);
+  border-right-color: rgb(var(--lt-t-ff7ab6, 255 122 182) / 0.22);
+  border-bottom-color: rgb(var(--lt-t-ff7ab6, 255 122 182) / 0.18);
   cursor: grab;
 }
 
@@ -6367,9 +6367,9 @@ html.lt-ios body {
    global track rather than an audio lane. Cues are painted on the canvas. */
 .lt-track-lane.is-automation {
   padding-top: 0;
-  background: rgb(var(--lt-c-ff7ab6, 255 122 182) / 0.045);
-  border-top: 1px solid rgb(var(--lt-c-ff7ab6, 255 122 182) / 0.16);
-  border-bottom: 1px solid rgb(var(--lt-c-ff7ab6, 255 122 182) / 0.16);
+  background: rgb(var(--lt-t-ff7ab6, 255 122 182) / 0.045);
+  border-top: 1px solid rgb(var(--lt-t-ff7ab6, 255 122 182) / 0.16);
+  border-bottom: 1px solid rgb(var(--lt-t-ff7ab6, 255 122 182) / 0.16);
 }
 
 .lt-folder-lane-fill {
@@ -6524,15 +6524,15 @@ html.lt-ios body {
   align-items: center;
   /* Non-target row: present enough to read as "the other option", faint enough
      not to compete with the highlighted one. */
-  background: rgb(var(--lt-c-ffd282, 255 210 130) / 0.04);
-  border-top: 1px solid rgb(var(--lt-c-ffd282, 255 210 130) / 0.16);
-  border-bottom: 1px solid rgb(var(--lt-c-ffd282, 255 210 130) / 0.16);
+  background: rgb(var(--lt-t-ffd282, 255 210 130) / 0.04);
+  border-top: 1px solid rgb(var(--lt-t-ffd282, 255 210 130) / 0.16);
+  border-bottom: 1px solid rgb(var(--lt-t-ffd282, 255 210 130) / 0.16);
   pointer-events: none;
   z-index: 4;
 }
 
 .lt-marker-lane-drop-target.is-target {
-  background: rgb(var(--lt-c-ffd282, 255 210 130) / 0.14);
+  background: rgb(var(--lt-t-ffd282, 255 210 130) / 0.14);
   border-top-color: rgb(var(--lt-c-ffd282, 255 210 130) / 0.6);
   border-bottom-color: rgb(var(--lt-c-ffd282, 255 210 130) / 0.6);
 }
@@ -6542,7 +6542,7 @@ html.lt-ios body {
 .lt-marker-lane-drop-target-label {
   margin-left: auto;
   padding: 0 8px;
-  color: rgb(var(--lt-c-ffe2ab, 255 226 171) / 0.5);
+  color: rgb(var(--lt-t-ffe2ab, 255 226 171) / 0.5);
   font: 600 9px/1 "Space Grotesk", sans-serif;
   text-transform: uppercase;
   letter-spacing: 0.12em;
@@ -6644,8 +6644,8 @@ html.lt-ios body {
   min-width: 1.5rem;
   border: 0;
   border-radius: 2px;
-  background: rgb(var(--lt-c-ffe2ab, 255 226 171) / 0.08);
-  box-shadow: inset 0 0 0 1px rgb(var(--lt-c-ffe2ab, 255 226 171) / 0.12);
+  background: rgb(var(--lt-t-ffe2ab, 255 226 171) / 0.08);
+  box-shadow: inset 0 0 0 1px rgb(var(--lt-t-ffe2ab, 255 226 171) / 0.12);
   color: transparent;
   /* Grab cursor cues that the band is draggable. The resize handles
      at either edge override this with col-resize via .is-start /
@@ -6656,8 +6656,8 @@ html.lt-ios body {
 }
 
 .lt-region-hotspot.is-selected {
-  background: rgb(var(--lt-c-ffe2ab, 255 226 171) / 0.16);
-  box-shadow: inset 0 0 0 1px rgb(var(--lt-c-ffe2ab, 255 226 171) / 0.36);
+  background: rgb(var(--lt-t-ffe2ab, 255 226 171) / 0.16);
+  box-shadow: inset 0 0 0 1px rgb(var(--lt-t-ffe2ab, 255 226 171) / 0.36);
 }
 
 /* Hover only with a pointer that hovers. On touch, iOS spends the first tap
@@ -6665,8 +6665,8 @@ html.lt-ios body {
    and selecting a song took two taps. Same fix as the bottom controls. */
 @media (hover: hover) {
   .lt-region-hotspot:hover {
-    background: rgb(var(--lt-c-ffe2ab, 255 226 171) / 0.16);
-    box-shadow: inset 0 0 0 1px rgb(var(--lt-c-ffe2ab, 255 226 171) / 0.36);
+    background: rgb(var(--lt-t-ffe2ab, 255 226 171) / 0.16);
+    box-shadow: inset 0 0 0 1px rgb(var(--lt-t-ffe2ab, 255 226 171) / 0.36);
   }
 
   .lt-region-hotspot:hover .lt-region-resize-handle {
@@ -6685,9 +6685,9 @@ html.lt-ios body {
    even when the band is short. */
 .lt-region-hotspot.is-moving {
   cursor: grabbing;
-  background: rgb(var(--lt-c-ffe2ab, 255 226 171) / 0.24);
+  background: rgb(var(--lt-t-ffe2ab, 255 226 171) / 0.24);
   box-shadow: inset 0 0 0 1px rgb(var(--lt-c-ffe2ab, 255 226 171) / 0.6),
-              0 0 0 1px rgb(var(--lt-c-ffe2ab, 255 226 171) / 0.45);
+              0 0 0 1px rgb(var(--lt-t-ffe2ab, 255 226 171) / 0.45);
 }
 
 /* Reordering in the DAW (useRegionDrag): the bands, normally almost
@@ -6698,7 +6698,7 @@ html.lt-ios body {
    and a see-through band mixed the two texts. */
 body.lt-daw-song-reordering .lt-region-hotspot {
   background: rgb(var(--lt-c-2c2719, 44 39 25));
-  box-shadow: inset 0 0 0 1px rgb(var(--lt-c-ffe2ab, 255 226 171) / 0.5);
+  box-shadow: inset 0 0 0 1px rgb(var(--lt-t-ffe2ab, 255 226 171) / 0.5);
   transition: left 140ms ease;
 }
 body.lt-daw-song-reordering .lt-region-hotspot.is-moving {
@@ -6903,15 +6903,15 @@ body.lt-daw-song-reordering .lt-region-hotspot .lt-region-hotspot-name {
   border-radius: 2px;
   background: linear-gradient(135deg, rgb(var(--lt-c-33241a, 51 36 26)), rgb(var(--lt-c-201f1f, 32 31 31)));
   color: rgb(var(--lt-c-ffd9b0, 255 217 176));
-  box-shadow: inset 0 0 0 1px rgb(var(--lt-c-ffb04c, 255 176 76) / 0.18);
+  box-shadow: inset 0 0 0 1px rgb(var(--lt-t-ffb04c, 255 176 76) / 0.18);
 }
 
 .lt-bottom-controls .lt-vamp-button.is-active {
   background: linear-gradient(135deg, rgb(var(--lt-c-6b3f16, 107 63 22)), rgb(var(--lt-c-2f2218, 47 34 24)));
   color: rgb(var(--lt-c-fff0d8, 255 240 216));
   box-shadow:
-    inset 0 0 0 1px rgb(var(--lt-c-ffb04c, 255 176 76) / 0.48),
-    0 0 16px rgb(var(--lt-c-ffb04c, 255 176 76) / 0.22);
+    inset 0 0 0 1px rgb(var(--lt-t-ffb04c, 255 176 76) / 0.48),
+    0 0 16px rgb(var(--lt-t-ffb04c, 255 176 76) / 0.22);
 }
 
 /* Mismo motivo que arriba: en tactil el VAMP apagado parecia encendido. */
@@ -6920,8 +6920,8 @@ body.lt-daw-song-reordering .lt-region-hotspot .lt-region-hotspot-name {
     background: linear-gradient(135deg, rgb(var(--lt-c-6b3f16, 107 63 22)), rgb(var(--lt-c-2f2218, 47 34 24)));
     color: rgb(var(--lt-c-fff0d8, 255 240 216));
     box-shadow:
-      inset 0 0 0 1px rgb(var(--lt-c-ffb04c, 255 176 76) / 0.48),
-      0 0 16px rgb(var(--lt-c-ffb04c, 255 176 76) / 0.22);
+      inset 0 0 0 1px rgb(var(--lt-t-ffb04c, 255 176 76) / 0.48),
+      0 0 16px rgb(var(--lt-t-ffb04c, 255 176 76) / 0.22);
   }
 }
 
@@ -7442,8 +7442,8 @@ body.lt-daw-song-reordering .lt-region-hotspot .lt-region-hotspot-name {
 
 .lt-compact-action.is-warning {
   color: rgb(var(--lt-c-ffe2ab, 255 226 171));
-  background: rgb(var(--lt-c-ffe2ab, 255 226 171) / 0.12);
-  box-shadow: inset 0 0 0 1px rgb(var(--lt-c-ffe2ab, 255 226 171) / 0.18);
+  background: rgb(var(--lt-t-ffe2ab, 255 226 171) / 0.12);
+  box-shadow: inset 0 0 0 1px rgb(var(--lt-t-ffe2ab, 255 226 171) / 0.18);
 }
 
 .lt-global-cancel-button {
@@ -7474,16 +7474,16 @@ body.lt-daw-song-reordering .lt-region-hotspot .lt-region-hotspot-name {
 .lt-global-cancel-button.is-warning {
   color: rgb(var(--lt-c-ffe2ab, 255 226 171));
   background:
-    linear-gradient(180deg, rgb(var(--lt-c-ffe2ab, 255 226 171) / 0.09), transparent 42%),
+    linear-gradient(180deg, rgb(var(--lt-t-ffe2ab, 255 226 171) / 0.09), transparent 42%),
     rgb(var(--lt-c-201b14, 32 27 20));
-  box-shadow: inset 0 0 0 1px rgb(var(--lt-c-ffe2ab, 255 226 171) / 0.16);
+  box-shadow: inset 0 0 0 1px rgb(var(--lt-t-ffe2ab, 255 226 171) / 0.16);
 }
 
 .lt-global-cancel-button:hover:not(:disabled) {
   color: rgb(var(--lt-c-ffe2ab, 255 226 171));
   box-shadow:
-    inset 0 0 0 1px rgb(var(--lt-c-ffe2ab, 255 226 171) / 0.24),
-    0 0 16px rgb(var(--lt-c-ffe2ab, 255 226 171) / 0.12);
+    inset 0 0 0 1px rgb(var(--lt-t-ffe2ab, 255 226 171) / 0.24),
+    0 0 16px rgb(var(--lt-t-ffe2ab, 255 226 171) / 0.12);
 }
 
 .lt-icon-button .material-symbols-outlined {
@@ -7719,7 +7719,7 @@ body.lt-daw-song-reordering .lt-region-hotspot .lt-region-hotspot-name {
 
 .lt-pitch-prep-cancel:hover {
   border-color: rgb(var(--lt-c-ff7864, 255 120 100) / 0.6);
-  background: rgb(var(--lt-c-ff7864, 255 120 100) / 0.14);
+  background: rgb(var(--lt-t-ff7864, 255 120 100) / 0.14);
 }
 
 .lt-missing-files-indicator {
@@ -8728,7 +8728,7 @@ body.lt-song-reordering .lt-compact-column-resize-slot {
   width: 3px;
   background: rgb(var(--lt-c-ffc457, 255 196 87) / 0.95);
   border-radius: 2px 0 0 2px;
-  box-shadow: 0 0 6px rgb(var(--lt-c-ffc457, 255 196 87) / 0.5);
+  box-shadow: 0 0 6px rgb(var(--lt-t-ffc457, 255 196 87) / 0.5);
   animation: lt-compact-playing-pulse 1.6s ease-in-out infinite;
   pointer-events: none;
 }
@@ -8760,10 +8760,10 @@ body.lt-song-reordering .lt-compact-column-resize-slot {
    currently playing, the destination gets a full warm outline and a label. */
 .lt-compact-song-column.is-queued .lt-compact-song-header {
   border-color: rgb(var(--lt-c-f4c95d, 244 201 93) / 0.78);
-  background: rgb(var(--lt-c-46360d, 70 54 13) / 0.42);
+  background: rgb(var(--lt-t-46360d, 70 54 13) / 0.42);
   box-shadow:
-    inset 0 0 0 2px rgb(var(--lt-c-f4c95d, 244 201 93) / 0.3),
-    0 0 8px rgb(var(--lt-c-f4c95d, 244 201 93) / 0.12);
+    inset 0 0 0 2px rgb(var(--lt-t-f4c95d, 244 201 93) / 0.3),
+    0 0 8px rgb(var(--lt-t-f4c95d, 244 201 93) / 0.12);
 }
 
 .lt-compact-song-header {
@@ -8817,8 +8817,8 @@ body.lt-song-reordering .lt-compact-column-resize-slot {
   flex: 0 0 auto;
   padding: 0.15rem 0.35rem;
   color: rgb(var(--lt-c-f4c95d, 244 201 93));
-  background: rgb(var(--lt-c-f4c95d, 244 201 93) / 0.1);
-  border: 1px solid rgb(var(--lt-c-f4c95d, 244 201 93) / 0.42);
+  background: rgb(var(--lt-t-f4c95d, 244 201 93) / 0.1);
+  border: 1px solid rgb(var(--lt-t-f4c95d, 244 201 93) / 0.42);
   border-radius: 2px;
   font: 700 8px/1.2 "Space Grotesk", sans-serif;
   letter-spacing: 0.05em;
@@ -8869,8 +8869,8 @@ body.lt-song-reordering .lt-compact-column-resize-slot {
   flex: 0 0 auto;
   padding: 0.15rem 0.4rem;
   color: rgb(var(--lt-c-ffe2ab, 255 226 171));
-  background: rgb(var(--lt-c-ffe2ab, 255 226 171) / 0.14);
-  border: 1px solid rgb(var(--lt-c-ffe2ab, 255 226 171) / 0.38);
+  background: rgb(var(--lt-t-ffe2ab, 255 226 171) / 0.14);
+  border: 1px solid rgb(var(--lt-t-ffe2ab, 255 226 171) / 0.38);
   border-radius: 2px;
   font: 700 9px/1.2 "Space Grotesk", sans-serif;
   letter-spacing: 0.04em;
@@ -9714,7 +9714,7 @@ body.lt-song-reordering .lt-compact-column-resize-slot {
 }
 
 .lt-compact-clip-menu-item.is-destructive:hover {
-  background: rgb(var(--lt-c-ff5f5f, 255 95 95) / 0.18);
+  background: rgb(var(--lt-t-ff5f5f, 255 95 95) / 0.18);
   color: rgb(var(--lt-c-ff5f5f, 255 95 95));
 }
 
@@ -10834,9 +10834,9 @@ body.lt-song-reordering .lt-compact-column-resize-slot {
   flex-direction: column;
   gap: 0.3rem;
   padding: 0.6rem 0.75rem;
-  border: 1px solid rgb(var(--lt-c-e25858, 226 88 88) / 0.35);
+  border: 1px solid rgb(var(--lt-t-e25858, 226 88 88) / 0.35);
   border-radius: 4px;
-  background: rgb(var(--lt-c-e25858, 226 88 88) / 0.08);
+  background: rgb(var(--lt-t-e25858, 226 88 88) / 0.08);
 }
 
 .lt-missing-media-name {
@@ -11084,8 +11084,8 @@ body.lt-song-reordering .lt-compact-column-resize-slot {
 }
 
 .lt-pads-delete {
-  border-color: rgb(var(--lt-c-ff7878, 255 120 120) / 0.5);
-  background: rgb(var(--lt-c-ff7878, 255 120 120) / 0.08);
+  border-color: rgb(var(--lt-t-ff7878, 255 120 120) / 0.5);
+  background: rgb(var(--lt-t-ff7878, 255 120 120) / 0.08);
   color: rgb(var(--lt-c-ff9a9a, 255 154 154));
 }
 
@@ -11292,7 +11292,7 @@ body.lt-song-reordering .lt-compact-column-resize-slot {
 }
 
 .lt-pads-partial-badge {
-  background: rgb(var(--lt-c-f1c86b, 241 200 107) / 0.16);
+  background: rgb(var(--lt-t-f1c86b, 241 200 107) / 0.16);
   color: rgb(var(--lt-c-f1c86b, 241 200 107));
 }
 
@@ -11359,7 +11359,7 @@ body.lt-song-reordering .lt-compact-column-resize-slot {
 }
 
 .lt-pad-manager-delete-btn {
-  border: 1px solid rgb(var(--lt-c-ff8f8f, 255 143 143) / 0.4);
+  border: 1px solid rgb(var(--lt-t-ff8f8f, 255 143 143) / 0.4);
   background: transparent;
   color: rgb(var(--lt-c-ff8f8f, 255 143 143));
 }
@@ -11700,7 +11700,7 @@ body.lt-song-reordering .lt-compact-column-resize-slot {
 
 .lt-midi-power.is-active {
   border-color: rgb(var(--lt-c-9d7bff, 157 123 255) / 0.85);
-  background: rgb(var(--lt-c-9d7bff, 157 123 255) / 0.18);
+  background: rgb(var(--lt-t-9d7bff, 157 123 255) / 0.18);
   color: rgb(var(--lt-c-c4b0ff, 196 176 255));
 }
 
@@ -11721,15 +11721,15 @@ body.lt-song-reordering .lt-compact-column-resize-slot {
   line-height: 1.3;
   padding: 2px 6px;
   border-radius: 4px;
-  border: 1px solid rgb(var(--lt-c-9d7bff, 157 123 255) / 0.35);
-  background: rgb(var(--lt-c-9d7bff, 157 123 255) / 0.1);
+  border: 1px solid rgb(var(--lt-t-9d7bff, 157 123 255) / 0.35);
+  background: rgb(var(--lt-t-9d7bff, 157 123 255) / 0.1);
   color: rgb(var(--lt-c-c4b0ff, 196 176 255) / 0.9);
   cursor: pointer;
 }
 
 .lt-midi-route-badge:hover {
   border-color: rgb(var(--lt-c-9d7bff, 157 123 255) / 0.75);
-  background: rgb(var(--lt-c-9d7bff, 157 123 255) / 0.18);
+  background: rgb(var(--lt-t-9d7bff, 157 123 255) / 0.18);
 }
 
 /* Violet identity for MIDI, mirroring the automation lane's pink. Header,
@@ -11738,8 +11738,8 @@ body.lt-song-reordering .lt-compact-column-resize-slot {
 .lt-track-header.lt-midi-track-header:not(.is-automation) {
   background:
     linear-gradient(180deg, rgb(var(--lt-c-201b2d, 32 27 45) / 0.98) 0%, rgb(var(--lt-c-181522, 24 21 34) / 0.98) 100%);
-  border-right-color: rgb(var(--lt-c-9d7bff, 157 123 255) / 0.22);
-  border-bottom-color: rgb(var(--lt-c-9d7bff, 157 123 255) / 0.18);
+  border-right-color: rgb(var(--lt-t-9d7bff, 157 123 255) / 0.22);
+  border-bottom-color: rgb(var(--lt-t-9d7bff, 157 123 255) / 0.18);
   cursor: grab;
 }
 
@@ -11750,9 +11750,9 @@ body.lt-song-reordering .lt-compact-column-resize-slot {
 
 .lt-track-lane.is-midi {
   padding-top: 0;
-  background: rgb(var(--lt-c-9d7bff, 157 123 255) / 0.045);
-  border-top: 1px solid rgb(var(--lt-c-9d7bff, 157 123 255) / 0.16);
-  border-bottom: 1px solid rgb(var(--lt-c-9d7bff, 157 123 255) / 0.16);
+  background: rgb(var(--lt-t-9d7bff, 157 123 255) / 0.045);
+  border-top: 1px solid rgb(var(--lt-t-9d7bff, 157 123 255) / 0.16);
+  border-bottom: 1px solid rgb(var(--lt-t-9d7bff, 157 123 255) / 0.16);
 }
 
 /* Disabled: drain the row of colour so an off lane reads as off at a glance,
@@ -11780,7 +11780,7 @@ body.lt-song-reordering .lt-compact-column-resize-slot {
   width: 100%;
   box-sizing: border-box;
   border-radius: 2px;
-  border: 1px solid rgb(var(--lt-c-9d7bff, 157 123 255) / 0.22);
+  border: 1px solid rgb(var(--lt-t-9d7bff, 157 123 255) / 0.22);
   background: rgb(var(--lt-c-1c1f20, 28 31 32) / 0.98);
   color: rgb(var(--lt-c-f3f0ef, 243 240 239));
   padding: 0.6rem 0.7rem;
@@ -11790,7 +11790,7 @@ body.lt-song-reordering .lt-compact-column-resize-slot {
    fields grid gives its own controls so the row reads as one unit. */
 .lt-automation-action-head select {
   border-radius: 2px;
-  border: 1px solid rgb(var(--lt-c-9d7bff, 157 123 255) / 0.22);
+  border: 1px solid rgb(var(--lt-t-9d7bff, 157 123 255) / 0.22);
   background: rgb(var(--lt-c-1c1f20, 28 31 32) / 0.98);
   color: rgb(var(--lt-c-f3f0ef, 243 240 239));
   padding: 0.45rem 0.6rem;
@@ -11839,7 +11839,7 @@ body.lt-song-reordering .lt-compact-column-resize-slot {
   flex: 1;
   min-width: 0;
   border-radius: 2px;
-  border: 1px solid rgb(var(--lt-c-9d7bff, 157 123 255) / 0.22);
+  border: 1px solid rgb(var(--lt-t-9d7bff, 157 123 255) / 0.22);
   background: rgb(var(--lt-c-1c1f20, 28 31 32) / 0.98);
   color: rgb(var(--lt-c-f3f0ef, 243 240 239));
   padding: 0.5rem 0.6rem;
@@ -13024,9 +13024,9 @@ body.lt-song-reordering .lt-compact-column-resize-slot {
   gap: 0.75rem;
   margin: 0;
   padding: 0.6rem 0.75rem;
-  border: 1px solid rgb(var(--lt-c-ff8a80, 255 138 128) / 0.35);
+  border: 1px solid rgb(var(--lt-t-ff8a80, 255 138 128) / 0.35);
   border-radius: 2px;
-  background: rgb(var(--lt-c-ff8a80, 255 138 128) / 0.08);
+  background: rgb(var(--lt-t-ff8a80, 255 138 128) / 0.08);
   font-size: 0.82rem;
   color: rgb(var(--lt-c-ffbeb8, 255 190 184));
 }
@@ -13374,7 +13374,7 @@ body.lt-song-reordering .lt-compact-column-resize-slot {
 }
 
 .lt-cloud-toast-error {
-  border-color: rgb(var(--lt-c-ff8a80, 255 138 128) / 0.4);
+  border-color: rgb(var(--lt-t-ff8a80, 255 138 128) / 0.4);
   color: rgb(var(--lt-c-ffbeb8, 255 190 184));
 }
 
@@ -14236,13 +14236,13 @@ body.lt-song-reordering .lt-compact-column-resize-slot {
 
 .lt-video-eye.is-active {
   border-color: rgb(var(--lt-c-3fb8af, 63 184 175) / 0.85);
-  background: rgb(var(--lt-c-3fb8af, 63 184 175) / 0.18);
+  background: rgb(var(--lt-t-3fb8af, 63 184 175) / 0.18);
   color: rgb(var(--lt-c-7fe0d8, 127 224 216));
 }
 
 .lt-video-solo.is-active {
   border-color: rgb(var(--lt-c-ffc400, 255 196 0) / 0.85);
-  background: rgb(var(--lt-c-ffc400, 255 196 0) / 0.18);
+  background: rgb(var(--lt-t-ffc400, 255 196 0) / 0.18);
   color: rgb(var(--lt-c-ffd766, 255 215 102));
 }
 
@@ -14433,7 +14433,7 @@ body.lt-song-reordering .lt-compact-column-resize-slot {
 }
 
 .lt-library-video-add:hover {
-  background: rgb(var(--lt-c-3fb8af, 63 184 175) / 0.18);
+  background: rgb(var(--lt-t-3fb8af, 63 184 175) / 0.18);
 }
 
 .lt-library-video-add .material-symbols-outlined {
@@ -14457,9 +14457,9 @@ body.lt-song-reordering .lt-compact-column-resize-slot {
   font-size: 11px;
   font-weight: 600;
   white-space: nowrap;
-  border: 1px solid rgb(var(--lt-c-3fb8af, 63 184 175) / 0.5);
+  border: 1px solid rgb(var(--lt-t-3fb8af, 63 184 175) / 0.5);
   color: rgb(var(--lt-c-7fe0d8, 127 224 216));
-  background: rgb(var(--lt-c-3fb8af, 63 184 175) / 0.12);
+  background: rgb(var(--lt-t-3fb8af, 63 184 175) / 0.12);
 }
 
 .lt-video-output-badge .material-symbols-outlined {
@@ -14494,13 +14494,13 @@ body.lt-song-reordering .lt-compact-column-resize-slot {
 .lt-video-output-badge.is-warning {
   border-color: rgb(var(--lt-c-ffc400, 255 196 0) / 0.6);
   color: rgb(var(--lt-c-ffd766, 255 215 102));
-  background: rgb(var(--lt-c-ffc400, 255 196 0) / 0.12);
+  background: rgb(var(--lt-t-ffc400, 255 196 0) / 0.12);
 }
 
 .lt-video-output-badge.is-error {
   border-color: rgb(var(--lt-c-ff5a5a, 255 90 90) / 0.7);
   color: rgb(var(--lt-c-ff9d9d, 255 157 157));
-  background: rgb(var(--lt-c-ff5a5a, 255 90 90) / 0.14);
+  background: rgb(var(--lt-t-ff5a5a, 255 90 90) / 0.14);
 }
 
 .lt-video-output-badge.is-black {
@@ -15511,7 +15511,7 @@ html.lt-mobile .lt-setlist-mixer.is-short > .lt-setlist-mixer-header > .lt-setli
   gap: 0.6rem;
   padding: 0.5rem 0.6rem 0.5rem 0.85rem;
   border-radius: 2px;
-  border: 1px solid rgb(var(--lt-c-ffb454, 255 180 84) / 0.4);
+  border: 1px solid rgb(var(--lt-t-ffb454, 255 180 84) / 0.4);
   background: rgb(var(--lt-c-0d0f10, 13 15 16) / 0.97);
   color: rgb(var(--lt-c-e6ddd0, 230 221 208));
   font-size: 0.82rem;

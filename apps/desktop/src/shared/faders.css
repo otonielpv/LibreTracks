@@ -75,7 +75,7 @@
 
 .lt-fader.is-pan {
   --lt-fader-index: rgb(var(--lt-c-74b8ff, 116 184 255));
-  --lt-fader-index-glow: rgb(var(--lt-c-74b8ff, 116 184 255) / 0.35);
+  --lt-fader-index-glow: rgb(var(--lt-t-74b8ff, 116 184 255) / 0.35);
 }
 
 /* El master lleva el medidor estéreo debajo, en la misma celda: la ranura

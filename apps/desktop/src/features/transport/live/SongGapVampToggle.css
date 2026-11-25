@@ -32,13 +32,13 @@
 .lt-song-gap-vamp.is-holding {
   border-color: rgb(var(--lt-c-f4c95d, 244 201 93) / 0.75);
   color: rgb(var(--lt-c-f4c95d, 244 201 93));
-  background: rgb(var(--lt-c-f4c95d, 244 201 93) / 0.14);
+  background: rgb(var(--lt-t-f4c95d, 244 201 93) / 0.14);
   animation: lt-song-gap-vamp-pulse 1.2s ease-in-out infinite;
 }
 
 @keyframes lt-song-gap-vamp-pulse {
   50% {
-    box-shadow: 0 0 10px rgb(var(--lt-c-f4c95d, 244 201 93) / 0.35);
+    box-shadow: 0 0 10px rgb(var(--lt-t-f4c95d, 244 201 93) / 0.35);
   }
 }
 

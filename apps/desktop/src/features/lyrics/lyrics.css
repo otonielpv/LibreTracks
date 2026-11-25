@@ -190,12 +190,12 @@ select.lt-lyrics-select.lt-lyrics-unmatched {
   margin: 0;
 }
 .lt-lyrics-probe.is-ok {
-  background: rgb(var(--lt-c-2f855a, 47 133 90) / 0.18);
-  border-color: rgb(var(--lt-c-68d391, 104 211 145) / 0.3);
+  background: rgb(var(--lt-t-2f855a, 47 133 90) / 0.18);
+  border-color: rgb(var(--lt-t-68d391, 104 211 145) / 0.3);
 }
 .lt-lyrics-probe.is-error {
-  background: rgb(var(--lt-c-c53030, 197 48 48) / 0.18);
-  border-color: rgb(var(--lt-c-fc8181, 252 129 129) / 0.3);
+  background: rgb(var(--lt-t-c53030, 197 48 48) / 0.18);
+  border-color: rgb(var(--lt-t-fc8181, 252 129 129) / 0.3);
 }
 .lt-lyrics-scan {
   display: flex;

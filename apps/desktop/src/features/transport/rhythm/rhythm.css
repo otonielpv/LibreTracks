@@ -699,7 +699,7 @@
 
 .lt-kit-editor .lt-kit-editor__remove:hover {
   color: rgb(var(--lt-c-ff8a80, 255 138 128));
-  border-color: rgb(var(--lt-c-ff8a80, 255 138 128) / 0.45);
+  border-color: rgb(var(--lt-t-ff8a80, 255 138 128) / 0.45);
 }
 
 .lt-kit-editor__remove .material-symbols-outlined {
@@ -1512,8 +1512,8 @@
   flex-direction: column;
   gap: 4px;
   padding: 6px 8px;
-  background: rgb(var(--lt-c-f2c94c, 242 201 76) / 0.08);
-  border-bottom: 1px solid rgb(var(--lt-c-f2c94c, 242 201 76) / 0.3);
+  background: rgb(var(--lt-t-f2c94c, 242 201 76) / 0.08);
+  border-bottom: 1px solid rgb(var(--lt-t-f2c94c, 242 201 76) / 0.3);
   color: rgb(var(--lt-c-f2c94c, 242 201 76));
   font-size: 12px;
 }
@@ -1552,7 +1552,7 @@
 .lt-kit-editor .lt-kit-editor__delete {
   background: transparent;
   color: rgb(var(--lt-c-ff8a80, 255 138 128));
-  border-color: rgb(var(--lt-c-ff8a80, 255 138 128) / 0.35);
+  border-color: rgb(var(--lt-t-ff8a80, 255 138 128) / 0.35);
 }
 
 .lt-kit-editor .lt-kit-editor__delete:hover:not(:disabled) {

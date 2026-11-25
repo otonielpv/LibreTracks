@@ -96,7 +96,7 @@
   padding: 0.5rem 0.75rem;
   list-style: none;
   border-left: 3px solid rgb(var(--lt-c-ffd27a, 255 210 122));
-  background: rgb(var(--lt-c-ffd27a, 255 210 122) / 0.08);
+  background: rgb(var(--lt-t-ffd27a, 255 210 122) / 0.08);
   font-size: 0.8rem;
   display: grid;
   gap: 0.35rem;
@@ -711,7 +711,7 @@
 }
 
 .lt-structure-toast.is-error {
-  border-color: rgb(var(--lt-c-ff8a80, 255 138 128) / 0.5);
+  border-color: rgb(var(--lt-t-ff8a80, 255 138 128) / 0.5);
   background: rgb(var(--lt-c-2c1d1c, 44 29 28));
   color: rgb(var(--lt-c-ffd0cb, 255 208 203));
 }
