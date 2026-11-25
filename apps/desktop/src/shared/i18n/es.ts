@@ -3604,7 +3604,7 @@ const es = {
     syncLabel: "Qué sección suena en cada marca",
     columnMarker: "Marca de la canción",
     columnSection: "Sección de la letra",
-    columnTimes: "Veces y tiempos",
+    columnTimes: "Tiempos",
     autoLink: "Enlazar automáticamente",
     noMarkers: "Esta canción no tiene marcas de sección. Crea marcas (Estrofa, Coro…) para que la letra siga a la canción.",
     sectionFor: "Sección para {{marker}}",

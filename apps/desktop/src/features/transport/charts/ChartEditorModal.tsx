@@ -13,7 +13,7 @@ import { useDismissOnBack } from "../mobile/backNavigation";
 import { usePortraitWhileOpen } from "../mobile/usePortraitWhileOpen";
 import { useVisibleViewportHeight } from "./useVisibleViewportHeight";
 import { parseChordPro } from "@libretracks/shared/charts/chordChart";
-import { autoLinkChart, chartLinkFor, remapChartLinks, withChartLinkPasses } from "@libretracks/shared/charts/chartSync";
+import { autoLinkChart, chartLinkFor, remapChartLinks } from "@libretracks/shared/charts/chartSync";
 import { chartTextHash } from "@libretracks/shared/charts/importedChart";
 import {
   addChartTimes,
@@ -182,9 +182,6 @@ export function ChartEditorModal({
 
   /** Times the section plays inside the marker (a long chorus sung twice):
    * its lines run once per pass. */
-  const setPasses = (markerId: string, passes: number) => {
-    setLinks((current) => withChartLinkPasses(current, markerId, passes));
-  };
 
   /** Back to the even spread: the section's links lose their times and the
    * text shows the spread times for it (what is typed elsewhere stays). */
@@ -496,21 +493,6 @@ export function ChartEditorModal({
                       </select>
                       {link ? (
                         <span className="lt-chart-editor-extra">
-                        {!recorded ? (
-                          <select
-                            className="lt-chart-editor-passes"
-                            value={link.repeat ?? 1}
-                            aria-label={t("liveChart.passesFor", { marker: marker.name })}
-                            title={t("liveChart.passesHelp")}
-                            onChange={(event) => setPasses(marker.id, Number(event.target.value))}
-                          >
-                            {[1, 2, 3, 4].map((count) => (
-                              <option key={count} value={count}>
-                                ×{count}
-                              </option>
-                            ))}
-                          </select>
-                        ) : null}
                         {recorded ? (
                           <button type="button" className="lt-chart-editor-times" onClick={() => resetTimes(marker.id)} title={t("liveChart.resetTimes")}>
                             {t("liveChart.recordedTimes")}

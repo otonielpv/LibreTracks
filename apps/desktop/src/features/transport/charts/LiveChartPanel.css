@@ -865,7 +865,7 @@
   }
 }
 
-/* Passes of a section inside its marker, next to its line times. */
+/* The line times of a section inside its marker. */
 .lt-chart-editor-extra {
   display: inline-flex;
   align-items: center;
@@ -884,18 +884,6 @@
 .lt-chart-editor-extra .lt-chart-editor-times.is-auto {
   white-space: normal;
   line-height: 1.15;
-}
-
-.lt-chart-editor-links select.lt-chart-editor-passes {
-  flex: none;
-  width: auto;
-  min-width: 4.4rem;
-  border-radius: 2px;
-  border: 1px solid rgb(var(--lt-accent-rgb) / 0.18);
-  background: rgb(var(--lt-c-1c1f20, 28 31 32) / 0.98);
-  color: var(--lt-accent);
-  padding: 0.3rem 0.35rem;
-  font: 700 0.72rem/1 "Space Grotesk", sans-serif;
 }
 
 /* "Follow" menu in the lyrics toolbar (LyricsFollowMenu). Portalled by
