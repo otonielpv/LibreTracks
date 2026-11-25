@@ -36,6 +36,7 @@ import {
   recordProductEvent,
   type ProductEventName,
 } from "../../telemetry/telemetry";
+import { noteStoreReviewMoment } from "../../storeReview/storeReview";
 import { useOpenWithFile } from "./useOpenWithFile";
 import { templateDroppedRuleCount } from "../panels/mixScenes/sceneRules";
 import { getSong } from "../songStore";
@@ -223,6 +224,9 @@ export function useProjectActions({
           // overlay closing and the tracks appearing.
           await nextPaint();
           setProjectViewHydrating(false);
+          if (successEvent === "project_opened") {
+            void noteStoreReviewMoment("sessionOpened");
+          }
         } catch (error) {
           cancelProjectAudioPreparation();
           if (successEvent === "project_opened") {
@@ -577,6 +581,7 @@ export function useProjectActions({
       async () => {
         const nextSnapshot = await saveProject();
         recordProductEvent("project_saved");
+        void noteStoreReviewMoment("projectSaved");
         applyPlaybackSnapshot(nextSnapshot);
         setStatus(
           nextSnapshot.songFilePath

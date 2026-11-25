@@ -319,6 +319,12 @@ class MainActivity : TauriActivity() {
     OrientationBridge.set(this, mode)
   }
 
+  // Hoja de valoración de Google Play (StoreReviewBridge). Lo llama Rust
+  // (platform/android_store_review.rs) solo con el audio parado.
+  fun requestStoreReview() {
+    StoreReviewBridge.request(this)
+  }
+
   // "Guardar como" del sistema con el tipo MIME del fichero.
   //
   // tauri-plugin-dialog crea el documento siempre como "*/*". Con eso el

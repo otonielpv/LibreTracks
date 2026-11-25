@@ -20,6 +20,7 @@ pub mod render_automation;
 pub mod settings;
 pub mod song_analysis;
 pub mod speech;
+pub mod store_review;
 pub mod system;
 pub mod timeline;
 pub mod transport;

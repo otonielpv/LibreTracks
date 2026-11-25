@@ -254,6 +254,20 @@ pub async fn present_bluetooth_midi<R: Runtime>(app: AppHandle<R>) -> Result<(),
     .map_err(|error| format!("iOS Bluetooth MIDI worker failed: {error}"))?
 }
 
+/// Hand iOS a request for the "rate this app" sheet. iOS alone decides whether
+/// it appears. Same main-queue rule as the pickers: the wait runs on a blocking
+/// worker, never on Tauri's main thread.
+pub async fn request_store_review<R: Runtime>(app: AppHandle<R>) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        app.state::<IosFolderPicker<R>>()
+            .0
+            .run_mobile_plugin::<()>("requestStoreReview", ())
+            .map_err(|error| error.to_string())
+    })
+    .await
+    .map_err(|error| format!("iOS store review worker failed: {error}"))?
+}
+
 pub fn init<R: Runtime>() -> TauriPlugin<R> {
     Builder::new("libretracks-ios-folder-picker")
         .setup(|app, api| {

@@ -285,6 +285,17 @@ export async function setScreenOrientation(mode: "portrait" | "landscape" | "fre
   return invokeCommand<void>("set_screen_orientation", { mode });
 }
 
+export type StoreReviewOutcome = "requested" | "audioActive" | "unsupported";
+
+/**
+ * Ask the App Store / Google Play for its "rate this app" sheet. The backend
+ * refuses ("audioActive") whenever any audio may be playing; the OS alone
+ * decides whether the sheet actually appears.
+ */
+export async function requestStoreReview(): Promise<StoreReviewOutcome> {
+  return invokeCommand<StoreReviewOutcome>("request_store_review");
+}
+
 /** Abort a close the backend was holding for the UI. */
 export async function cancelAppClose(): Promise<void> {
   return invokeCommand<void>("cancel_app_close");
