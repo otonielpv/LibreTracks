@@ -3517,6 +3517,11 @@ const es = {
     chordColor: "Color de los acordes",
     bold: "Negrita",
     reset: "Restablecer",
+    systemFonts: "Fuente instalada…",
+    searchFonts: "Buscar fuente",
+    loadingFonts: "Buscando fuentes instaladas…",
+    noSystemFonts: "No se encontraron fuentes instaladas en este dispositivo.",
+    noFontMatch: "Ninguna fuente coincide.",
     font: {
       inter: "Inter",
       grotesk: "Grotesk",

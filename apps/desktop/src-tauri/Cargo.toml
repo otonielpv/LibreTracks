@@ -22,6 +22,7 @@ tauri-build = { version = "2", features = [] }
 [dependencies]
 base64 = "0.22"
 flate2 = "1"
+fontdb = "0.23"
 libretracks-analysis = { path = "../../../crates/libretracks-analysis" }
 libretracks-audio = { path = "../../../crates/libretracks-audio" }
 libretracks-cloud = { path = "../../../crates/libretracks-cloud" }

@@ -5,6 +5,7 @@ pub mod cloud;
 pub mod demo;
 pub mod engine_v2;
 pub mod eq_presets;
+pub mod fonts;
 pub mod events;
 pub mod level_songs;
 pub mod library;

@@ -2,12 +2,18 @@ import type { CSSProperties } from "react";
 
 /** How this device draws lyrics and chords (like Planning Center's chart
  * settings). Only the look: the song is not touched. */
-export type ChartFont = "inter" | "grotesk" | "system" | "serif" | "mono";
+export type BuiltinChartFont = "inter" | "grotesk" | "system" | "serif" | "mono";
 
-export const CHART_FONTS: readonly ChartFont[] = ["inter", "grotesk", "system", "serif", "mono"];
+/** A built-in choice, or `family:<name>`: a font installed on this device. */
+export type ChartFont = BuiltinChartFont | `family:${string}`;
+
+export const CHART_FONTS: readonly BuiltinChartFont[] = ["inter", "grotesk", "system", "serif", "mono"];
+
+const FAMILY_PREFIX = "family:";
+const MAX_FAMILY_LENGTH = 200;
 
 /** Bundled fonts or system ones every platform has: nothing is downloaded. */
-export const CHART_FONT_FAMILIES: Record<ChartFont, string> = {
+export const CHART_FONT_FAMILIES: Record<BuiltinChartFont, string> = {
   inter: "Inter, sans-serif",
   grotesk: '"Space Grotesk", sans-serif',
   system: 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif',
@@ -15,8 +21,25 @@ export const CHART_FONT_FAMILIES: Record<ChartFont, string> = {
   mono: 'ui-monospace, "Cascadia Mono", Menlo, Consolas, "Roboto Mono", monospace',
 };
 
+export function systemFont(family: string): ChartFont {
+  return `${FAMILY_PREFIX}${family}`;
+}
+
+/** The installed family a choice names, or `null` for a built-in one. */
+export function systemFamilyOf(font: ChartFont): string | null {
+  return font.startsWith(FAMILY_PREFIX) ? font.slice(FAMILY_PREFIX.length) : null;
+}
+
+/** The CSS `font-family` for a choice. An installed family falls back to the
+ * app's font when this device does not have it (a style copied elsewhere). */
+export function chartFontFamily(font: ChartFont): string {
+  const family = systemFamilyOf(font);
+  if (family === null) return CHART_FONT_FAMILIES[font as BuiltinChartFont];
+  return `"${family.replace(/["\\]/g, "\\$&")}", ${CHART_FONT_FAMILIES.inter}`;
+}
+
 /** `default` = the theme's orange, `accent` = the theme's accent, or a hex. */
-export type ChordColor = "default" | "accent" | `#${string}`;
+export type ChordColor ="default" | "accent" | `#${string}`;
 
 export const CHORD_COLOR_SWATCHES: readonly `#${string}`[] = [
   "#ff5c5c",
@@ -46,7 +69,10 @@ export const DEFAULT_CHART_STYLE: ChartStyle = {
 const HEX = /^#[0-9a-f]{6}$/i;
 
 function parseFont(value: unknown): ChartFont | null {
-  return typeof value === "string" && (CHART_FONTS as readonly string[]).includes(value) ? (value as ChartFont) : null;
+  if (typeof value !== "string") return null;
+  if ((CHART_FONTS as readonly string[]).includes(value)) return value as ChartFont;
+  const family = systemFamilyOf(value as ChartFont)?.trim();
+  return family && family.length <= MAX_FAMILY_LENGTH && !/[\n\r;{}<>]/.test(family) ? systemFont(family) : null;
 }
 
 function parseColor(value: unknown): ChordColor | null {
@@ -87,10 +113,10 @@ export function isDefaultChartStyle(style: ChartStyle): boolean {
 export function chartStyleVars(style: ChartStyle): CSSProperties {
   const vars: Record<string, string> = {};
   if (style.lyricFont !== DEFAULT_CHART_STYLE.lyricFont) {
-    vars["--lt-chart-lyric-font"] = CHART_FONT_FAMILIES[style.lyricFont];
+    vars["--lt-chart-lyric-font"] = chartFontFamily(style.lyricFont);
   }
   if (style.chordFont !== DEFAULT_CHART_STYLE.chordFont) {
-    vars["--lt-chart-chord-font"] = CHART_FONT_FAMILIES[style.chordFont];
+    vars["--lt-chart-chord-font"] = chartFontFamily(style.chordFont);
   }
   if (style.chordColor === "accent") vars["--lt-chart-chord-color"] = "var(--lt-accent)";
   else if (style.chordColor !== "default") vars["--lt-chart-chord-color"] = style.chordColor;
