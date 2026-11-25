@@ -1,11 +1,11 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { create } from "zustand";
 
 import type { FollowFocus } from "@libretracks/shared/models";
 import { DEFAULT_FOLLOW_FOCUS, FOLLOW_FOCUSES, parseFollowFocus } from "@libretracks/shared/charts/lyricsFollow";
 
-import { isMobileApp } from "../desktopApi";
+import { PopoverShell } from "../panels/PopoverShell";
 
 const GENERAL_KEY = "lt.liveChart.follow";
 
@@ -40,39 +40,36 @@ type LyricsFollowMenuProps = {
   onSong: ((focus: FollowFocus | null) => void) | null;
 };
 
-/** "Follow" in the lyrics toolbar: for all songs (this device) and only for this song. */
+/** "Follow" in the lyrics toolbar: this song's own first, then all songs (this device). */
 export function LyricsFollowMenu({ general, song, onGeneral, onSong }: LyricsFollowMenuProps) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
-  const rootRef = useRef<HTMLDivElement | null>(null);
-  useEffect(() => {
-    if (!open) return;
-    const close = (event: PointerEvent) => {
-      if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
-    };
-    window.addEventListener("pointerdown", close);
-    return () => window.removeEventListener("pointerdown", close);
-  }, [open]);
+  const anchorRef = useRef<HTMLButtonElement | null>(null);
+  const close = useCallback(() => setOpen(false), []);
   const name = (focus: FollowFocus) => t(`lyricsFollow.focus.${focus}`);
-  const option = (focus: FollowFocus | null, active: boolean, onPick: () => void, label: string) => (
-    <button
-      key={String(focus)}
-      type="button"
-      role="menuitemradio"
-      aria-checked={active}
-      className={active ? "is-active" : undefined}
-      onClick={() => {
-        onPick();
-        setOpen(false);
-      }}
-    >
-      <span className="material-symbols-outlined" aria-hidden="true">{active ? "radio_button_checked" : "radio_button_unchecked"}</span>
-      {label}
-    </button>
+  // A segmented row; `shown` is the lit segment, `inherited` dims it (the song follows all songs).
+  const segments = (label: string, shown: FollowFocus, inherited: boolean, onPick: (focus: FollowFocus) => void) => (
+    <div className={`lt-lyrics-follow-segments${inherited ? " is-inherited" : ""}`} role="group" aria-label={label}>
+      {FOLLOW_FOCUSES.map((focus) => (
+        <button
+          key={String(focus)}
+          type="button"
+          role="menuitemradio"
+          aria-checked={!inherited && focus === shown}
+          aria-label={name(focus)}
+          title={name(focus)}
+          className={focus === shown ? "is-active" : undefined}
+          onClick={() => onPick(focus)}
+        >
+          {t(`lyricsFollow.short.${focus}`)}
+        </button>
+      ))}
+    </div>
   );
   return (
-    <div className="lt-lyrics-follow" ref={rootRef}>
+    <div className="lt-lyrics-follow">
       <button
+        ref={anchorRef}
         type="button"
         className={`lt-icon-button${song !== null ? " is-active" : ""}`}
         aria-haspopup="menu"
@@ -83,36 +80,45 @@ export function LyricsFollowMenu({ general, song, onGeneral, onSong }: LyricsFol
       >
         <span className="material-symbols-outlined" aria-hidden="true">format_line_spacing</span>
       </button>
-      {open ? (
-        <div
-          className={`lt-context-menu lt-lyrics-follow-menu${isMobileApp ? " is-mobile-sheet" : ""}`}
-          role="menu"
-          aria-label={t("lyricsFollow.title")}
-        >
-          {isMobileApp ? (
-            // A sheet on phones and tablets, like the app's other menus.
-            <div className="lt-context-menu-sheet-header">
-              <strong>{t("lyricsFollow.title")}</strong>
-              <button type="button" className="lt-icon-button" aria-label={t("liveChart.cancel")} onClick={() => setOpen(false)}>
-                <span className="material-symbols-outlined" aria-hidden="true">close</span>
+      <PopoverShell
+        open={open}
+        anchorRef={anchorRef}
+        ariaLabel={t("lyricsFollow.title")}
+        onClose={close}
+        className="lt-pads-popover lt-lyrics-follow-panel"
+        role="menu"
+      >
+        <header className="lt-lyrics-follow-header">
+          <span className="material-symbols-outlined" aria-hidden="true">format_line_spacing</span>
+          <strong>{t("lyricsFollow.title")}</strong>
+        </header>
+        {onSong ? (
+          <section className="lt-lyrics-follow-section">
+            <div className="lt-lyrics-follow-row">
+              <span className="lt-lyrics-follow-label">{t("lyricsFollow.thisSong")}</span>
+              <button
+                type="button"
+                role="menuitemcheckbox"
+                aria-checked={song === null}
+                className={`lt-lyrics-follow-switch${song === null ? " is-on" : ""}`}
+                onClick={() => onSong(song === null ? general : null)}
+              >
+                <span className="lt-lyrics-follow-switch-track" aria-hidden="true">
+                  <span className="lt-lyrics-follow-switch-thumb" />
+                </span>
+                {t("lyricsFollow.likeAll")}
               </button>
             </div>
-          ) : null}
-          <div className="lt-lyrics-follow-groups">
-            <div className="lt-lyrics-follow-group">
-              <strong>{t("lyricsFollow.allSongs")}</strong>
-              {FOLLOW_FOCUSES.map((focus) => option(focus, focus === general, () => onGeneral(focus), name(focus)))}
-            </div>
-            {onSong ? (
-              <div className="lt-lyrics-follow-group">
-                <strong>{t("lyricsFollow.thisSong")}</strong>
-                {option(null, song === null, () => onSong(null), t("lyricsFollow.likeAll"))}
-                {FOLLOW_FOCUSES.map((focus) => option(focus, focus === song, () => onSong(focus), name(focus)))}
-              </div>
-            ) : null}
+            {segments(t("lyricsFollow.thisSong"), song ?? general, song === null, (focus) => onSong(focus))}
+          </section>
+        ) : null}
+        <section className="lt-lyrics-follow-section">
+          <div className="lt-lyrics-follow-row">
+            <span className="lt-lyrics-follow-label">{t("lyricsFollow.allSongs")}</span>
           </div>
-        </div>
-      ) : null}
+          {segments(t("lyricsFollow.allSongs"), general, false, onGeneral)}
+        </section>
+      </PopoverShell>
     </div>
   );
 }

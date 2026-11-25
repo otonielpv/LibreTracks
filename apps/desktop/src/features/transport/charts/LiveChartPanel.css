@@ -898,56 +898,151 @@
   font: 700 0.72rem/1 "Space Grotesk", sans-serif;
 }
 
-/* "Follow" menu in the lyrics toolbar (LyricsFollowMenu). */
+/* "Follow" menu in the lyrics toolbar (LyricsFollowMenu). Portalled by
+   PopoverShell so the panel never clips; above full-screen lyrics (z 80). */
 .lt-lyrics-follow {
   position: relative;
   display: inline-flex;
 }
 
-.lt-context-menu.lt-lyrics-follow-menu {
-  position: absolute;
-  top: calc(100% + 4px);
-  right: 0;
-  z-index: 60;
-  min-width: 13rem;
+.lt-pads-popover.lt-lyrics-follow-panel {
+  z-index: 95;
+  width: 22rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 0.75rem;
 }
 
-.lt-lyrics-follow-groups {
+.lt-lyrics-follow-header {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: #57f1db;
+  font: 700 0.72rem/1 "Space Grotesk", sans-serif;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.lt-lyrics-follow-header .material-symbols-outlined {
+  font-size: 16px;
+}
+
+.lt-lyrics-follow-section {
   display: flex;
   flex-direction: column;
   gap: 0.4rem;
 }
 
-.lt-lyrics-follow-group {
+.lt-lyrics-follow-section + .lt-lyrics-follow-section {
+  padding-top: 0.75rem;
+  border-top: 1px solid rgb(255 255 255 / 0.08);
+}
+
+.lt-lyrics-follow-row {
   display: flex;
-  flex-direction: column;
-  gap: 0.2rem;
-  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  min-height: 1.5rem;
 }
 
-/* Phones and tablets: a bottom sheet, both groups side by side so it fits a
-   landscape phone (390 px tall) without scrolling. */
-.lt-mobile .lt-context-menu.lt-lyrics-follow-menu.is-mobile-sheet {
-  position: fixed;
-  top: auto;
-  right: var(--lt-safe-area-right);
-  max-height: 80vh;
+.lt-lyrics-follow-label {
+  color: #d8fff7;
+  font-size: 0.82rem;
+  font-weight: 600;
 }
 
-.lt-mobile .lt-lyrics-follow-menu.is-mobile-sheet .lt-lyrics-follow-groups {
+/* "Like all songs": a switch, not another option. */
+.lt-lyrics-follow-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.15rem 0.2rem;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: rgb(216 255 247 / 0.65);
+  font-size: 0.74rem;
+  cursor: pointer;
+}
+
+.lt-lyrics-follow-switch:hover {
+  color: #d8fff7;
+}
+
+.lt-lyrics-follow-switch-track {
+  position: relative;
+  width: 1.75rem;
+  height: 1rem;
+  border-radius: 999px;
+  background: rgb(255 255 255 / 0.16);
+  transition: background 120ms ease;
+}
+
+.lt-lyrics-follow-switch-thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 0.75rem;
+  height: 0.75rem;
+  border-radius: 50%;
+  background: #d8fff7;
+  transition: transform 120ms ease;
+}
+
+.lt-lyrics-follow-switch.is-on .lt-lyrics-follow-switch-track {
+  background: #57f1db;
+}
+
+.lt-lyrics-follow-switch.is-on .lt-lyrics-follow-switch-thumb {
+  transform: translateX(0.75rem);
+  background: #0a0a0a;
+}
+
+/* Segmented control: one track, the lit segment filled. */
+.lt-lyrics-follow-segments {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
-  gap: 0 1rem;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 2px;
+  padding: 2px;
+  border-radius: 6px;
+  background: rgb(255 255 255 / 0.06);
 }
 
-.lt-mobile .lt-lyrics-follow-menu.is-mobile-sheet .lt-lyrics-follow-group button {
-  min-height: 2.5rem;
+.lt-lyrics-follow-segments button {
+  min-height: 2rem;
+  padding: 0 0.25rem;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: rgb(216 255 247 / 0.7);
+  font-size: 0.76rem;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease;
 }
 
-.lt-lyrics-follow-menu button.is-active {
+.lt-lyrics-follow-segments button:hover {
+  background: rgb(255 255 255 / 0.08);
+  color: #d8fff7;
+}
+
+.lt-lyrics-follow-segments button.is-active {
+  background: #57f1db;
+  color: #0a0a0a;
+}
+
+/* The song follows all songs: show which one, without claiming it. */
+.lt-lyrics-follow-segments.is-inherited button.is-active {
+  background: rgb(87 241 219 / 0.16);
   color: #57f1db;
+  box-shadow: inset 0 0 0 1px rgb(87 241 219 / 0.4);
 }
 
-.lt-lyrics-follow-menu .material-symbols-outlined {
-  font-size: 16px;
+.lt-mobile .lt-lyrics-follow-segments button {
+  min-height: 2.5rem;
 }
