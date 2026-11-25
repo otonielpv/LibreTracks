@@ -20,7 +20,8 @@ export type SongCountStyleMenuDeps = {
 };
 
 /** Same accent the key submenu uses to tick the current choice. */
-const CURRENT_SWATCH = "#3CDDC7";
+// Variable de tema: sigue al color de acento.
+const CURRENT_SWATCH = "var(--lt-accent)";
 
 const LABEL_KEYS: Record<VoiceGuideCountStyle, string> = {
   full: "transport.settingsModal.voiceGuideCountStyleFull",

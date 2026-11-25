@@ -238,8 +238,9 @@ export function remapThemeRgb(rgb: Rgb, settings: ThemeSettings): Rgb {
   const tone = THEME_TONES.find((item) => item.id === settings.tone)?.offset ?? [0, 0, 0];
   const grey = lightness * 255;
   const target = y * 255;
-  return [r, g, b].map((channel, index) =>
-    Math.round(clamp(target + (channel - grey) + tone[index], 0, 255)),
+  const tint = accentTintedOffset([r - grey, g - grey, b - grey], settings);
+  return [0, 1, 2].map((index) =>
+    Math.round(clamp(target + tint[index] + tone[index], 0, 255)),
   ) as unknown as Rgb;
 }
 
@@ -258,8 +259,8 @@ const NEUTRAL_MAX_CHROMA = 42;
 // pasan al acento elegido conservando lo claras u oscuras que son respecto al
 // turquesa. Sin esto, con acento naranja seguían saliendo letras verdes.
 const DEFAULT_ACCENT_HSL = rgbToHsl([87, 241, 219]);
-const ACCENT_FAMILY_HUE: readonly [number, number] = [165 / 360, 182 / 360];
-const ACCENT_FAMILY_MIN_SATURATION = 0.55;
+const ACCENT_FAMILY_HUE: readonly [number, number] = [155 / 360, 200 / 360];
+const ACCENT_FAMILY_MIN_SATURATION = 0.2;
 
 function remapAccentFamilyRgb(
   rgb: Rgb,
@@ -283,6 +284,25 @@ function remapAccentFamilyRgb(
     clamp(accentS * (s / DEFAULT_ACCENT_HSL[1]), 0, 1),
     clamp(accentL + delta, 0.04, 0.97),
   );
+}
+
+/** Gris con un leve tinte turquesa (textos apagados del diseño): con otro
+ * acento, el tinte pasa a la dirección del acento con la misma intensidad. */
+function accentTintedOffset(offset: Rgb, settings: ThemeSettings): Rgb {
+  if (settings.accent === DEFAULT_THEME.accent) return offset;
+  const magnitude = Math.hypot(offset[0], offset[1], offset[2]);
+  if (magnitude < 8) return offset;
+  const [h] = rgbToHsl([
+    clamp(128 + offset[0], 0, 255),
+    clamp(128 + offset[1], 0, 255),
+    clamp(128 + offset[2], 0, 255),
+  ]);
+  if (h < ACCENT_FAMILY_HUE[0] || h > ACCENT_FAMILY_HUE[1]) return offset;
+  const accent = (THEME_ACCENTS.find((item) => item.id === settings.accent) ?? THEME_ACCENTS[0]).accent;
+  const mean = (accent[0] + accent[1] + accent[2]) / 3;
+  const direction = [accent[0] - mean, accent[1] - mean, accent[2] - mean];
+  const length = Math.hypot(direction[0], direction[1], direction[2]) || 1;
+  return direction.map((value) => (value / length) * magnitude) as unknown as Rgb;
 }
 
 function remapChromaticRgb(rgb: Rgb, settings: ThemeSettings): Rgb {

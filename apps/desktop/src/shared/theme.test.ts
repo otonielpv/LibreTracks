@@ -15,7 +15,7 @@ import {
   setTheme,
   themedRgba,
 } from "./theme";
-import { THEMED_CSS_COLORS } from "./themeColors.generated";
+import { THEMED_CSS_COLORS, THEMED_CSS_TINTS } from "./themeColors.generated";
 
 const luma = ([r, g, b]: readonly number[]) => (0.299 * r + 0.587 * g + 0.114 * b) / 255;
 
@@ -87,6 +87,30 @@ describe("theme", () => {
       const orange = remapThemeRgb(variant, { ...DEFAULT_THEME, base, accent: "orange" });
       expect(hue(orange)).toBeGreaterThan(15);
       expect(hue(orange)).toBeLessThan(45);
+    }
+  });
+
+  it("con otro acento no queda ningún color de la CSS en turquesa", () => {
+    // Si falla, alguien escribió un turquesa nuevo fuera de la familia que
+    // reconoce theme.ts (tono 155–200°): usa var(--lt-accent) o ajusta la familia.
+    const hue = ([r, g, b]: readonly number[]) => {
+      const max = Math.max(r, g, b);
+      const min = Math.min(r, g, b);
+      const d = max - min;
+      if (d < 30) return -1;
+      const h = max === r ? ((g - b) / d) % 6 : max === g ? (b - r) / d + 2 : (r - g) / d + 4;
+      return (h * 60 + 360) % 360;
+    };
+    for (const base of ["dark", "light"] as const) {
+      for (const accent of ["orange", "violet"]) {
+        const theme = { ...DEFAULT_THEME, base, accent };
+        const teal = [...THEMED_CSS_COLORS, ...THEMED_CSS_TINTS].filter((hex) => {
+          const rgb = [0, 2, 4].map((i) => Number.parseInt(hex.slice(i, i + 2), 16));
+          const h = hue(remapThemeRgb(rgb as [number, number, number], theme));
+          return h >= 152 && h <= 200;
+        });
+        expect(teal).toEqual([]);
+      }
     }
   });
 

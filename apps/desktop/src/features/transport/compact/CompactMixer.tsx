@@ -106,8 +106,8 @@ type CompactMixerProps = {
  * them transparent. Folder tracks get a slightly different default so the
  * eye can still tell folder strips apart from leaf audio strips when no
  * user colour is configured anywhere in the project. */
-const DEFAULT_TRACK_ACCENT = "rgba(186, 202, 197, 0.35)";
-const DEFAULT_FOLDER_ACCENT = "rgba(87, 241, 219, 0.55)";
+const DEFAULT_TRACK_ACCENT = "rgb(var(--lt-c-bacac5, 186 202 197) / 0.35)";
+const DEFAULT_FOLDER_ACCENT = "rgb(var(--lt-accent-rgb) / 0.55)";
 
 /**
  * Strips the mixer should render. With the filter off — or with no active

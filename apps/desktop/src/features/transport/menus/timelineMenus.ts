@@ -719,12 +719,12 @@ export function createTimelineMenus(getDeps: () => TimelineMenuDeps) {
       actions: [
         {
           label: d.t("transport.menu.songKeyNone", { defaultValue: "Sin nota" }),
-          swatch: currentKey === null ? "#3CDDC7" : undefined,
+          swatch: currentKey === null ? "var(--lt-accent)" : undefined,
           onSelect: () => setSongRegionKey(region, null),
         },
         ...SONG_KEY_OPTIONS.map((key) => ({
           label: key,
-          swatch: currentKey === key ? "#3CDDC7" : undefined,
+          swatch: currentKey === key ? "var(--lt-accent)" : undefined,
           onSelect: () => setSongRegionKey(region, key),
         })),
       ],

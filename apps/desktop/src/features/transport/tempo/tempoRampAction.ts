@@ -45,7 +45,7 @@ export function tempoRampAction(
     label: next
       ? t("transport.menu.tempoRamp", { from: formatBpm(marker.bpm), to: formatBpm(next.bpm) })
       : t("transport.menu.tempoRampNoNext"),
-    swatch: ramp ? "#3CDDC7" : undefined,
+    swatch: ramp ? "var(--lt-accent)" : undefined,
     disabled: !next && !ramp,
     onSelect: async () => {
       await deps.runAction(async () => {
