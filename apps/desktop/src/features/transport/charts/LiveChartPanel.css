@@ -1047,25 +1047,39 @@
   min-height: 2.5rem;
 }
 
-/* The section select and its eye: hover or tap shows the whole section. */
+/* The section select, then its first line and an eye that shows it all. */
 .lt-chart-editor-section {
   display: flex;
-  align-items: center;
-  gap: 0.25rem;
+  flex-direction: column;
+  gap: 0.2rem;
   min-width: 0;
 }
 
 .lt-section-peek {
-  flex: none;
-  display: inline-flex;
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  min-width: 0;
+}
+
+.lt-section-peek-first {
+  order: -1;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  color: rgb(var(--lt-c-e5e2e1, 229 226 225) / 0.6);
+  font: 500 0.7rem/1.3 "Space Grotesk", sans-serif;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .lt-section-peek-button {
+  flex: none;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 1.9rem;
-  height: 1.9rem;
+  width: 1.5rem;
+  height: 1.5rem;
   padding: 0;
   border: 1px solid rgb(var(--lt-accent-rgb) / 0.18);
   border-radius: 2px;
@@ -1074,7 +1088,7 @@
 }
 
 .lt-section-peek-button .material-symbols-outlined {
-  font-size: 16px;
+  font-size: 14px;
 }
 
 .lt-section-peek-button:hover,
@@ -1089,8 +1103,8 @@
   flex-direction: column;
   gap: 0.35rem;
   width: max-content;
-  max-width: min(20rem, calc(100vw - 16px));
-  max-height: 16rem;
+  max-width: min(26rem, calc(100vw - 16px));
+  max-height: 18rem;
   overflow-y: auto;
   padding: 0.55rem 0.7rem;
   border: 1px solid rgb(var(--lt-accent-rgb) / 0.3);
@@ -1107,14 +1121,24 @@
   text-transform: uppercase;
 }
 
-.lt-section-peek-box ol {
-  margin: 0;
-  padding-left: 1.5rem;
+.lt-section-peek-lines {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
   color: rgb(var(--lt-c-f3f0ef, 243 240 239));
   font: 500 0.76rem/1.4 "Space Grotesk", sans-serif;
+  counter-reset: peek-line;
 }
 
-.lt-section-peek-box li::marker {
+.lt-section-peek-line {
+  display: block;
+}
+
+.lt-section-peek-line::before {
+  counter-increment: peek-line;
+  content: counter(peek-line);
+  display: inline-block;
+  min-width: 1.2rem;
   color: rgb(var(--lt-c-bacac5, 186 202 197) / 0.7);
   font-size: 0.66rem;
 }

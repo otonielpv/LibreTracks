@@ -61,6 +61,9 @@ export function SectionPeek({ section, name }: { section: ChartSection; name: st
       >
         <span className="material-symbols-outlined" aria-hidden="true">visibility</span>
       </button>
+      <span className="lt-section-peek-first" title={lines[0] ?? undefined}>
+        {lines[0] ?? t("liveChart.peekEmpty")}
+      </span>
       {place ? (
         <span className="lt-section-peek-box" role="tooltip" style={place}>
           <span className="lt-section-peek-head">
@@ -69,11 +72,14 @@ export function SectionPeek({ section, name }: { section: ChartSection; name: st
           {lines.length === 0 ? (
             <span className="lt-section-peek-empty">{t("liveChart.peekEmpty")}</span>
           ) : (
-            <ol>
+            // Not <li>: the links list styles its own rows as a grid.
+            <span className="lt-section-peek-lines" role="list">
               {lines.map((text, index) => (
-                <li key={index}>{text}</li>
+                <span key={index} className="lt-section-peek-line" role="listitem">
+                  {text}
+                </span>
               ))}
-            </ol>
+            </span>
           )}
         </span>
       ) : null}

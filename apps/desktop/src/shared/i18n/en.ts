@@ -3443,7 +3443,7 @@ const en = {
     placeholder: "Write the lyrics of this part.\nFor chords, put them on the line above:\n\nG              D\nHoly is the Lord",
     help: "Chords go on the line above the words, lined up with spaces. Blank lines are ignored. Lines in ChordPro ([G]Holy) also work.",
     passesNote_one: "Sung once.",
-    passesNote_other: "Sung {{count}} times in a row in this marker. Write it once: the lines are spread over the {{count}} passes.",
+    passesNote_other: "In this marker the lyrics are sung {{count}} times in a row. Shown once here, sung {{count}} times.",
     textFor: "Lyrics of {{part}}",
     clearedTimes: "The recorded line times of this part were cleared: its number of lines changed.",
     pasteSong: "Paste whole song",
