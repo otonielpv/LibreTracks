@@ -13,7 +13,7 @@ type Props = {
   /** Program being set up (its name in the texts). */
   programName: string;
   /** Holyrics asks for a token; FreeShow for a key. */
-  tokenWord: "token" | "key";
+  tokenWord: "token" | "key" | "password";
   /** Runs the sweep; never throws. */
   scan: () => Promise<FoundProgram[]>;
   onPick: (found: FoundProgram) => void;
@@ -61,7 +61,13 @@ export function LyricsNetworkScan({ programName, tokenWord, scan, onPick, ios = 
                   {` · ${t("lyrics.scan.port", { port: entry.port })}`}
                 </span>
                 {entry.needsToken ? (
-                  <small>{t(tokenWord === "token" ? "lyrics.scan.needsToken" : "lyrics.scan.needsKey")}</small>
+                  <small>{t(
+                      tokenWord === "token"
+                        ? "lyrics.scan.needsToken"
+                        : tokenWord === "password"
+                          ? "lyrics.scan.needsPassword"
+                          : "lyrics.scan.needsKey",
+                    )}</small>
                 ) : null}
               </button>
             </li>

@@ -76,6 +76,7 @@ fn token_key(software: LyricsSoftware) -> String {
             LyricsSoftware::ProPresenter => "propresenter",
             LyricsSoftware::FreeShow => "freeshow",
             LyricsSoftware::Holyrics => "holyrics",
+            LyricsSoftware::OpenLp => "openlp",
             LyricsSoftware::Unknown => "unknown",
         }
     )

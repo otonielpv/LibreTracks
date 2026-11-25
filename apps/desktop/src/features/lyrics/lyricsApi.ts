@@ -36,6 +36,8 @@ export type LyricsError =
   | { kind: "timeout" }
   | { kind: "unauthorized"; missing: string[] }
   | { kind: "notFound"; what: string }
+  /** The program is projecting something else (OpenLP): read later. */
+  | { kind: "busy"; detail: string }
   | { kind: "unexpected"; detail: string };
 
 export type LyricsConnection =
@@ -126,6 +128,7 @@ export const DEFAULT_PORTS: Record<LyricsSoftware, number | null> = {
   proPresenter: null,
   freeShow: 5506,
   holyrics: 8091,
+  openLp: 4316,
   unknown: null,
 };
 
@@ -133,10 +136,11 @@ export const LYRICS_PROGRAMS: Array<Exclude<LyricsSoftware, "unknown">> = [
   "proPresenter",
   "freeShow",
   "holyrics",
+  "openLp",
 ];
 
 export function usesToken(software: LyricsSoftware | null): boolean {
-  return software === "freeShow" || software === "holyrics";
+  return software === "freeShow" || software === "holyrics" || software === "openLp";
 }
 
 export function getLyricsConfig() {

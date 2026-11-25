@@ -15,6 +15,14 @@ import "./lyrics.css";
 
 type Program = Exclude<LyricsSoftware, "unknown">;
 
+/** What the program calls its secret: Holyrics a token, OpenLP a password,
+ * FreeShow a key. */
+function tokenWord(software: LyricsSoftware): "token" | "key" | "password" {
+  if (software === "holyrics") return "token";
+  if (software === "openLp") return "password";
+  return "key";
+}
+
 /** A lyrics error in plain words. */
 export function lyricsErrorText(
   error: LyricsError,
@@ -32,6 +40,8 @@ export function lyricsErrorText(
         : t("lyrics.errors.badToken");
     case "notFound":
       return t("lyrics.errors.notFound");
+    case "busy":
+      return t("lyrics.errors.busy");
     default:
       return error.detail === "port" ? t("lyrics.errors.noPort") : t("lyrics.errors.unexpected", { detail: error.detail });
   }
@@ -185,18 +195,18 @@ export function LyricsSettingsTab({ api }: { api?: LyricsApi } = {}) {
               <LyricsNetworkScan
                 key={software}
                 programName={t(`lyrics.programs.${software}`)}
-                tokenWord={software === "holyrics" ? "token" : "key"}
+                tokenWord={tokenWord(software)}
                 scan={() => handlers.scan(software, config.port)}
                 onPick={pickFound}
               />
 
               {usesToken(software) ? (
                 <label className="lt-settings-field">
-                  <span>{t(software === "holyrics" ? "lyrics.settings.token" : "lyrics.settings.key")}</span>
+                  <span>{t(`lyrics.settings.${tokenWord(software)}`)}</span>
                   <input className="lt-lyrics-input"
                     type="password"
                     autoComplete="off"
-                    aria-label={t(software === "holyrics" ? "lyrics.settings.token" : "lyrics.settings.key")}
+                    aria-label={t(`lyrics.settings.${tokenWord(software)}`)}
                     value={token}
                     placeholder={view?.hasToken ? t("lyrics.settings.tokenSaved") : ""}
                     onChange={(event) => setToken(event.target.value)}
@@ -208,7 +218,7 @@ export function LyricsSettingsTab({ api }: { api?: LyricsApi } = {}) {
                     }}
                   />
                   <small>
-                    {t(software === "holyrics" ? "lyrics.settings.tokenHelp" : "lyrics.settings.keyHelp")}
+                    {t(`lyrics.settings.${tokenWord(software)}Help`)}
                   </small>
                 </label>
               ) : null}

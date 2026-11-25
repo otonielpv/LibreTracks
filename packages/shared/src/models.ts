@@ -665,7 +665,7 @@ export type LeadTime =
 
 /** Programa de proyección de letras. Espejo de Rust `LyricsSoftware`;
  * `unknown` es un programa que esta versión no conoce. */
-export type LyricsSoftware = "proPresenter" | "freeShow" | "holyrics" | "unknown";
+export type LyricsSoftware = "proPresenter" | "freeShow" | "holyrics" | "openLp" | "unknown";
 
 /** Cómo avanzan las diapositivas dentro de una sección. Espejo de `StepMode`. */
 export type LyricsStepMode = "auto" | "manual" | "off";

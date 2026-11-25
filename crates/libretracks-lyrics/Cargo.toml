@@ -4,20 +4,24 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 
-# Lyrics sync with ProPresenter, FreeShow and Holyrics over their local HTTP
+# Lyrics sync with ProPresenter, FreeShow, Holyrics and OpenLP over their local HTTP
 # APIs (plan lyrics-sync). Pure parts (structure, plan, send gate) plus the
 # network clients; no Tauri, so its tests run in CI.
 
 [dependencies]
 async-trait = "0.1"
 base64 = "0.22"
+futures-util = { version = "0.3", default-features = false }
 libretracks-core = { path = "../libretracks-core" }
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
 tokio = { version = "1", features = ["sync", "time", "rt", "macros", "net"] }
+# OpenLP pushes its screen state over a WebSocket only.
+tokio-tungstenite = "0.24"
 
 [dev-dependencies]
+futures-util = { version = "0.3", default-features = false, features = ["sink"] }
 libretracks-test-http = { path = "../libretracks-test-http" }
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "time"] }

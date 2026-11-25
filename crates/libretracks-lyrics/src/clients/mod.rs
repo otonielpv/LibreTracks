@@ -5,6 +5,7 @@
 
 mod freeshow;
 mod holyrics;
+mod openlp;
 mod propresenter;
 
 use std::time::{Duration, Instant};
@@ -16,6 +17,7 @@ use serde_json::Value;
 
 pub use freeshow::FreeShowClient;
 pub use holyrics::HolyricsClient;
+pub use openlp::OpenLpClient;
 pub use propresenter::ProPresenterClient;
 
 use crate::plan::LyricsCommand;
@@ -66,6 +68,10 @@ pub trait LyricsClient: Send + Sync {
     /// Send one order; returns how long the program took.
     async fn send(&self, command: &LyricsCommand) -> Result<Duration, LyricsError>;
     async fn current(&self) -> Result<Option<CurrentSlide>, LyricsError>;
+    /// The song is starting now, so reading a presentation may take the
+    /// program's screen (OpenLP, which only shows the live item's slides).
+    /// Off again once the song's plan is resolved.
+    fn set_may_take_screen(&self, _allowed: bool) {}
     /// What identifies this state of a presentation for its kept pictures:
     /// it changes when the presentation is edited. `None` = do not keep them
     /// (the program makes them fast, or cannot tell).
@@ -98,7 +104,8 @@ pub(crate) fn data_url(mime: &str, bytes: &[u8]) -> String {
 pub struct Connection {
     pub host: String,
     pub port: u16,
-    /// Holyrics token or FreeShow key; `None` when not set.
+    /// Holyrics token, FreeShow key or OpenLP `user:password`; `None` when
+    /// not set.
     pub token: Option<String>,
 }
 
@@ -124,6 +131,7 @@ pub fn client_for(
         LyricsSoftware::ProPresenter => Box::new(ProPresenterClient::new(http)),
         LyricsSoftware::FreeShow => Box::new(FreeShowClient::new(http)),
         LyricsSoftware::Holyrics => Box::new(HolyricsClient::new(http)),
+        LyricsSoftware::OpenLp => Box::new(OpenLpClient::new(http)),
         LyricsSoftware::Unknown => {
             return Err(LyricsError::unexpected("programa de letras no admitido"))
         }
@@ -212,6 +220,10 @@ impl Http {
 
     pub(crate) fn post(&self, path: &str) -> reqwest::RequestBuilder {
         self.client.post(self.url(path))
+    }
+
+    pub(crate) fn request(&self, method: reqwest::Method, path: &str) -> reqwest::RequestBuilder {
+        self.client.request(method, self.url(path))
     }
 }
 

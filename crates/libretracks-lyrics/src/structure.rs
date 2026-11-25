@@ -296,6 +296,67 @@ pub fn parse_freeshow(
     })
 }
 
+/// OpenLP `GET /api/v2/controller/live-items`: the live service item with
+/// every slide in the order it projects them (a song's verse order already
+/// expanded). Each slide's `tag` is its verse ("V1", "C1", "B1"…); items
+/// with no verses (custom slides) number them instead. `controller/show`
+/// takes the 0-based position in that list.
+pub fn parse_openlp(item: &Value) -> Result<LyricsStructure, LyricsError> {
+    let presentation_id = item
+        .get("id")
+        .and_then(text)
+        .ok_or_else(|| unexpected("ítem de OpenLP sin id"))?;
+    let title = item.get("title").and_then(text).unwrap_or_default();
+    let slides = item
+        .get("slides")
+        .and_then(Value::as_array)
+        .ok_or_else(|| unexpected("ítem de OpenLP sin diapositivas"))?;
+    let mut entries = Vec::with_capacity(slides.len());
+    let mut slide_list = Vec::with_capacity(slides.len());
+    for (position, slide) in slides.iter().enumerate() {
+        let index = position as u32;
+        // A number is OpenLP counting slides, not naming a verse.
+        let label = match slide.get("tag") {
+            Some(Value::String(tag)) => tag.trim().to_string(),
+            _ => String::new(),
+        };
+        let body = slide
+            .get("text")
+            .and_then(text)
+            .unwrap_or_default();
+        slide_list.push(SlideInfo {
+            index,
+            group_label: base_label(&label).to_string(),
+            text: slide_text(&body),
+            title: false,
+        });
+        entries.push(StructureEntry {
+            canonical: openlp_canonical(&label),
+            group_label: label,
+            aliases: Vec::new(),
+            source: None,
+            slide_count: 1,
+            first_index: index,
+        });
+    }
+    Ok(LyricsStructure {
+        presentation_id,
+        title,
+        entries: merge_consecutive(entries),
+        slides: slide_list,
+    })
+}
+
+/// OpenLP's verse letters: V, C, B, P (pre-chorus), I, E as everywhere,
+/// but "O" is "Other", not an outro.
+fn openlp_canonical(tag: &str) -> Option<SectionId> {
+    let letters = tag.trim_end_matches(|c: char| c.is_ascii_digit());
+    if letters.eq_ignore_ascii_case("o") {
+        return None;
+    }
+    canonical_section(tag)
+}
+
 /// LibreTracks' own numbering of a Holyrics song: the title slide is 0 and
 /// the lyrics start at 1, whether or not Holyrics shows a title slide. The
 /// client turns it into Holyrics' real index when sending, so plans never

@@ -39,6 +39,11 @@ pub enum LyricsError {
     /// The presentation or group does not exist there.
     #[error("no encontrado: {what}")]
     NotFound { what: String },
+    /// The program is projecting something else and reading this
+    /// presentation would take its screen (OpenLP only gives the slides of
+    /// the live item): tried again later.
+    #[error("{detail}")]
+    Busy { detail: String },
     #[error("{detail}")]
     Unexpected { detail: String },
 }

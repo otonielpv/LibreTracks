@@ -9,6 +9,7 @@ export const TUTORIAL_STEPS: Record<Exclude<LyricsSoftware, "unknown">, number> 
   proPresenter: 4,
   freeShow: 4,
   holyrics: 4,
+  openLp: 4,
 };
 
 type Props = {

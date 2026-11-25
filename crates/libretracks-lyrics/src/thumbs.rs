@@ -29,6 +29,7 @@ fn program(software: LyricsSoftware) -> &'static str {
         LyricsSoftware::ProPresenter => "propresenter",
         LyricsSoftware::FreeShow => "freeshow",
         LyricsSoftware::Holyrics => "holyrics",
+        LyricsSoftware::OpenLp => "openlp",
         LyricsSoftware::Unknown => "unknown",
     }
 }

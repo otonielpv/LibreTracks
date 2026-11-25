@@ -84,7 +84,7 @@ fn region_lyrics_round_trip_without_loss() {
 #[test]
 fn an_unknown_program_reads_as_unknown_and_keeps_the_rest() {
     let json = r#"{"enabled":true,"links":[
-        {"software":"openLp","presentationName":"Oceans"},
+        {"software":"easyWorship","presentationName":"Oceans"},
         {"software":"holyrics","presentationName":"Oceans","presentationId":"42"}
     ],"stepMode":"auto"}"#;
     let lyrics: RegionLyrics = serde_json::from_str(json).expect("tolerant");

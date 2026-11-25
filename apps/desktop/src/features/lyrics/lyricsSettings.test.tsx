@@ -94,6 +94,26 @@ describe("LyricsSettingsTab", () => {
     }
   });
 
+  it("OpenLP uses port 4316 and asks for an optional password", async () => {
+    const api = makeApi({ enabled: true, tutorialDone: ["openLp"] });
+    render(<LyricsSettingsTab api={api} />);
+    fireEvent.click(await screen.findByRole("radio", { name: "OpenLP" }));
+    await waitFor(() => expect(api.saveLyricsConfig.mock.calls.at(-1)?.[0].software).toBe("openLp"));
+    expect(api.saveLyricsConfig.mock.calls.at(-1)?.[0].port).toBe(4316);
+    const password = await screen.findByLabelText("Contraseña (opcional)");
+    fireEvent.change(password, { target: { value: "openlp:secreto" } });
+    fireEvent.blur(password);
+    await waitFor(() => expect(api.saveLyricsConfig.mock.calls.at(-1)?.[1]).toBe("openlp:secreto"));
+  });
+
+  it("OpenLP busy projecting is explained, not shown as a raw error", async () => {
+    const api = makeApi({ enabled: true, software: "openLp", port: 4316, tutorialDone: ["openLp"] });
+    api.probeLyrics.mockRejectedValueOnce({ kind: "busy", detail: "x" });
+    render(<LyricsSettingsTab api={api} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Probar conexión" }));
+    expect((await screen.findByRole("alert")).textContent).toContain("OpenLP está proyectando otra cosa");
+  });
+
   it("a probe without permissions lists the actions to tick", async () => {
     const api = makeApi({ enabled: true, software: "holyrics", port: 8091, tutorialDone: ["holyrics"] });
     api.probeLyrics.mockRejectedValueOnce({ kind: "unauthorized", missing: ["ActionGoToIndex", "SetF8"] });

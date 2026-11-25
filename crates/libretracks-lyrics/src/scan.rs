@@ -127,6 +127,21 @@ pub fn classify(software: LyricsSoftware, status: u16, body: &Value) -> Option<(
                 _ => None,
             }
         }
+        // GET /api/v2/core/system → {"api_version": 2, "login_required", …};
+        // the endpoint is open even when the API asks for a login.
+        LyricsSoftware::OpenLp => {
+            if status != 200 {
+                return None;
+            }
+            let object = body.as_object()?;
+            object.get("api_version")?;
+            object.get("websocket_port")?;
+            let login = object
+                .get("login_required")
+                .and_then(Value::as_bool)
+                .unwrap_or(false);
+            Some(("OpenLP".into(), login))
+        }
         LyricsSoftware::Unknown => None,
     }
 }
@@ -154,6 +169,7 @@ pub async fn identify(
         LyricsSoftware::Holyrics => client
             .post(format!("{base}/api/GetTokenInfo?token="))
             .json(&json!({})),
+        LyricsSoftware::OpenLp => client.get(format!("{base}/api/v2/core/system")),
         LyricsSoftware::Unknown => return None,
     };
     let exchange = async {
@@ -331,6 +347,25 @@ mod tests {
             Some(("Holyrics 2.30.0".into(), false))
         );
         assert_eq!(classify(LyricsSoftware::Holyrics, 200, &json!({"other": 1})), None);
+        assert_eq!(
+            classify(
+                LyricsSoftware::OpenLp,
+                200,
+                &json!({"websocket_port": 4317, "login_required": false, "api_version": 2, "api_revision": 7})
+            ),
+            Some(("OpenLP".into(), false))
+        );
+        assert_eq!(
+            classify(
+                LyricsSoftware::OpenLp,
+                200,
+                &json!({"websocket_port": 4317, "login_required": true, "api_version": 2})
+            ),
+            Some(("OpenLP".into(), true))
+        );
+        assert_eq!(classify(LyricsSoftware::OpenLp, 200, &json!({"api_version": 2})), None);
+        assert_eq!(classify(LyricsSoftware::OpenLp, 404, &json!({})), None);
+        assert_eq!(sweep_ports(LyricsSoftware::OpenLp, None), vec![4316]);
     }
 
     fn found(host: &str, port: u16) -> FoundProgram {

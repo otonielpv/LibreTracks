@@ -158,6 +158,8 @@ pub enum LyricsSoftware {
     ProPresenter,
     FreeShow,
     Holyrics,
+    #[serde(rename = "openLp")]
+    OpenLp,
     #[serde(other)]
     Unknown,
 }

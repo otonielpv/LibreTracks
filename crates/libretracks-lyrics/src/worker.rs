@@ -37,6 +37,8 @@ const RESOLVE_STEP: Duration = Duration::from_millis(50);
 /// After the program could not be reached, wait this long before resolving
 /// again.
 const RETRY_CONNECTION: Duration = Duration::from_secs(3);
+/// The program is busy projecting (OpenLP): look again after this.
+const RETRY_BUSY: Duration = Duration::from_secs(5);
 /// What `showing` holds while a song's start slide is up.
 const START_MARKER: &str = "#start";
 
@@ -439,7 +441,15 @@ impl LyricsWorker {
             } => {
                 let region_id = region_id.clone();
                 self.entered = Some(region_id.clone());
-                if let Ok(Some(plan)) = self.ensure_plan(&region_id).await {
+                // The song starts now: its presentation may take the screen.
+                if let Some(client) = &self.client {
+                    client.set_may_take_screen(true);
+                }
+                let plan = self.ensure_plan(&region_id).await;
+                if let Some(client) = &self.client {
+                    client.set_may_take_screen(false);
+                }
+                if let Ok(Some(plan)) = plan {
                     let prepare = plan.prepare.clone();
                     self.send(&prepare, &region_id, None, None).await;
                 }
@@ -660,7 +670,9 @@ impl LyricsWorker {
     }
 
     fn fail(&mut self, error: LyricsError) {
-        self.status.last_error = Some(error.to_string());
+        if !matches!(error, LyricsError::Busy { .. }) {
+            self.status.last_error = Some(error.to_string());
+        }
         match error {
             LyricsError::Unreachable { .. } | LyricsError::Timeout => {
                 self.retry_after = Some(Instant::now() + RETRY_CONNECTION);
@@ -668,6 +680,13 @@ impl LyricsWorker {
             }
             LyricsError::Unauthorized { missing } => {
                 self.set_connection(ConnectionState::Unauthorized { missing });
+            }
+            // Not a failure: the song is read once the screen is free, or
+            // when it starts. Without the pause the idle loop would ask
+            // again at once, over and over.
+            LyricsError::Busy { .. } => {
+                self.retry_after = Some(Instant::now() + RETRY_BUSY);
+                self.dirty = true;
             }
             _ => self.dirty = true,
         }

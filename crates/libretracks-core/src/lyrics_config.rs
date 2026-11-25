@@ -51,13 +51,17 @@ pub fn default_port(software: LyricsSoftware) -> Option<u16> {
     match software {
         LyricsSoftware::FreeShow => Some(5506),
         LyricsSoftware::Holyrics => Some(8091),
+        LyricsSoftware::OpenLp => Some(4316),
         LyricsSoftware::ProPresenter | LyricsSoftware::Unknown => None,
     }
 }
 
 /// Whether the program asks for a token or key.
 pub fn uses_token(software: LyricsSoftware) -> bool {
-    matches!(software, LyricsSoftware::FreeShow | LyricsSoftware::Holyrics)
+    matches!(
+        software,
+        LyricsSoftware::FreeShow | LyricsSoftware::Holyrics | LyricsSoftware::OpenLp
+    )
 }
 
 impl LyricsConfig {
