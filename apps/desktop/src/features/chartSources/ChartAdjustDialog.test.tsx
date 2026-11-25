@@ -58,6 +58,20 @@ describe("adjusting a sheet to the song's sequence", () => {
     expect(within(rows[3]).getByText("Eres mi refugio")).toBeTruthy();
   });
 
+  it("the eye beside the first line shows the whole section", () => {
+    open(SONG, input(RAW.replace("[G]Camino por la orilla", "[G]Camino por la orilla\nCon la mirada en ti")));
+    const rows = screen.getAllByTestId("chart-import-row");
+    const eye = within(rows[1]).getByRole("button", { name: "liveChart.peekSection" });
+    expect(within(rows[1]).getByText("Camino por la orilla")).toBeTruthy();
+    fireEvent.mouseEnter(eye.parentElement!);
+    expect(within(screen.getByRole("tooltip")).getAllByRole("listitem").map((item) => item.textContent)).toEqual([
+      "Camino por la orilla",
+      "Con la mirada en ti",
+    ]);
+    fireEvent.mouseLeave(eye.parentElement!);
+    expect(screen.queryByRole("tooltip")).toBeNull();
+  });
+
   it("applies the cleaned sheet with the links, a changed one included", async () => {
     const onApply = open();
     const rows = screen.getAllByTestId("chart-import-row");

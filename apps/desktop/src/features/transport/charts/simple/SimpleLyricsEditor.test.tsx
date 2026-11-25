@@ -306,23 +306,4 @@ describe("simple lyrics editor", () => {
     expect(links.find((link) => link.markerId === "c3")?.repeat).toBe(3);
     expect(links.find((link) => link.markerId === "c1")?.repeat).toBeUndefined();
   });
-
-  it("the advanced editor's eye shows the whole linked section and its line count", () => {
-    const text = PC_TEXT.replace("[C]Santo eres [G]tú", "[C]Santo eres [G]tú\nDigno de [D]honra\nRey de reyes");
-    renderEditor({ ...PC_CHART, text }, "advanced");
-    const eyes = screen.getAllByRole("button", { name: "liveChart.peekSection:Coro" });
-    expect(eyes).toHaveLength(3);
-    // Beside the select: the first line, cut to what fits.
-    expect(eyes[0].parentElement!.querySelector(".lt-section-peek-first")?.textContent).toBe("Santo eres tú");
-    fireEvent.mouseEnter(eyes[0].parentElement!);
-    const box = screen.getByRole("tooltip");
-    expect(box.textContent).toContain("liveChart.peekLines:3");
-    expect(within(box).getAllByRole("listitem").map((item) => item.textContent)).toEqual([
-      "Santo eres tú",
-      "Digno de honra",
-      "Rey de reyes",
-    ]);
-    fireEvent.mouseLeave(eyes[0].parentElement!);
-    expect(screen.queryByRole("tooltip")).toBeNull();
-  });
 });

@@ -1046,17 +1046,3 @@
 .lt-mobile .lt-lyrics-follow-segments button {
   min-height: 2.5rem;
 }
-
-/* The section select, its first line (what fits) and the eye (SectionPeek.css). */
-.lt-chart-editor-section {
-  display: flex;
-  align-items: center;
-  gap: 0.35rem;
-  min-width: 0;
-}
-
-.lt-chart-editor-links .lt-chart-editor-section select {
-  flex: 0 1 9.5rem;
-  min-width: 6rem;
-  width: auto;
-}
