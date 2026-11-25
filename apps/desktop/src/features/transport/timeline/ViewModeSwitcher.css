@@ -33,7 +33,7 @@
   border: 1px solid transparent;
   border-radius: 4px;
   background: transparent;
-  color: #bacac5;
+  color: rgb(var(--lt-c-bacac5, 186 202 197));
   font: 600 0.85rem/1 "Space Grotesk", sans-serif;
   text-align: left;
   cursor: pointer;
@@ -47,14 +47,14 @@
    accent so the two never look alike. */
 .lt-view-mode-menu-item:hover,
 .lt-view-mode-menu-item:focus-visible {
-  border-color: rgb(186 202 197 / 0.25);
-  background: rgb(186 202 197 / 0.1);
-  color: #e6f0ed;
+  border-color: rgb(var(--lt-c-bacac5, 186 202 197) / 0.25);
+  background: rgb(var(--lt-c-bacac5, 186 202 197) / 0.1);
+  color: rgb(var(--lt-c-e6f0ed, 230 240 237));
   outline: none;
 }
 
 .lt-view-mode-menu-item.is-active {
-  border-color: rgb(87 241 219 / 0.4);
-  background: rgb(87 241 219 / 0.1);
-  color: #57f1db;
+  border-color: rgb(var(--lt-accent-rgb) / 0.4);
+  background: rgb(var(--lt-accent-rgb) / 0.1);
+  color: var(--lt-accent);
 }

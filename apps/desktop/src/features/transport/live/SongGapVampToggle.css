@@ -5,10 +5,10 @@
   align-items: center;
   gap: 0.25rem;
   padding: 0.25rem 0.45rem;
-  border: 1px solid rgb(255 255 255 / 0.1);
+  border: 1px solid rgb(var(--lt-c-ffffff, 255 255 255) / 0.1);
   border-radius: 0.3rem;
-  color: #82908c;
-  background: #171a19;
+  color: rgb(var(--lt-c-82908c, 130 144 140));
+  background: rgb(var(--lt-c-171a19, 23 26 25));
   font: 750 9px/1 "Space Grotesk", sans-serif;
   text-transform: uppercase;
   white-space: nowrap;
@@ -23,22 +23,22 @@
 }
 
 .lt-song-gap-vamp.is-active {
-  border-color: rgb(87 241 219 / 0.4);
-  color: #62f2dc;
-  background: rgb(87 241 219 / 0.12);
+  border-color: rgb(var(--lt-accent-rgb) / 0.4);
+  color: rgb(var(--lt-c-62f2dc, 98 242 220));
+  background: rgb(var(--lt-accent-rgb) / 0.12);
 }
 
 /* Holding between songs: the transport looks paused, so say why. */
 .lt-song-gap-vamp.is-holding {
-  border-color: rgb(244 201 93 / 0.75);
-  color: #f4c95d;
-  background: rgb(244 201 93 / 0.14);
+  border-color: rgb(var(--lt-c-f4c95d, 244 201 93) / 0.75);
+  color: rgb(var(--lt-c-f4c95d, 244 201 93));
+  background: rgb(var(--lt-c-f4c95d, 244 201 93) / 0.14);
   animation: lt-song-gap-vamp-pulse 1.2s ease-in-out infinite;
 }
 
 @keyframes lt-song-gap-vamp-pulse {
   50% {
-    box-shadow: 0 0 10px rgb(244 201 93 / 0.35);
+    box-shadow: 0 0 10px rgb(var(--lt-c-f4c95d, 244 201 93) / 0.35);
   }
 }
 

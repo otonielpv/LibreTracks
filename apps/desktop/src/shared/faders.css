@@ -23,16 +23,16 @@
      diferencia, así la zona de agarre crece sin mover la fila. */
   --lt-fader-footprint: var(--lt-fader-box);
   --lt-fader-groove: 4px;
-  --lt-fader-groove-bg: #070808;
-  --lt-fader-groove-shadow: inset 0 1px 2px #000, 0 1px 0 rgb(255 255 255 / 0.05);
+  --lt-fader-groove-bg: rgb(var(--lt-c-070808, 7 8 8));
+  --lt-fader-groove-shadow: inset 0 1px 2px #000, 0 1px 0 rgb(var(--lt-c-ffffff, 255 255 255) / 0.05);
   /* Cap: ancho a lo largo del recorrido y alto a lo ancho. */
   --lt-fader-cap-w: 11px;
   --lt-fader-cap-h: 18px;
-  --lt-fader-index: #57f1db;
-  --lt-fader-index-glow: rgb(87 241 219 / 0.35);
+  --lt-fader-index: var(--lt-accent);
+  --lt-fader-index-glow: rgb(var(--lt-accent-rgb) / 0.35);
   --lt-fader-tick-len: 3px;
-  --lt-fader-tick: #3c4443;
-  --lt-fader-tick-unity: #8f9e9b;
+  --lt-fader-tick: rgb(var(--lt-c-3c4443, 60 68 67));
+  --lt-fader-tick-unity: rgb(var(--lt-c-8f9e9b, 143 158 155));
   --lt-fader-ticks: linear-gradient(
     to right,
     transparent calc(var(--lt-fader-cap-w) / 2 + (100% - var(--lt-fader-cap-w)) * 0.3 - 0.5px),
@@ -74,8 +74,8 @@
 }
 
 .lt-fader.is-pan {
-  --lt-fader-index: #74b8ff;
-  --lt-fader-index-glow: rgb(116 184 255 / 0.35);
+  --lt-fader-index: rgb(var(--lt-c-74b8ff, 116 184 255));
+  --lt-fader-index-glow: rgb(var(--lt-c-74b8ff, 116 184 255) / 0.35);
 }
 
 /* El master lleva el medidor estéreo debajo, en la misma celda: la ranura
@@ -135,7 +135,7 @@ input[type="range"].lt-fader:focus {
 }
 
 input[type="range"].lt-fader:focus-visible {
-  outline: 1px solid rgb(87 241 219 / 0.7);
+  outline: 1px solid rgb(var(--lt-accent-rgb) / 0.7);
   outline-offset: 1px;
 }
 
@@ -181,21 +181,21 @@ input[type="range"].lt-fader::-webkit-slider-thumb {
     /* Cuerpo del cap: plástico oscuro con dos aristas. */
     linear-gradient(
       to right,
-      #2c3131 0%,
-      #474e4e 22%,
-      #2a2f2f 46%,
-      #1c2020 54%,
-      #3a4141 78%,
-      #262a2a 100%
+      rgb(var(--lt-c-2c3131, 44 49 49)) 0%,
+      rgb(var(--lt-c-474e4e, 71 78 78)) 22%,
+      rgb(var(--lt-c-2a2f2f, 42 47 47)) 46%,
+      rgb(var(--lt-c-1c2020, 28 32 32)) 54%,
+      rgb(var(--lt-c-3a4141, 58 65 65)) 78%,
+      rgb(var(--lt-c-262a2a, 38 42 42)) 100%
     );
   box-shadow:
     0 2px 4px rgb(0 0 0 / 0.65),
-    inset 0 1px 0 rgb(255 255 255 / 0.12);
+    inset 0 1px 0 rgb(var(--lt-c-ffffff, 255 255 255) / 0.12);
   cursor: ew-resize;
 }
 
 input[type="range"].lt-fader:hover:not(:disabled)::-webkit-slider-thumb {
-  border-color: #4a5454;
+  border-color: rgb(var(--lt-c-4a5454, 74 84 84));
 }
 
 input[type="range"].lt-fader:active:not(:disabled)::-webkit-slider-thumb {
@@ -292,10 +292,10 @@ input[type="range"].lt-fader:active:not(:disabled)::-webkit-slider-thumb {
   padding: 1px;
   box-sizing: border-box;
   border-radius: 1px;
-  background: #070808;
+  background: rgb(var(--lt-c-070808, 7 8 8));
   box-shadow:
     inset 0 1px 2px #000,
-    0 1px 0 rgb(255 255 255 / 0.05);
+    0 1px 0 rgb(var(--lt-c-ffffff, 255 255 255) / 0.05);
   pointer-events: none;
 }
 
@@ -319,12 +319,12 @@ input[type="range"].lt-fader:active:not(:disabled)::-webkit-slider-thumb {
   clip-path: inset(0 100% 0 0);
   background: linear-gradient(
     90deg,
-    #1f8a55 0%,
-    #2fba69 25%,
-    #63db78 55%,
-    #dbe95f 75%,
-    #ff6150 85%,
-    #ff6150 100%
+    rgb(var(--lt-c-1f8a55, 31 138 85)) 0%,
+    rgb(var(--lt-c-2fba69, 47 186 105)) 25%,
+    rgb(var(--lt-c-63db78, 99 219 120)) 55%,
+    rgb(var(--lt-c-dbe95f, 219 233 95)) 75%,
+    rgb(var(--lt-c-ff6150, 255 97 80)) 85%,
+    rgb(var(--lt-c-ff6150, 255 97 80)) 100%
   );
 }
 
@@ -358,8 +358,8 @@ input[type="range"].lt-fader:active:not(:disabled)::-webkit-slider-thumb {
    dos bandas a los lados. Marcas en la escala que se lee al lado:
    +10 arriba, 0 dB al 25 %, −12 al 40 %, −36 al 70 %, −∞ abajo. */
 .lt-compact-mixer-fader {
-  --lt-vfader-tick: #3c4443;
-  --lt-vfader-tick-unity: #8f9e9b;
+  --lt-vfader-tick: rgb(var(--lt-c-3c4443, 60 68 67));
+  --lt-vfader-tick-unity: rgb(var(--lt-c-8f9e9b, 143 158 155));
   --lt-vfader-ticks: linear-gradient(
     to bottom,
     var(--lt-vfader-tick) 0 1px,
@@ -399,15 +399,15 @@ input[type="range"].lt-fader:active:not(:disabled)::-webkit-slider-thumb {
   width: calc(4px * var(--lt-mixer-fader-scale, 1));
   transform: translateX(-50%);
   border-radius: 1px;
-  background: #070808;
+  background: rgb(var(--lt-c-070808, 7 8 8));
   box-shadow:
     inset 0 1px 2px #000,
-    1px 0 0 rgb(255 255 255 / 0.05);
+    1px 0 0 rgb(var(--lt-c-ffffff, 255 255 255) / 0.05);
   pointer-events: none;
 }
 
 .lt-compact-mixer-fader:focus-visible {
-  outline: 1px solid rgb(87 241 219 / 0.7);
+  outline: 1px solid rgb(var(--lt-accent-rgb) / 0.7);
   outline-offset: 2px;
 }
 
@@ -427,28 +427,28 @@ input[type="range"].lt-fader:active:not(:disabled)::-webkit-slider-thumb {
     linear-gradient(
         to bottom,
         transparent calc(50% - 1px),
-        #57f1db calc(50% - 1px) calc(50% + 1px),
+        var(--lt-accent) calc(50% - 1px) calc(50% + 1px),
         transparent calc(50% + 1px)
       )
       center / calc(100% - 4px) 100% no-repeat,
     repeating-linear-gradient(to bottom, transparent 0 2px, rgb(0 0 0 / 0.22) 2px 3px),
     linear-gradient(
       to bottom,
-      #2c3131 0%,
-      #474e4e 22%,
-      #2a2f2f 46%,
-      #1c2020 54%,
-      #3a4141 78%,
-      #262a2a 100%
+      rgb(var(--lt-c-2c3131, 44 49 49)) 0%,
+      rgb(var(--lt-c-474e4e, 71 78 78)) 22%,
+      rgb(var(--lt-c-2a2f2f, 42 47 47)) 46%,
+      rgb(var(--lt-c-1c2020, 28 32 32)) 54%,
+      rgb(var(--lt-c-3a4141, 58 65 65)) 78%,
+      rgb(var(--lt-c-262a2a, 38 42 42)) 100%
     );
   box-shadow:
     0 2px 4px rgb(0 0 0 / 0.65),
-    inset 0 1px 0 rgb(255 255 255 / 0.12);
+    inset 0 1px 0 rgb(var(--lt-c-ffffff, 255 255 255) / 0.12);
   pointer-events: none;
 }
 
 .lt-compact-mixer-fader:hover .lt-compact-mixer-fader-thumb {
-  border-color: #4a5454;
+  border-color: rgb(var(--lt-c-4a5454, 74 84 84));
 }
 
 .lt-compact-mixer-fader:active .lt-compact-mixer-fader-thumb {

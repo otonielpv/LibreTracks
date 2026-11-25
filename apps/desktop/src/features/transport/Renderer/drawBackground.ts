@@ -1,3 +1,4 @@
+import { accentHex, accentRgba, themedHex, themedHexColor, themedRgb, themedRgba } from "../../../shared/theme";
 import {
   formatBpm,
   isMobileApp,
@@ -47,15 +48,17 @@ function blendOnRulerBackdrop(hex: string, alpha: number): string {
   const r = parseInt(value.slice(0, 2), 16);
   const g = parseInt(value.slice(2, 4), 16);
   const b = parseInt(value.slice(4, 6), 16);
-  const mix = (channel: number, backdrop: number) =>
-    Math.round(channel * alpha + backdrop * (1 - alpha));
-  return `rgb(${mix(r, RULER_BACKDROP_RGB[0])}, ${mix(g, RULER_BACKDROP_RGB[1])}, ${mix(b, RULER_BACKDROP_RGB[2])})`;
+  const backdrop = rulerBackdropRgb();
+  const mix = (channel: number, under: number) =>
+    Math.round(channel * alpha + under * (1 - alpha));
+  return `rgb(${mix(r, backdrop[0])}, ${mix(g, backdrop[1])}, ${mix(b, backdrop[2])})`;
 }
 
 /** The flat colour `drawRulerBackgroundLayer` paints the ruler with. Flags
  * pre-blend against it to stay opaque without changing their apparent tint. */
-const RULER_BACKDROP_RGB = [42, 42, 42] as const;
-const RULER_BACKDROP = `rgb(${RULER_BACKDROP_RGB[0]}, ${RULER_BACKDROP_RGB[1]}, ${RULER_BACKDROP_RGB[2]})`;
+// Es el #2a2a2a del diseño oscuro pasado al tema actual.
+const rulerBackdropRgb = () => themedRgb(42, 42, 42);
+const rulerBackdrop = () => themedRgba(42, 42, 42);
 
 const MIN_LABEL_WIDTH_PX = 112;
 
@@ -303,8 +306,8 @@ function drawActiveVampRange(
   }
 
   context.save();
-  context.fillStyle = "rgba(255, 176, 76, 0.18)";
-  context.strokeStyle = "rgba(255, 176, 76, 0.78)";
+  context.fillStyle = themedRgba(255, 176, 76, 0.18);
+  context.strokeStyle = themedRgba(255, 176, 76, 0.78);
   context.lineWidth = 1;
   context.fillRect(highlightLeft, 0, highlightWidth, height);
   context.beginPath();
@@ -322,6 +325,12 @@ function drawActiveVampRange(
  * keeps the beat/bar reference without fighting the marker names. The track
  * area keeps the grid at full strength. */
 const RULER_GRID_OPACITY_SCALE = 0.45;
+
+/** Opacidad base de las lineas de beat y de compas con la intensidad al 100 %.
+ * Antes eran 0.14 / 0.32: comparado con Live la rejilla pesaba demasiado sobre
+ * las ondas. El ajuste de intensidad multiplica estos valores. */
+export const GRID_BEAT_ALPHA = 0.09;
+export const GRID_BAR_ALPHA = 0.2;
 
 export function drawGridLines(
   context: CanvasRenderingContext2D,
@@ -341,6 +350,11 @@ export function drawGridLines(
     screenXToSeconds(0, cameraX, pixelsPerSecond),
   );
   const visibleEndSeconds = screenXToSeconds(width, cameraX, pixelsPerSecond);
+  const barLineStep = Math.max(1, Math.floor(grid.barLineStep ?? 1));
+  const alphaScale = opacityScale * Math.max(0, grid.lineIntensity ?? 1);
+  if (alphaScale <= 0) {
+    return;
+  }
   const beatPath = grid.showBeatGridLines ? new Path2D() : null;
   const barPath = new Path2D();
 
@@ -387,6 +401,14 @@ export function drawGridLines(
     if (seconds > visibleEndSeconds) {
       break;
     }
+    // Al alejar se salta compases (de 2 en 2, de 4 en 4…): con una linea por
+    // compas a 4 px de distancia el timeline era un muro gris. Se filtra por
+    // numero de compas, no por indice, para que las lineas que quedan no
+    // bailen al desplazar.
+    const barNumber = grid.barNumbers?.[index];
+    if (barLineStep > 1 && barNumber !== undefined && (barNumber - 1) % barLineStep !== 0) {
+      continue;
+    }
 
     const x =
       Math.round(secondsToScreenX(seconds, cameraX, pixelsPerSecond)) + 0.5;
@@ -399,12 +421,12 @@ export function drawGridLines(
   }
 
   if (beatPath) {
-    context.strokeStyle = `rgba(186, 202, 197, ${0.14 * opacityScale})`;
+    context.strokeStyle = themedRgba(186, 202, 197, Math.min(1, GRID_BEAT_ALPHA * alphaScale));
     context.lineWidth = 1;
     context.stroke(beatPath);
   }
 
-  context.strokeStyle = `rgba(186, 202, 197, ${0.32 * opacityScale})`;
+  context.strokeStyle = themedRgba(186, 202, 197, Math.min(1, GRID_BAR_ALPHA * alphaScale));
   context.lineWidth = 1;
   context.stroke(barPath);
 }
@@ -447,7 +469,7 @@ export function drawRulerGridLabels(
     const x = Math.round(markerX) + 4;
     const y = GRID_LABEL_TOP;
 
-    context.fillStyle = marker.isBarStart ? "#e5e2e1" : "#bacac5";
+    context.fillStyle = marker.isBarStart ? themedHex("#e5e2e1") : themedHex("#bacac5");
     context.font = '600 9px "Space Grotesk", sans-serif';
     context.fillText(
       formatRulerMusicalPosition(marker.barNumber, marker.beatInBar),
@@ -456,7 +478,7 @@ export function drawRulerGridLabels(
     );
 
     if (marker.isBarStart) {
-      context.fillStyle = "#57f1db";
+      context.fillStyle = accentHex();
       context.font = '400 9px "Space Grotesk", sans-serif';
       context.fillText(
         formatRulerTimecode(marker.seconds),
@@ -499,12 +521,12 @@ export function drawRulerRegion(
   // the ruler's grid show through the song name. Pre-blending against the
   // backdrop keeps the familiar warm tint while masking whatever is behind.
   context.fillStyle = blendOnRulerBackdrop(
-    "#ffe2ab",
+    themedHexColor("#ffe2ab"),
     isSelected ? 0.34 : 0.2,
   );
   context.strokeStyle = isSelected
-    ? "rgba(255, 226, 171, 0.85)"
-    : "rgba(255, 226, 171, 0.45)";
+    ? themedRgba(255, 226, 171, 0.85)
+    : themedRgba(255, 226, 171, 0.45);
   context.lineWidth = 1;
   context.beginPath();
   context.roundRect(blockLeft, blockTop, blockWidth, blockHeight, 6);
@@ -525,7 +547,7 @@ export function drawRulerRegion(
   context.clip();
   // Fully opaque in both states — the resting name used to sit at 92% alpha on
   // top of a translucent block, which is where it lost its edge.
-  context.fillStyle = isSelected ? "#fff4d6" : "#ffefc9";
+  context.fillStyle = isSelected ? themedHex("#fff4d6") : themedHex("#ffefc9");
   context.font = '700 10px "Space Grotesk", sans-serif';
   context.textBaseline = "middle";
   const textCenterY = blockTop + blockHeight / 2 + 0.5;
@@ -569,15 +591,15 @@ export function drawRulerRegion(
     const badgeWidth = Math.ceil(badgeTextWidth + badgePaddingX * 2);
     const badgeTop = Math.round(textCenterY - badgeHeight / 2);
 
-    context.fillStyle = "rgb(16, 16, 22)";
-    context.strokeStyle = "rgba(255, 226, 171, 0.38)";
+    context.fillStyle = themedRgba(16, 16, 22);
+    context.strokeStyle = themedRgba(255, 226, 171, 0.38);
     context.lineWidth = 1;
     context.beginPath();
     context.roundRect(badgeLeft, badgeTop, badgeWidth, badgeHeight, 999);
     context.fill();
     context.stroke();
 
-    context.fillStyle = "rgb(255, 244, 210)";
+    context.fillStyle = themedRgba(255, 244, 210);
     context.fillText(badgeText, badgeLeft + badgePaddingX, textCenterY + 0.1);
     badgeLeft += badgeWidth + 5;
   }
@@ -633,28 +655,28 @@ export function drawRulerMarker(
   // resting state takes on the marker kind's colour so sections read distinctly.
   const kindColor = markerColor(marker);
   const strokeStyle = options.isArmed
-    ? `rgba(87, 241, 219, ${options.pulseAlpha})`
+    ? accentRgba(options.pulseAlpha)
     : options.isSelected
-      ? "rgba(255, 226, 171, 0.9)"
+      ? themedRgba(255, 226, 171, 0.9)
       : options.isCurrent
-        ? "rgba(229, 226, 225, 0.88)"
+        ? themedRgba(229, 226, 225, 0.88)
         : hexToRgba(kindColor, 0.72);
   // Opaque flag bodies. The tint matches what the old translucent fills looked
   // like over the ruler, but pre-blended, so the grid lines stop reading
   // through the label. Armed keeps a live alpha because it pulses.
   const fillStyle = options.isArmed
-    ? `rgba(87, 241, 219, ${0.22 + options.pulseAlpha * 0.22})`
+    ? accentRgba(0.22 + options.pulseAlpha * 0.22)
     : options.isSelected
-      ? blendOnRulerBackdrop("#ffe2ab", 0.26)
+      ? blendOnRulerBackdrop(themedHexColor("#ffe2ab"), 0.26)
       : options.isCurrent
-        ? blendOnRulerBackdrop("#e5e2e1", 0.24)
+        ? blendOnRulerBackdrop(themedHexColor("#e5e2e1"), 0.24)
         : blendOnRulerBackdrop(kindColor, 0.24);
   const textStyle = options.isArmed
-    ? "#57f1db"
+    ? accentHex()
     : options.isSelected
-      ? "#ffe2ab"
+      ? themedHex("#ffe2ab")
       : options.isCurrent
-        ? "#e5e2e1"
+        ? themedHex("#e5e2e1")
         : kindColor;
 
   context.save();
@@ -662,7 +684,7 @@ export function drawRulerMarker(
   context.fillStyle = fillStyle;
   context.lineWidth = options.isArmed ? 1.8 : 1.2;
   if (options.isArmed) {
-    context.shadowColor = "rgba(87, 241, 219, 0.55)";
+    context.shadowColor = accentRgba(0.55);
     context.shadowBlur = 10;
   }
 
@@ -700,7 +722,7 @@ export function drawRulerMarker(
   const shadowColorForFill = context.shadowColor;
   context.shadowBlur = 0;
   const previousFillStyle = context.fillStyle;
-  context.fillStyle = RULER_BACKDROP;
+  context.fillStyle = rulerBackdrop();
   traceFlagBody();
   context.fill();
   context.fillStyle = previousFillStyle;
@@ -755,7 +777,7 @@ export function drawRulerTempoRamp(
   const y0 = rising ? low : high;
   const y1 = rising ? high : low;
   context.save();
-  context.fillStyle = "rgba(87, 241, 219, 0.14)";
+  context.fillStyle = accentRgba(0.14);
   context.beginPath();
   context.moveTo(x0, low);
   context.lineTo(x0, y0);
@@ -763,7 +785,7 @@ export function drawRulerTempoRamp(
   context.lineTo(x1, low);
   context.closePath();
   context.fill();
-  context.strokeStyle = "rgba(87, 241, 219, 0.85)";
+  context.strokeStyle = accentRgba(0.85);
   context.lineWidth = 1.5;
   context.beginPath();
   context.moveTo(x0, y0);
@@ -815,15 +837,15 @@ export function drawRulerTempoMarker(
   // Seleccionada: borde blanco y cuerpo mas lleno, como las banderas de
   // seccion. Hasta la seleccion multiple nada las marcaba como elegidas.
   context.strokeStyle = isSelected
-    ? "rgba(255, 255, 255, 0.95)"
+    ? themedRgba(255, 255, 255, 0.95)
     : overrideLabel
-      ? "rgba(255, 184, 107, 0.85)"
-      : "rgba(87, 241, 219, 0.85)";
+      ? themedRgba(255, 184, 107, 0.85)
+      : accentRgba(0.85);
   // Opaque, for the same reason as the section flags: a translucent body let
   // the grid lines show through the number.
   context.fillStyle = overrideLabel
-    ? blendOnRulerBackdrop("#ffb86b", isSelected ? 0.42 : 0.24)
-    : blendOnRulerBackdrop("#57f1db", isSelected ? 0.42 : 0.24);
+    ? blendOnRulerBackdrop(themedHexColor("#ffb86b"), isSelected ? 0.42 : 0.24)
+    : blendOnRulerBackdrop(accentHex(), isSelected ? 0.42 : 0.24);
   context.lineWidth = isSelected ? 1.8 : 1.2;
   context.beginPath();
   context.moveTo(snappedX, flagTop + 2);
@@ -855,7 +877,7 @@ export function drawRulerTempoMarker(
   context.fill();
   context.stroke();
 
-  context.fillStyle = overrideLabel ? "#ffb86b" : "#57f1db";
+  context.fillStyle = overrideLabel ? themedHex("#ffb86b") : accentHex();
   context.textBaseline = "middle";
   context.fillText(
     label,
@@ -879,7 +901,7 @@ export function drawRulerBackgroundLayer(
   context: CanvasRenderingContext2D,
   args: RulerBackgroundLayerArgs,
 ) {
-  context.fillStyle = "#2a2a2a";
+  context.fillStyle = themedHex("#2a2a2a");
   context.fillRect(0, 0, args.width, args.height);
 
   // Grid first, region blocks on top. The regions used to be painted first, so

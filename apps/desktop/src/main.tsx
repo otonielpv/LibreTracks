@@ -12,6 +12,7 @@ import { isIOSApp, isMobileApp } from "./features/transport/desktopApi";
 import "./shared/styles.css";
 import "./shared/faders.css";
 import { getZoomedRectScale } from "./shared/zoomedRects";
+import { applyThemeToDom } from "./shared/theme";
 import { bootGuestMirrorMode } from "./features/network/guestMirrorBoot";
 
 installGlobalErrorHandlers();
@@ -66,6 +67,9 @@ if (isMobileApp) {
 
   }, 1500);
 }
+
+// Tema de color antes del primer pintado, para que no parpadee el de por defecto.
+applyThemeToDom();
 
 // Network sessions: decide mirror mode (this device following a host) before
 // anything loads, so no screen ever starts against the wrong session.

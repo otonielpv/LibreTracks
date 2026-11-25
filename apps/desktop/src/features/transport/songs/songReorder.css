@@ -7,7 +7,7 @@
   width: 1.1rem;
   height: 1.4rem;
   border-radius: 2px;
-  color: #7f928c;
+  color: rgb(var(--lt-c-7f928c, 127 146 140));
   cursor: grab;
   opacity: 0.55;
   /* Sin esto el dedo haría scroll en vez de arrastrar, y en iOS la pulsación
@@ -23,12 +23,12 @@
 
 .lt-song-reorder-handle:hover,
 .lt-song-reorder-handle:focus-visible {
-  color: #57f1db;
+  color: var(--lt-accent);
   opacity: 1;
 }
 
 .lt-song-reorder-handle:focus-visible {
-  outline: 1px solid rgb(87 241 219 / 0.7);
+  outline: 1px solid rgb(var(--lt-accent-rgb) / 0.7);
   outline-offset: 1px;
 }
 

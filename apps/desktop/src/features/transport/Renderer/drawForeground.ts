@@ -1,3 +1,4 @@
+import { accentRgba, themedRgba } from "../../../shared/theme";
 import type {
   PendingAutomationCueSummary,
   PendingJumpSummary,
@@ -97,8 +98,8 @@ export function drawPendingExecutionLine(
     cameraX,
     pixelsPerSecond,
     executeAtSeconds,
-    "rgba(255, 226, 171, 0.88)",
-    "rgba(255, 226, 171, 0.92)",
+    themedRgba(255, 226, 171, 0.88),
+    themedRgba(255, 226, 171, 0.92),
   );
 }
 
@@ -117,8 +118,8 @@ export function drawPendingTargetLine(
     cameraX,
     pixelsPerSecond,
     targetSeconds,
-    "rgba(87, 241, 219, 0.88)",
-    "rgba(87, 241, 219, 0.92)",
+    accentRgba(0.88),
+    accentRgba(0.92),
   );
 }
 

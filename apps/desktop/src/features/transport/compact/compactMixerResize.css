@@ -16,7 +16,7 @@
 
 .lt-compact-mixer-resize:hover,
 .lt-compact-view.is-resizing-mixer > .lt-compact-mixer-resize {
-  background: rgb(87 241 219 / 0.25);
+  background: rgb(var(--lt-accent-rgb) / 0.25);
 }
 
 .lt-compact-view.is-resizing-mixer,

@@ -15,7 +15,7 @@
 /* El fantasma: lo arrastrado, ya en el hueco donde caerá. */
 .lt-reorder-ghost {
   opacity: 0.38;
-  outline: 1px dashed rgb(87 241 219 / 0.85);
+  outline: 1px dashed rgb(var(--lt-accent-rgb) / 0.85);
   outline-offset: -1px;
   pointer-events: none;
 }
@@ -26,7 +26,7 @@
 
 .lt-compact-song-column.lt-reorder-ghost .lt-song-reorder-handle,
 .lt-drag-lift .lt-song-reorder-handle {
-  color: #57f1db;
+  color: var(--lt-accent);
   opacity: 1;
 }
 
@@ -45,7 +45,7 @@
   pointer-events: none !important;
   opacity: 0.94;
   box-shadow:
-    0 0 0 1px rgb(87 241 219 / 0.75),
+    0 0 0 1px rgb(var(--lt-accent-rgb) / 0.75),
     0 10px 28px rgb(0 0 0 / 0.55);
   transition: none !important;
   will-change: transform;
@@ -61,8 +61,8 @@
   height: 1.2rem;
   padding: 0 0.3rem;
   border-radius: 999px;
-  background: #57f1db;
-  color: #062a24;
+  background: var(--lt-accent);
+  color: rgb(var(--lt-c-062a24, 6 42 36));
   font: 700 11px/1.2rem Inter, sans-serif;
   text-align: center;
   box-sizing: border-box;

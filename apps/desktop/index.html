@@ -57,11 +57,34 @@
         background: #57f1db;
         animation: lt-boot-slide 1.1s ease-in-out infinite;
       }
+      /* Tema claro elegido (ver el script de abajo): la pantalla de arranque
+         sale ya clara en vez de un fogonazo negro. */
+      html.lt-boot-light body,
+      html.lt-boot-light #lt-boot-splash {
+        background: #e9e9e9 !important;
+        color: #1f1f1f;
+      }
+      html.lt-boot-light #lt-boot-splash .lt-boot-track {
+        background: rgb(0 0 0 / 0.1);
+      }
+      html.lt-boot-light #lt-boot-splash .lt-boot-track::after {
+        background: #2f7f73;
+      }
       @keyframes lt-boot-slide {
         from { transform: translateX(-100%); }
         to { transform: translateX(250%); }
       }
     </style>
+    <script>
+      // Antes de cargar la app: si el tema guardado es claro (shared/theme.ts),
+      // marca <html> para que el arranque no salga negro.
+      try {
+        var ltTheme = JSON.parse(localStorage.getItem("lt.ui.theme") || "{}");
+        if (ltTheme && (ltTheme.base === "light" || ltTheme.base === "midLight")) {
+          document.documentElement.classList.add("lt-boot-light");
+        }
+      } catch (error) {}
+    </script>
   </head>
   <body style="margin: 0; background: #131313">
     <div id="lt-boot-splash" role="status" aria-label="LibreTracks">

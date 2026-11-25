@@ -54,6 +54,8 @@ import {
   TRACK_HEIGHT_STEP,
 } from "../constants";
 import { BASE_PIXELS_PER_SECOND, type TimelineGrid } from "./timelineMath";
+import { useGridIntensity } from "../../../shared/gridIntensity";
+import { DEFAULT_THEME_ID, useThemeId } from "../../../shared/theme";
 import { secondsToScreenX } from "./timelineMath";
 import type { TrackRowLayout } from "../tracks/trackLayout";
 import {
@@ -166,6 +168,22 @@ type TrackCanvasProps = {
    * how much taller the row under it should get (negative to shrink). */
   onNativeTrackRowHeightStep: (localY: number, deltaPx: number) => void;
 };
+
+/** Mete la intensidad de la rejilla en el grid y lo renueva al cambiar de
+ * tema. Un objeto nuevo es justo lo que hace falta: el renderer y el ruler
+ * repintan cuando cambia la identidad de `timelineGrid`, y los colores de
+ * acento del canvas se leen de shared/theme en cada pintado. */
+function useGridWithIntensity(grid: TimelineGrid): TimelineGrid {
+  const intensity = useGridIntensity();
+  const themeId = useThemeId();
+  return useMemo(
+    () =>
+      intensity === 1 && themeId === DEFAULT_THEME_ID
+        ? grid
+        : { ...grid, lineIntensity: intensity },
+    [grid, intensity, themeId],
+  );
+}
 
 function isRenderableCanvasSize(value: number) {
   return Number.isFinite(value) && value > 0;
@@ -380,7 +398,7 @@ export function TimelineRulerCanvas({
   cameraXRef,
   pixelsPerSecond,
   livePixelsPerSecondRef,
-  timelineGrid,
+  timelineGrid: rawTimelineGrid,
   regions,
   markers,
   tempoMarkers,
@@ -403,6 +421,7 @@ export function TimelineRulerCanvas({
   onNativeTrackHeightChange,
   children,
 }: RulerCanvasProps) {
+  const timelineGrid = useGridWithIntensity(rawTimelineGrid);
   useFrameGateWake();
   const baseCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const overlayCanvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -867,7 +886,7 @@ export function TimelineTrackCanvas({
   scrollViewportRef,
   interactionContainerRef,
   rulerHeight,
-  timelineGrid,
+  timelineGrid: rawTimelineGrid,
   selectedClipId,
   selectedClipIds,
   onTouchShouldEdit,
@@ -885,6 +904,7 @@ export function TimelineTrackCanvas({
   onNativeTrackHeightChange,
   onNativeTrackRowHeightStep,
 }: TrackCanvasProps) {
+  const timelineGrid = useGridWithIntensity(rawTimelineGrid);
   useFrameGateWake();
   const backgroundCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const tracksCanvasRef = useRef<HTMLCanvasElement | null>(null);

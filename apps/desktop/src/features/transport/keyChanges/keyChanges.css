@@ -15,12 +15,12 @@
 /* En táctil un :hover se come el primer toque (ver regionHoverTouch.test). */
 @media (hover: hover) {
   .lt-key-change-hotspot:hover {
-    background: rgb(201 167 255 / 0.14);
+    background: rgb(var(--lt-c-c9a7ff, 201 167 255) / 0.14);
   }
 }
 
 .lt-key-change-hotspot:focus-visible {
-  background: rgb(201 167 255 / 0.14);
+  background: rgb(var(--lt-c-c9a7ff, 201 167 255) / 0.14);
   outline: none;
 }
 
@@ -33,14 +33,14 @@
   bottom: 0;
   left: var(--lt-key-change-stem, 6px);
   width: 2px;
-  background: rgb(201 167 255 / 0.95);
-  box-shadow: 0 0 6px 1px rgb(201 167 255 / 0.6);
+  background: rgb(var(--lt-c-c9a7ff, 201 167 255) / 0.95);
+  box-shadow: 0 0 6px 1px rgb(var(--lt-c-c9a7ff, 201 167 255) / 0.6);
 }
 
 /* La nota que suena (SoundingKeyLabel). Con un cambio de nota cerca, la
    siguiente va detrás en lila, el color de las muescas del ruler. */
 .lt-sounding-key.has-upcoming {
-  border-color: rgb(201 167 255 / 0.55);
+  border-color: rgb(var(--lt-c-c9a7ff, 201 167 255) / 0.55);
 }
 
 /* Anula el estilo de pastilla que las vistas dan a sus <span> (y el
@@ -51,7 +51,7 @@
   padding: 0;
   border: 0;
   background: none;
-  color: rgb(214 190 255);
+  color: rgb(var(--lt-c-d6beff, 214 190 255));
   font: inherit;
   animation: lt-sounding-key-pulse 1.2s ease-in-out infinite alternate;
 }
@@ -82,7 +82,7 @@
 }
 
 .lt-key-sequence-key.is-current {
-  color: rgb(214 190 255);
+  color: rgb(var(--lt-c-d6beff, 214 190 255));
 }
 
 .lt-key-sequence-key.is-next {
