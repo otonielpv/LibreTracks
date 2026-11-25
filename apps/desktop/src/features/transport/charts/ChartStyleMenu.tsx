@@ -1,4 +1,5 @@
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { create } from "zustand";
 
@@ -123,16 +124,19 @@ type FontListProps = {
 };
 
 /** Touch: the list over the whole screen above the keyboard (in landscape
- * that leaves ~190 px, so search and close share one row). Fixed inside the
- * popover so its taps still count as inside it. */
+ * that leaves ~190 px, so search and close share one row). Portalled to the
+ * body: iOS WebKit clips a fixed element to a scrolling ancestor, so inside
+ * the popover it showed up black and cut off on the iPhone. */
 function SystemFontSheet({ listLabel, chosen, onPick, onClose }: FontListProps) {
   const { t } = useTranslation();
   useDismissOnBack(onClose);
   const area = useVisibleArea(true);
-  return (
+  return createPortal(
     <div
       className="lt-chart-style-system-panel is-sheet"
       style={area ? { top: `${area.top}px`, height: `${area.height}px` } : undefined}
+      // Outside the popover's DOM now: keep its outside-click from closing it.
+      onMouseDown={(event) => event.stopPropagation()}
     >
       <SystemFontList
         listLabel={listLabel}
@@ -151,7 +155,8 @@ function SystemFontSheet({ listLabel, chosen, onPick, onClose }: FontListProps) 
           </button>
         }
       />
-    </div>
+    </div>,
+    document.body,
   );
 }
 

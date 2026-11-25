@@ -314,7 +314,7 @@
 
 /* Touch: the installed-font list takes the screen above the keyboard (the
    inline style sets top/height from visualViewport; 100% is the fallback).
-   Fixed inside the popover on purpose, so taps still count as inside it. */
+   Portalled to the body: iOS clips fixed elements to a scrolling ancestor. */
 .lt-chart-style-system-panel.is-sheet {
   position: fixed;
   top: 0;
