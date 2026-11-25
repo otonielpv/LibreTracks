@@ -108,6 +108,8 @@
 
 .lt-chart-import-line .lt-section-peek {
   justify-content: flex-start;
+  /* Clear of the dialog's edge and its scrollbar. */
+  padding-right: 0.9rem;
 }
 
 .lt-chart-import-badge.is-medium {
