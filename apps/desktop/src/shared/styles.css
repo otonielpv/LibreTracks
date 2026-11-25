@@ -7058,9 +7058,22 @@ body.lt-daw-song-reordering .lt-region-hotspot .lt-region-hotspot-name {
   box-shadow: 0 18px 36px rgba(0, 0, 0, 0.45);
 }
 
+/* Absolute inside a narrow chip, the panel shrank to its 36rem minimum and
+   the five nowrap jump options spilled past its right edge. Size it to its
+   content (still capped by the base max-width); past the cap, the options
+   wrap instead of overflowing. */
 .lt-control-group-jump .lt-control-popover-panel {
   left: 0;
   transform: none;
+  width: max-content;
+}
+
+.lt-control-group-jump .lt-control-group-actions > * {
+  max-width: 100%;
+}
+
+.lt-control-group-jump .lt-control-group-actions .lt-segmented-control {
+  flex-wrap: wrap;
 }
 
 /* When the user is "Armado: <song name> | <reason>" — typical when a
