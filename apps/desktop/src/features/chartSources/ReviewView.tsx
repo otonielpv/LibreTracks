@@ -4,6 +4,8 @@ import { useTranslation } from "react-i18next";
 import type { ImportReview } from "@libretracks/shared/charts/chartImportReview";
 import type { SheetChange } from "@libretracks/shared/charts/importedChart";
 
+import { SectionPeek } from "../transport/charts/SectionPeek";
+
 /** The review of an adjust, marker by marker: section, confidence, passes
  * and first line. Shared by the adjust dialog and the plan import. */
 export function ReviewView({
@@ -98,7 +100,11 @@ export function ReviewView({
                   ) : row.passes > 1 ? (
                     <span className="lt-chart-import-meta">×{row.passes} </span>
                   ) : null}
-                  {row.firstLine ?? ""}
+                  {row.section !== null && review.doc.sections[row.section] ? (
+                    <SectionPeek section={review.doc.sections[row.section]} name={sectionName(row.section)} firstLine={row.firstLine} />
+                  ) : (
+                    (row.firstLine ?? "")
+                  )}
                 </span>
               </li>
             ))}

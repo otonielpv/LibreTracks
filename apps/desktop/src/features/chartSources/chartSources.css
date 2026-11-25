@@ -97,10 +97,17 @@
 }
 
 .lt-chart-import-line {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-width: 0;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  opacity: 0.8;
+}
+
+.lt-chart-import-line .lt-section-peek {
+  justify-content: flex-start;
 }
 
 .lt-chart-import-badge.is-medium {
