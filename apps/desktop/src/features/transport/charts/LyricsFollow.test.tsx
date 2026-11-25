@@ -139,19 +139,24 @@ describe("configurable lyrics follow", () => {
     expect(scrollTo).not.toHaveBeenCalled();
   });
 
-  it("C5: Only in this song saves the chart's follow; Like all songs removes it; In all songs is the device's", async () => {
+  it("C5: this song's follow comes first and saves the chart; Like all songs removes it; All songs is the device's", async () => {
     const { onChartChange } = renderPanel(CHART, { current: 1 });
     fireEvent.click(screen.getByRole("button", { name: "lyricsFollow.title" }));
     const items = screen.getAllByRole("menuitemradio");
-    // In all songs: 1, 2, 3, section, off; only in this song: like all, then the same five.
-    expect(items).toHaveLength(11);
+    // This song first (1, 2, 3, section, off), then all songs (the same five).
+    expect(items).toHaveLength(10);
+    expect(screen.getByRole("group", { name: "lyricsFollow.thisSong" }).compareDocumentPosition(
+      screen.getByRole("group", { name: "lyricsFollow.allSongs" }),
+    ) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // The song follows all songs: its row shows the general one but checks nothing.
+    expect(screen.getByRole("menuitemcheckbox", { name: /lyricsFollow.likeAll/ }).getAttribute("aria-checked")).toBe("true");
+    expect(items.slice(0, 5).some((item) => item.getAttribute("aria-checked") === "true")).toBe(false);
     await act(async () => {
-      fireEvent.click(items[9]); // this song: section
+      fireEvent.click(items[3]); // this song: section
     });
     expect(onChartChange).toHaveBeenLastCalledWith("song", { ...CHART, follow: { focus: "section" } });
 
-    fireEvent.click(screen.getByRole("button", { name: "lyricsFollow.title" }));
-    fireEvent.click(screen.getAllByRole("menuitemradio")[2]); // all songs: 3
+    fireEvent.click(screen.getAllByRole("menuitemradio")[7]); // all songs: 3
     expect(useGeneralFollowStore.getState().focus).toBe(3);
     expect(window.localStorage.getItem("lt.liveChart.follow")).toBe("3");
   });
@@ -162,7 +167,7 @@ describe("configurable lyrics follow", () => {
     expect(current()).toEqual(["uno"]);
     fireEvent.click(screen.getByRole("button", { name: "lyricsFollow.title" }));
     await act(async () => {
-      fireEvent.click(screen.getAllByRole("menuitemradio")[5]); // this song: like all
+      fireEvent.click(screen.getByRole("menuitemcheckbox", { name: /lyricsFollow.likeAll/ })); // this song: like all
     });
     expect(onChartChange).toHaveBeenLastCalledWith("song", CHART);
   });

@@ -3481,6 +3481,13 @@ const es = {
     allSongs: "En todas las canciones",
     thisSong: "Solo en esta canción",
     likeAll: "Como en todas",
+    short: {
+      1: "1 línea",
+      2: "2 líneas",
+      3: "3 líneas",
+      section: "Sección",
+      off: "No",
+    },
     focus: {
       1: "1 línea",
       2: "2 líneas",

@@ -3449,6 +3449,13 @@ const en = {
     allSongs: "In all songs",
     thisSong: "Only in this song",
     likeAll: "Like all songs",
+    short: {
+      1: "1 line",
+      2: "2 lines",
+      3: "3 lines",
+      section: "Section",
+      off: "Off",
+    },
     focus: {
       1: "1 line",
       2: "2 lines",
