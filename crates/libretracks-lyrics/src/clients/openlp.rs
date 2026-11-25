@@ -14,8 +14,8 @@
 //! user and password gives a token, sent as the bare `Authorization` header.
 
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Mutex;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use async_trait::async_trait;
@@ -35,6 +35,12 @@ const DEFAULT_USER: &str = "openlp";
 const GO_LIVE_POLLS: u32 = 12;
 const GO_LIVE_POLL: Duration = Duration::from_millis(50);
 
+/// From black (or theme) to a slide: the slide changes under the black
+/// screen, and the black goes once its transition is over (Reveal's normal
+/// speed, what OpenLP themes use by default). Lifting it at once showed the
+/// transition half done.
+const UNBLANK_AFTER: Duration = Duration::from_millis(800);
+
 /// The service item kinds that carry lyrics.
 const TEXT_PLUGINS: &[&str] = &["songs", "custom"];
 
@@ -47,32 +53,30 @@ pub(crate) struct ScreenState {
     pub mode: &'static str,
 }
 
-pub struct OpenLpClient {
+/// The HTTP calls with OpenLP's login: cloneable, for the delayed unblank.
+#[derive(Clone)]
+struct Api {
     http: Http,
     /// From `core/login`; `None` until OpenLP asks for one.
-    token: Mutex<Option<String>>,
+    token: Arc<Mutex<Option<String>>>,
+}
+
+pub struct OpenLpClient {
+    api: Api,
     /// Structures read while their item was live, by item uuid.
     cache: Mutex<HashMap<String, LyricsStructure>>,
     /// LibreTracks hid the text (theme or blank): the next slide shows the
     /// screen again. Starts true so the first slide always shows it.
     text_hidden: AtomicBool,
+    /// Counts every time the text is hidden: a delayed unblank only goes
+    /// out if nothing hid the text again while it waited.
+    hides: Arc<AtomicU64>,
     /// The item LibreTracks put live last.
     live: Mutex<Option<String>>,
     may_take_screen: AtomicBool,
 }
 
-impl OpenLpClient {
-    pub(crate) fn new(http: Http) -> Self {
-        Self {
-            http,
-            token: Mutex::new(None),
-            cache: Mutex::new(HashMap::new()),
-            text_hidden: AtomicBool::new(true),
-            live: Mutex::new(None),
-            may_take_screen: AtomicBool::new(false),
-        }
-    }
-
+impl Api {
     /// `user:password`, or a bare password for OpenLP's default user.
     fn credentials(&self) -> Option<(String, String)> {
         let secret = self.http.connection.token.as_deref()?.trim();
@@ -153,6 +157,44 @@ impl OpenLpClient {
     async fn display(&self, mode: &str) -> Result<Duration, LyricsError> {
         self.post("core/display", json!({ "display": mode })).await
     }
+}
+
+impl OpenLpClient {
+    pub(crate) fn new(http: Http) -> Self {
+        Self {
+            api: Api {
+                http,
+                token: Arc::new(Mutex::new(None)),
+            },
+            cache: Mutex::new(HashMap::new()),
+            text_hidden: AtomicBool::new(true),
+            hides: Arc::new(AtomicU64::new(0)),
+            live: Mutex::new(None),
+            may_take_screen: AtomicBool::new(false),
+        }
+    }
+
+    async fn get(&self, path: &str) -> Result<Value, LyricsError> {
+        self.api.get(path).await
+    }
+
+    async fn post(&self, path: &str, body: Value) -> Result<Duration, LyricsError> {
+        self.api.post(path, body).await
+    }
+
+    async fn display(&self, mode: &str) -> Result<Duration, LyricsError> {
+        self.api.display(mode).await
+    }
+
+    async fn login(&self) -> Result<(), LyricsError> {
+        self.api.login().await
+    }
+
+    /// The text is off the screen (theme, blank): the next slide lifts it.
+    fn mark_hidden(&self) {
+        self.hides.fetch_add(1, Ordering::SeqCst);
+        self.text_hidden.store(true, Ordering::SeqCst);
+    }
 
     /// The live item with all its slides; `Null` when nothing is live
     /// (OpenLP answers `{}`).
@@ -185,7 +227,7 @@ impl OpenLpClient {
 
         let system = self.get("core/system").await.ok()?;
         let port = system.get("websocket_port").and_then(Value::as_u64)?;
-        let base = self.http.connection.base_url();
+        let base = self.api.http.connection.base_url();
         let host = base.trim_start_matches("http://").rsplit_once(':')?.0.to_string();
         let url = format!("ws://{host}:{port}/state");
         let read = async {
@@ -217,7 +259,7 @@ impl OpenLpClient {
         // A starting song keeps the screen; otherwise it is only borrowed
         // when no text shows, so hiding the text changes nothing visible.
         self.display("theme").await?;
-        self.text_hidden.store(true, Ordering::SeqCst);
+        self.mark_hidden();
         self.post("service/show", json!({ "id": id })).await?;
         *self.live.lock().unwrap() = Some(id.to_string());
         let mut read = None;
@@ -251,7 +293,11 @@ impl OpenLpClient {
             if mode != "theme" {
                 let _ = self.display(mode).await;
             }
-            self.text_hidden.store(mode != "show", Ordering::SeqCst);
+            if mode == "show" {
+                self.text_hidden.store(false, Ordering::SeqCst);
+            } else {
+                self.mark_hidden();
+            }
             *self.live.lock().unwrap() = previous;
         }
         let structure = read.ok_or_else(|| {
@@ -274,9 +320,19 @@ impl OpenLpClient {
     async fn show_slide(&self, id: &str, body: (&str, Value)) -> Result<Duration, LyricsError> {
         let mut elapsed = self.ensure_live(id).await?;
         elapsed += self.post(body.0, body.1).await?;
-        // The slide first, then the screen: the old text never flashes.
+        // The slide first, then the screen once its transition is over, in
+        // the background so the next orders do not wait. Hiding the text
+        // again meanwhile (a short section, a stop) cancels it.
         if self.text_hidden.swap(false, Ordering::SeqCst) {
-            elapsed += self.display("show").await?;
+            let api = self.api.clone();
+            let hides = Arc::clone(&self.hides);
+            let at = hides.load(Ordering::SeqCst);
+            tokio::spawn(async move {
+                tokio::time::sleep(UNBLANK_AFTER).await;
+                if hides.load(Ordering::SeqCst) == at {
+                    let _ = api.display("show").await;
+                }
+            });
         }
         Ok(elapsed)
     }
@@ -321,7 +377,7 @@ impl LyricsClient for OpenLpClient {
         let system = self.get("core/system").await?;
         let revision = system.get("api_revision").and_then(Value::as_u64);
         if system.get("login_required").and_then(Value::as_bool) == Some(true)
-            && self.token.lock().unwrap().is_none()
+            && self.api.token.lock().unwrap().is_none()
         {
             self.login().await?;
         }
@@ -399,7 +455,7 @@ impl LyricsClient for OpenLpClient {
                 // Live with its background, no text yet: the first section
                 // shows it.
                 let mut elapsed = self.display("theme").await?;
-                self.text_hidden.store(true, Ordering::SeqCst);
+                self.mark_hidden();
                 elapsed += self
                     .post("service/show", json!({ "id": presentation_id }))
                     .await?;
@@ -435,13 +491,13 @@ impl LyricsClient for OpenLpClient {
             // The text only: the theme's background stays.
             LyricsCommand::ClearText => {
                 let elapsed = self.display("theme").await?;
-                self.text_hidden.store(true, Ordering::SeqCst);
+                self.mark_hidden();
                 Ok(elapsed)
             }
             // The whole screen.
             LyricsCommand::Clear => {
                 let elapsed = self.display("blank").await?;
-                self.text_hidden.store(true, Ordering::SeqCst);
+                self.mark_hidden();
                 Ok(elapsed)
             }
         }

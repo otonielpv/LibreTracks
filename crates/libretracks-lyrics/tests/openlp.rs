@@ -278,8 +278,21 @@ async fn does_not_take_a_screen_showing_other_lyrics_until_the_song_starts() {
     assert!(sent(&log).is_empty());
 }
 
+fn section(index: u32) -> LyricsCommand {
+    LyricsCommand::Section {
+        presentation_id: "U-GRACE".into(),
+        group_label: "V1".into(),
+        index,
+    }
+}
+
+/// Past the wait for the slide's transition (800 ms).
+async fn after_transition() {
+    tokio::time::sleep(std::time::Duration::from_millis(1_100)).await;
+}
+
 #[tokio::test]
-async fn sections_select_the_slide_then_show_the_hidden_text() {
+async fn from_black_the_slide_changes_first_and_the_black_goes_after_its_transition() {
     let (connection, log, state) = openlp(Some("U-WAY")).await;
     let openlp = client(connection);
     openlp
@@ -289,16 +302,23 @@ async fn sections_select_the_slide_then_show_the_hidden_text() {
         .await
         .unwrap();
     assert_eq!(state.lock().unwrap().as_deref(), Some("U-GRACE"));
-    for index in [0, 1] {
-        openlp
-            .send(&LyricsCommand::Section {
-                presentation_id: "U-GRACE".into(),
-                group_label: "V1".into(),
-                index,
-            })
-            .await
-            .unwrap();
-    }
+    openlp.send(&section(0)).await.unwrap();
+    // The slide is changed under the hidden text; the screen is not shown
+    // yet, and the order returns without waiting for it.
+    assert_eq!(
+        sent(&log),
+        vec![
+            ("core/display".to_string(), json!({"display": "theme"})),
+            ("service/show".to_string(), json!({"id": "U-GRACE"})),
+            ("controller/show".to_string(), json!({"id": 0})),
+        ]
+    );
+    after_transition().await;
+    assert_eq!(sent(&log).last().unwrap(), &("core/display".to_string(), json!({"display": "show"})));
+
+    // With the text up, slides change with nothing else.
+    log.lock().unwrap().clear();
+    openlp.send(&section(1)).await.unwrap();
     openlp
         .send(&LyricsCommand::Step {
             presentation_id: "U-GRACE".into(),
@@ -306,6 +326,17 @@ async fn sections_select_the_slide_then_show_the_hidden_text() {
         })
         .await
         .unwrap();
+    after_transition().await;
+    assert_eq!(
+        sent(&log),
+        vec![
+            ("controller/show".to_string(), json!({"id": 1})),
+            ("controller/progress".to_string(), json!({"action": "next"})),
+        ]
+    );
+
+    // Text cleared, then a slide: shown again after the transition.
+    log.lock().unwrap().clear();
     openlp.send(&LyricsCommand::ClearText).await.unwrap();
     openlp
         .send(&LyricsCommand::Slide {
@@ -314,20 +345,33 @@ async fn sections_select_the_slide_then_show_the_hidden_text() {
         })
         .await
         .unwrap();
+    after_transition().await;
     openlp.send(&LyricsCommand::Clear).await.unwrap();
-    let expected: Vec<(String, Value)> = vec![
-        ("core/display".into(), json!({"display": "theme"})),
-        ("service/show".into(), json!({"id": "U-GRACE"})),
-        ("controller/show".into(), json!({"id": 0})),
-        ("core/display".into(), json!({"display": "show"})),
-        ("controller/show".into(), json!({"id": 1})),
-        ("controller/progress".into(), json!({"action": "next"})),
-        ("core/display".into(), json!({"display": "theme"})),
-        ("controller/show".into(), json!({"id": 1})),
-        ("core/display".into(), json!({"display": "show"})),
-        ("core/display".into(), json!({"display": "blank"})),
-    ];
-    assert_eq!(sent(&log), expected);
+    assert_eq!(
+        sent(&log),
+        vec![
+            ("core/display".to_string(), json!({"display": "theme"})),
+            ("controller/show".to_string(), json!({"id": 1})),
+            ("core/display".to_string(), json!({"display": "show"})),
+            ("core/display".to_string(), json!({"display": "blank"})),
+        ]
+    );
+}
+
+#[tokio::test]
+async fn hiding_the_text_while_waiting_cancels_the_pending_unblank() {
+    let (connection, log, _) = openlp(Some("U-GRACE")).await;
+    let openlp = client(connection);
+    openlp.send(&LyricsCommand::Clear).await.unwrap();
+    openlp.send(&section(0)).await.unwrap();
+    // Stopped before the transition ended: the screen stays black.
+    openlp.send(&LyricsCommand::Clear).await.unwrap();
+    after_transition().await;
+    assert!(
+        !sent(&log).contains(&("core/display".to_string(), json!({"display": "show"}))),
+        "{:?}",
+        sent(&log)
+    );
 }
 
 #[tokio::test]
