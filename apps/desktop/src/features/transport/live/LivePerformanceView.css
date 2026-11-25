@@ -490,7 +490,7 @@
   visibility: hidden;
   overflow: hidden;
   border-radius: 999px;
-  /* El carril tiene que VERSE ENTERO, lleno o no. Era `rgb(0 0 0 / 0.45)`:
+  /* El carril tiene que VERSE ENTERO, lleno o no. Era `rgb(var(--lt-shadow-rgb, 0 0 0) / calc(0.45 * var(--lt-shadow-alpha, 1)))`:
      negro sobre un fondo casi negro (rgb(var(--lt-c-0d100f, 13 16 15)), y la fila activa encima), asi que
      solo se distinguia el trozo lleno y no habia forma de saber donde acaba el
      recorrido — es decir, cuanto queda. Un gris claro translucido funciona

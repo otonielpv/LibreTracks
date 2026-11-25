@@ -18,7 +18,7 @@
   border: 1px solid rgb(var(--lt-accent-rgb) / 0.22);
   border-radius: 4px;
   background: linear-gradient(180deg, rgb(var(--lt-c-16191a, 22 25 26) / 0.98), rgb(var(--lt-c-0d0f10, 13 15 16) / 0.98));
-  box-shadow: 0 24px 64px rgb(0 0 0 / 0.5);
+  box-shadow: 0 24px 64px rgb(var(--lt-shadow-rgb, 0 0 0) / calc(0.5 * var(--lt-shadow-alpha, 1)));
   color: rgb(var(--lt-c-e8eeee, 232 238 238));
 }
 
@@ -316,7 +316,7 @@
   margin: 0;
   pointer-events: none;
   opacity: 0.92;
-  box-shadow: 0 10px 24px rgb(0 0 0 / 0.5);
+  box-shadow: 0 10px 24px rgb(var(--lt-shadow-rgb, 0 0 0) / calc(0.5 * var(--lt-shadow-alpha, 1)));
   cursor: grabbing;
 }
 
@@ -685,7 +685,7 @@
     calc(0.85rem + var(--lt-safe-area-left, 0px));
   background: rgb(var(--lt-c-161616, 22 22 22));
   border-top: 1px solid rgb(var(--lt-c-ffffff, 255 255 255) / 0.1);
-  box-shadow: 0 -12px 28px rgb(0 0 0 / 0.4);
+  box-shadow: 0 -12px 28px rgb(var(--lt-shadow-rgb, 0 0 0) / calc(0.4 * var(--lt-shadow-alpha, 1)));
 }
 
 .lt-structure-mobile-bar button {
@@ -706,7 +706,7 @@
   border: 1px solid rgb(var(--lt-c-ffffff, 255 255 255) / 0.08);
   border-radius: 2px;
   background: rgb(var(--lt-c-242828, 36 40 40));
-  box-shadow: 0 8px 24px rgb(0 0 0 / 0.45);
+  box-shadow: 0 8px 24px rgb(var(--lt-shadow-rgb, 0 0 0) / calc(0.45 * var(--lt-shadow-alpha, 1)));
   font-size: 0.85rem;
 }
 
@@ -723,7 +723,7 @@
   position: fixed;
   inset: 0;
   z-index: 80;
-  background: rgb(0 0 0 / 0.45);
+  background: rgb(var(--lt-shadow-rgb, 0 0 0) / calc(0.45 * var(--lt-shadow-alpha, 1)));
 }
 
 .lt-structure-app-sheet {
