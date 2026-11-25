@@ -749,7 +749,11 @@ export function drawRulerMarker(
     flagTop + labelHeight / 2 + 0.5,
   );
 
-  context.fillStyle = textStyle;
+  // La punta va del color de la marca. En claro el texto pasa a oscuro o
+  // blanco para leerse sobre la bandera, y la punta no debe seguirlo.
+  const restingInLight =
+    light && !options.isArmed && !options.isSelected && !options.isCurrent;
+  context.fillStyle = restingInLight ? kindColor : textStyle;
   context.beginPath();
   context.moveTo(snappedX - 4, stemBottom);
   context.lineTo(snappedX + 4, stemBottom);
