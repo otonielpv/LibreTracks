@@ -1,0 +1,182 @@
+---
+title: A tela principal
+description: "O que é cada área da tela do LibreTracks no computador e o que faz cada botão da barra superior: andamento, transporte, metrônomo, guia falada, pads e o menu File."
+sidebar:
+  order: 1
+---
+
+import Legend from "../../../../../components/guide/Legend.astro";
+import Clip from "../../../../../components/guide/Clip.astro";
+
+Quando você abre uma sessão, o LibreTracks mostra a **DAW view**: a timeline
+com as suas músicas da esquerda para a direita e as faixas de cima para baixo.
+Esta página percorre a tela área por área e explica a barra superior botão por
+botão. Clique em qualquer captura para vê-la em tamanho real.
+
+![A tela principal do LibreTracks com as suas dez áreas numeradas](/guide/desktop-en/daw-zones.png)
+
+<Legend>
+
+1. **Menu File**: criar, abrir, salvar, importar e exportar sessões.
+   [Veja o menu completo](#menu-file).
+2. **Andamento e fórmula de compasso** da música sob o cursor, o botão *Tap*
+   e desfazer/refazer. [Abaixo](#andamento-fórmula-de-compasso-e-desfazer).
+3. **Transporte**: play, pausa e stop, e os interruptores de metrônomo, guia
+   falada e pads. [Abaixo](#transporte).
+4. **Indicadores**: andamento, fórmula de compasso, posição e tempo decorrido.
+   [Abaixo](#indicadores-e-medidor-de-recursos).
+5. **Medidor de recursos**: CPU, memória, disco e carga de áudio.
+6. **Barra lateral**: Library, Remote, Settings e Tutorial.
+7. **Barra de ferramentas**: seletor de visão, snap, seguir o cursor, Vamp,
+   saltos e os ajustes da música selecionada (master, tom e warp).
+8. **Régua**: as músicas da sessão, os compassos, os marcadores de seção e as
+   mudanças de andamento. Clique nela para mover o cursor.
+9. **Cabeçalhos das faixas**: mute (M), solo (S), transposição (T), volume,
+   pan e saída de áudio de cada faixa.
+10. **Faixas**: os clipes de áudio, as faixas MIDI e a faixa de automação, na
+    timeline.
+
+</Legend>
+
+## Andamento, fórmula de compasso e desfazer
+
+![A parte esquerda da barra superior](/guide/desktop-en/topbar-left.png)
+
+<Legend>
+
+1. **File**: abre o [menu File](#menu-file).
+2. **BPM**: o andamento. Digite um número e aperte Enter. Ele muda o trecho de
+   andamento em que o cursor está, e o rótulo à direita diz qual:
+   *Tempo @ 00:00.000* quer dizer "o andamento que começa no segundo 0".
+3. **Tap**: bata junto com a música quatro ou cinco vezes e o LibreTracks
+   calcula o andamento e o aplica a esse mesmo trecho.
+4. **Fórmula de compasso** (4/4, 6/8, 3/4…). Com o cursor no início da sessão
+   ela muda a fórmula inicial; em qualquer outro lugar, cria uma mudança de
+   compasso ali. Veja [Andamento e fórmula de compasso](/pt/docs/tasks/tempo/).
+5. **Desfazer** (Ctrl+Z) a última mudança na sessão.
+6. **Refazer** (Ctrl+Shift+Z ou Ctrl+Y) o que você acabou de desfazer.
+
+</Legend>
+
+:::tip[Cada música com o seu andamento]
+O andamento e a fórmula de compasso não são globais: cada música da sessão tem
+os seus. Coloque o cursor na música que você quer mudar antes de digitar o BPM
+ou usar o *Tap*.
+:::
+
+## Transporte
+
+![Os botões de transporte, metrônomo, guia falada e pads](/guide/desktop-en/topbar-transport.png)
+
+<Legend>
+
+1. **Previous**: salta para a música anterior à que está tocando. Como o
+   *Next*, segue o ajuste *Song Jump*. Da primeira música vai para a última.
+2. **Stop** (Shift+Espaço): para a reprodução e leva o cursor de volta ao
+   início da sessão.
+3. **Fade out and stop**: abaixa o volume da música que está tocando e depois
+   para. Veja [abaixo](#fade-out-and-stop).
+4. **Play** (Espaço) a partir da posição do cursor.
+5. **Pause** (Espaço): para a reprodução e deixa o cursor onde está, para
+   continuar dali.
+6. **Click**: liga ou desliga o metrônomo.
+7. **Ajustes do metrônomo**: saída, volume, sons, acento e subdivisão. Veja
+   [Saídas de áudio e metrônomo](/pt/docs/audio-routing-metronome/).
+8. **Guide**: liga ou desliga a guia falada; ela anuncia cada seção antes de
+   chegar.
+9. **Ajustes da guia falada**. Veja [Guia falada](/pt/docs/voice-guide/).
+10. **Pads**: liga ou desliga o pad de ambiente.
+11. **Ajustes dos pads**: tom, volume, fades e os seus próprios pads. Veja
+    [Pads de ambiente](/pt/docs/ambient-pads/).
+12. **Next**: salta para a próxima música da sessão. Quando o salto acontece
+    (na hora, no fim da música, depois de alguns compassos…) é definido pelo
+    ajuste *Song Jump* da barra de ferramentas. Da última música volta para a
+    primeira.
+
+</Legend>
+
+As setinhas ao lado de *Click*, *Guide* e *Pads* abrem o painel de ajustes de
+cada um sem ir para Settings:
+
+<Clip
+  src="/guide/desktop-en/metronome-settings.mp4"
+  poster="/guide/desktop-en/metronome-settings.webp"
+  caption="A seta ao lado de “Click” abre os ajustes do metrônomo."
+/>
+
+### Fade out and stop
+
+Para terminar uma música ao vivo sem um corte seco. Enquanto ela toca, aperte
+**Fade out and stop**: a música vai sumindo e, quando o fade termina, o
+transporte para. O botão fica **âmbar** enquanto o fade dura.
+
+- **Apertar de novo** durante o fade para na hora: é a saída de emergência.
+- Só as **faixas** fazem fade. O click e a guia falada continuam no nível
+  deles até parar.
+- Apertar **Stop** ou **Pause** durante o fade o cancela; quando você der play
+  de novo, a música volta ao nível normal.
+- A duração é definida em
+  [Settings › General › Playback](/pt/docs/interface/settings/#playback) (5
+  segundos por padrão).
+- Também pode ser disparado por um **atalho de teclado** (sem atribuição de
+  fábrica: defina um em Settings › Shortcuts), um **pedal MIDI** (MIDI learn) e
+  o [Remote](/pt/docs/remote-control/).
+
+### Fade in and play
+
+Com a reprodução **parada ou pausada**, o mesmo botão vira **Fade in and
+play**: a música começa no cursor com as faixas em silêncio e sobe até o
+volume total na mesma duração do fade out. Use para voltar a um refrão
+espontâneo sem que tudo entre de uma vez.
+
+- Apertar de novo enquanto sobe faz fade out a partir daquele ponto.
+- **Pause** ou **Stop** devolvem as faixas ao volume normal.
+
+## Indicadores e medidor de recursos
+
+![O medidor de recursos e os indicadores de posição](/guide/desktop-en/topbar-right.png)
+
+<Legend>
+
+1. **Medidor de recursos**: CPU, memória (RAM), leituras de disco e **carga de
+   áudio**. A carga de áudio é a parte do tempo de cada bloco de som de que o
+   motor precisa para processá-lo: acima de 100 % você ouve falhas. Clique
+   para ver os detalhes.
+2. **Andamento** tocando na posição atual.
+3. **Fórmula de compasso** tocando na posição atual.
+4. **Compasso**: a posição musical, como *compasso.tempo.fração*. "12.3.00" é
+   o início do terceiro tempo do compasso 12.
+5. **Timecode**: o tempo decorrido desde o início da sessão.
+6. **Estado** do transporte: parado, tocando ou pausado.
+
+</Legend>
+
+## Menu File
+
+![O menu File aberto](/guide/desktop-en/file-menu.png)
+
+- **New project**: cria uma sessão vazia numa pasta nova.
+- **New from template…**: cria uma sessão a partir de um `.lttemplate`, com as
+  faixas e as saídas já configuradas.
+- **Open** e **Open recent**: abrem um `.ltsession`.
+- **Import song**: adiciona uma música exportada (`.ltpkg`) à sessão aberta,
+  com o áudio, os marcadores e os ajustes dela.
+- **Import session…** e **Export session…**: movem uma sessão inteira, com
+  todo o áudio, num único arquivo `.ltset`. É assim que você a leva para outro
+  computador ou para o celular.
+- **Cloud…**: conecta ou desconecta a sua conta do Google Drive, mostra o
+  espaço usado e deixa você apagar as músicas e sessões que enviou.
+- **Import Reaper/Ableton**: monta a estrutura a partir de um projeto `.rpp`
+  ou `.als`.
+- **Save** (Ctrl+S) e **Save as** (Ctrl+Shift+S).
+- **Save as template…**: salva as faixas e as saídas, sem áudio, para
+  reutilizá-las na próxima sessão.
+- **Exit**: salva a sessão, diz onde ela foi salva e fecha o app.
+
+Com a nuvem conectada, **Import** e **Export** (de músicas e sessões)
+perguntam primeiro para onde: **This device** ou o seu **Google Drive**. Ou
+seja, enviar e baixar acontece nesses mesmos botões; o de Cloud serve só para
+gerenciar a conta.
+
+Mais sobre esses formatos em
+[Exportar, importar e compartilhar](/pt/docs/integration-ecosystem/).

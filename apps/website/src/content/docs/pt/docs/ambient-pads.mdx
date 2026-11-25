@@ -1,0 +1,72 @@
+---
+title: Pads de ambiente
+description: "Pads de ambiente no LibreTracks: baixar pacotes, escolher um tom ou seguir o da música, fade in e out, saída de áudio, os seus próprios pads e controle pelo Remote e por automações."
+---
+
+Um **pad** é uma cama de som longa e sustentada num tom, para preencher entre
+as músicas, sob uma oração ou enquanto alguém fala. No LibreTracks o pad não é
+uma faixa da sessão: é uma voz à parte, como o metrônomo. Ele toca **mesmo sem
+apertar Play**, não depende do master da música e continua tocando quando a
+música muda.
+
+## Primeiros passos
+
+1. Aperte a **seta** ao lado de **Pads** na barra superior.
+2. Se você ainda não tem nenhum, abra o **Pad manager…** e baixe um pacote.
+   Cada pacote traz os 12 tons.
+3. Escolha o pacote e o tom, e aperte **Pads** (ou *Enable pad*) para começar a
+   tocar.
+
+## O painel de pads
+
+![O painel de pads](/guide/desktop-en/pads-popover.png)
+
+- **Enable pad**: o mesmo que o botão *Pads*.
+- **Pack**: o som. Só aparecem os pacotes totalmente baixados e os seus
+  próprios pads (marcados como *custom*).
+- **Follow song key**: o pad pega o
+  [tom da música](/pt/docs/tasks/songs/#os-ajustes-de-cada-música) que está
+  tocando, mesmo se você transpô-la. Se o pacote não tem aquele tom, ele fica
+  mudo naquela música.
+- **Key**: com *Follow song key* desligado, você escolhe, de C a B.
+- **Volume**, em dB como os outros faders.
+- **Fade in** e **Fade out**: quanto tempo ele leva para aparecer quando você
+  o liga e para sumir quando o desliga. Sem eles, entra e sai quase na hora.
+- **Stop with playback**: o pad some com fade quando você para ou pausa e volta
+  quando você aperta Play. Desligado, o pad toca sem parar entre as músicas,
+  que é o comum.
+- **Output**: Master ou uma saída física da sua interface. Veja
+  [Saídas de áudio e metrônomo](/pt/docs/audio-routing-metronome/).
+- **Pad manager…**: baixar pacotes e criar os seus.
+
+Quando você muda de tom ou de pacote com o pad tocando, o novo entra em
+crossfade com o anterior num fade curto, sem silêncio e sem repetir o ataque do
+início. Se faltar o áudio novo, o anterior continua tocando.
+
+## Gerenciador de pads
+
+![O gerenciador de pads](/guide/desktop-en/pad-manager.png)
+
+- **Pacotes oficiais**: **Download** ou **Delete** de cada pacote. Eles ocupam
+  bastante espaço; os pads não viajam dentro das sessões nem das músicas
+  exportadas, então baixe-os em cada computador que você vai usar.
+- **My pads**: crie um pad com o seu próprio áudio. Dê um nome e **Assign** um
+  arquivo para cada tom; os tons sem áudio ficam desativados. Você pode
+  **Replace** ou **Remove audio** em cada um.
+
+## Pelo Remote e por automações
+
+- O [Remote](/pt/docs/remote-control/) tem um widget de pads para ligá-lo e mudar
+  pacote, tom, volume e saída pelo celular. Os pacotes ficam instalados no
+  computador.
+- Uma [automação](/pt/docs/automation/) com a ação **Control pads** guarda um
+  estado completo do pad (ligado, pacote, tom, volume e saída) e o aplica num
+  ponto exato da música: mudar de textura na ponte ou deixar pronto o pad da
+  próxima música.
+
+## Antes do show
+
+- Baixe e teste os pacotes antes; não conte com um download durante o show.
+- Confira a saída do pad à parte do click e da guia.
+- Deixe uma folga de volume: durante o crossfade entre dois tons, os dois tocam
+  ao mesmo tempo.

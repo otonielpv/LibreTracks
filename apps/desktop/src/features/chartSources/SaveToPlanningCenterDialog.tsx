@@ -5,11 +5,21 @@ import { compareCharts } from "@libretracks/shared/charts/chartRefresh";
 import { parseChordPro } from "@libretracks/shared/charts/chordChart";
 import { chartTextHash, planningCenterToImported } from "@libretracks/shared/charts/importedChart";
 import { planningCenterExport, type RepeatStyle } from "@libretracks/shared/charts/planningCenterExport";
-import type { ChartLink, ChartSource, SectionMarkerSummary, SongRegionSummary } from "@libretracks/shared/models";
+import {
+  getEffectiveBpmAt,
+  getSongTempoRegionAtPosition,
+  type ChartLink,
+  type ChartSource,
+  type SectionMarkerSummary,
+  type SongRegionSummary,
+  type SongView,
+} from "@libretracks/shared/models";
 
 import type { PcoArrangement } from "../transport/desktopApi";
+import { getSong } from "../transport/songStore";
 import { chartSourceHandlers } from "./chartSourceHandlers";
 import { pcoErrorMessage, toPcoError } from "./pcoErrors";
+import { PcoSaveTargetPicker } from "./PcoSaveTargetPicker";
 import "./chartSources.css";
 
 type Props = {
@@ -18,12 +28,30 @@ type Props = {
   /** The chart as it is in the editor now (adjusted and corrected). */
   text: string;
   links: readonly ChartLink[];
-  source: ChartSource;
+  /** Where it was imported from; absent for lyrics written here or from a
+   * file: the song to save to is picked in Planning Center first. */
+  source?: ChartSource;
   /** Where the chart is linked now (the new arrangement, or the replaced one
    * with its new date), for the editor to save with the lyrics. */
   onSaved: (source: ChartSource) => void;
   onClose: () => void;
 };
+
+/** The tempo and time signature the song starts with, as it plays here, for
+ * the arrangement's BPM and meter in Planning Center. Nothing without a song. */
+export function songTimingFor(
+  song: SongView | null | undefined,
+  region: SongRegionSummary,
+): { bpm?: number; meter?: string } {
+  if (!song) return {};
+  const at = region.startSeconds + 0.001;
+  const bpm = Math.round(getEffectiveBpmAt(song, at) * 100) / 100;
+  const meter = (getSongTempoRegionAtPosition(song, at)?.timeSignature ?? song.timeSignature ?? "").trim();
+  return {
+    ...(Number.isFinite(bpm) && bpm > 0 ? { bpm } : {}),
+    ...(meter ? { meter } : {}),
+  };
+}
 
 /**
  * "Save to Planning Center": the chart corrected and adjusted here goes back
@@ -32,10 +60,53 @@ type Props = {
  * explicit, confirmed choice, with what changes and a warning when it changed
  * there since the import.
  */
-export function SaveToPlanningCenterDialog({ region, markers, text, links, source, onSaved, onClose }: Props) {
+export function SaveToPlanningCenterDialog(props: Props) {
+  const { t } = useTranslation();
+  const [target, setTarget] = useState<{ source: ChartSource; kind: "new" | "replace" } | null>(() =>
+    props.source ? { source: props.source, kind: "new" } : null,
+  );
+  if (target) return <SaveToPlanningCenterForm {...props} source={target.source} initialKind={target.kind} />;
+  return (
+    <div className="lt-modal-backdrop lt-chart-import-backdrop" onClick={props.onClose}>
+      <section
+        className="lt-settings-modal lt-chart-import"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="lt-pco-save-title"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <header className="lt-settings-modal-header">
+          <div>
+            <span className="lt-settings-modal-eyebrow">{t("chartSources.save.eyebrow")}</span>
+            <h2 id="lt-pco-save-title">{t("chartSources.save.pickTitle")}</h2>
+            <p>{props.region.name}</p>
+          </div>
+        </header>
+        <div className="lt-settings-modal-body lt-chart-import-body">
+          <PcoSaveTargetPicker
+            initialQuery={props.region.name}
+            onPicked={(source, kind) => setTarget({ source, kind })}
+            onCancel={props.onClose}
+          />
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function SaveToPlanningCenterForm({
+  region,
+  markers,
+  text,
+  links,
+  source,
+  initialKind,
+  onSaved,
+  onClose,
+}: Props & { source: ChartSource; initialKind: "new" | "replace" }) {
   const { t } = useTranslation();
   const [current, setCurrent] = useState<PcoArrangement | null>(null);
-  const [kind, setKind] = useState<"new" | "replace">("new");
+  const [kind, setKind] = useState<"new" | "replace">(initialKind);
   const [name, setName] = useState(() => t("chartSources.save.defaultName"));
   // The key the lyrics are written in now ({key: D} once adjusted); the
   // song's or the source's only for a sheet that does not say.
@@ -54,11 +125,27 @@ export function SaveToPlanningCenterDialog({ region, markers, text, links, sourc
       .catch((cause) => setError(pcoErrorMessage(t, toPcoError(cause))));
   }, [source.songId, source.arrangementId, t]);
 
+  // The song's arrangements, so a "new" one with a name already there updates
+  // that one instead of making a second with the same name.
+  const [arrangements, setArrangements] = useState<PcoArrangement[]>([]);
+  useEffect(() => {
+    void chartSourceHandlers
+      .loadArrangements(source.songId)
+      .then(setArrangements)
+      .catch(() => setArrangements([]));
+  }, [source.songId]);
+  const sameName = useMemo(() => {
+    const wanted = name.trim().toLocaleLowerCase();
+    return wanted ? arrangements.find((arrangement) => (arrangement.name ?? "").trim().toLocaleLowerCase() === wanted) : undefined;
+  }, [arrangements, name]);
+
   const exported = useMemo(
     () => planningCenterExport(text, links, markers, repeatStyle),
     [text, links, markers, repeatStyle],
   );
   const sequence = exported.sequence ?? null;
+  // The whole song as it plays here, for the arrangement's length in Planning Center.
+  const songLength = Math.max(0, Math.round(region.endSeconds - region.startSeconds));
   const changedThere = Boolean(current?.updatedAt && source.updatedAt && current.updatedAt !== source.updatedAt);
   const changes = useMemo(() => {
     if (!current) return [];
@@ -79,11 +166,15 @@ export function SaveToPlanningCenterDialog({ region, markers, text, links, sourc
         chordChart: exported.chordChart,
         chordChartKey: key.trim(),
         ...(exported.sequence ? { sequence: exported.sequence } : {}),
+        ...(songLength > 0 ? { length: songLength } : {}),
+        ...songTimingFor(getSong(), region),
       };
       const result = await chartSourceHandlers.saveToPlanningCenter(
-        kind === "new"
-          ? { kind: "new", songId: source.songId, name: name.trim() }
-          : { kind: "replace", songId: source.songId, arrangementId: source.arrangementId },
+        kind === "new" && sameName
+          ? { kind: "replace", songId: source.songId, arrangementId: sameName.id }
+          : kind === "new"
+            ? { kind: "new", songId: source.songId, name: name.trim() }
+            : { kind: "replace", songId: source.songId, arrangementId: source.arrangementId },
         write,
       );
       onSaved({
@@ -131,6 +222,11 @@ export function SaveToPlanningCenterDialog({ region, markers, text, links, sourc
                 {t("chartSources.save.name")}
                 <input className="lt-pco-save-input" value={name} onChange={(event) => setName(event.target.value)} />
               </label>
+              {sameName ? (
+                <p className="lt-chart-import-legend" role="status" data-testid="pco-save-same-name">
+                  {t("chartSources.save.sameName", { name: sameName.name })}
+                </p>
+              ) : null}
             </>
           ) : null}
           <label className="lt-chart-import-key">

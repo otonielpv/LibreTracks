@@ -1,0 +1,82 @@
+---
+import AlternativePage from "../../components/AlternativePage.astro";
+
+const rows = [
+  [
+    "Custo",
+    "Licença barata, mas paga, com período de avaliação.",
+    "Grátis e de código aberto (AGPL-3.0), sem licença nem conta.",
+  ],
+  [
+    "Para que serve",
+    "Uma DAW completa: gravar, editar, mixar e masterizar.",
+    "Tocar faixas prontas no palco.",
+  ],
+  [
+    "Montar o rig ao vivo",
+    "Totalmente possível, e bem feito, mas com ações personalizadas, templates de roteamento e às vezes scripts que você mesmo mantém.",
+    "Os controles ao vivo vêm no app: saltos para marcadores, Vamp, transições e saltos entre músicas.",
+  ],
+  [
+    "Ordem do repertório",
+    "Regiões e a Region Render Matrix, ou um projeto por música.",
+    "A música é a unidade: regiões com andamento, tom, marcadores e volume master próprios.",
+  ],
+  [
+    "Click e guia falada",
+    "Metrônomo integrado; a guia falada você monta com as suas próprias faixas de áudio.",
+    "Metrônomo e guia falada como sinais de retorno com saídas independentes.",
+  ],
+  [
+    "Controle remoto",
+    "OSC ou superfícies de controle configuradas à mão.",
+    "Remote web editável integrado, pelo celular ou tablet.",
+  ],
+  [
+    "Curva de aprendizado",
+    "Flexibilidade enorme, paga em tempo de configuração.",
+    "Menos opções, focadas num só trabalho.",
+  ],
+];
+
+const strengths = [
+  [
+    "Abre os seus projetos .rpp",
+    "File → Import Reaper/Ableton lê arquivos .rpp. Os itens de áudio viram clipes, as faixas e as faixas de pasta são recriadas, as mudanças de andamento e de compasso vêm junto, as REGIONs viram músicas do LibreTracks e os MARKERs viram marcadores de seção dentro delas.",
+  ],
+  [
+    "Sem ações nem scripts para manter",
+    "Saltos de seção, Vamp e transições são recursos do programa, não um rig pessoal que você precisa reconstruir ao trocar de computador.",
+  ],
+  [
+    "Visão Compacta para o palco",
+    "Uma coluna por música, com controles próprios e um mixer compartilhado, legível sob pressão e sem reorganizar janelas antes de cada show.",
+  ],
+  [
+    "Leva o show inteiro",
+    "Um arquivo .ltset empacota a sessão completa (músicas, biblioteca, automação e formas de onda), para você preparar em casa e abrir do jeito que está no computador do local.",
+  ],
+];
+
+const limits = [
+  "Se você grava, edita ou mixa, continue com o Reaper. O LibreTracks não grava, não carrega plugins e não tem edição destrutiva de áudio.",
+  "O Reaper é uma das DAWs mais configuráveis que existem. Se você já montou suas próprias ações e templates para tocar ao vivo e está à vontade com eles, essa configuração funciona bem e você não precisa mudar.",
+  "O Reaper é barato. Se o preço é o seu único motivo para trocar, a diferença é pequena: o argumento real é que aqui você não configura nada para ter controles ao vivo.",
+  "O importador traz o que importa no palco (clipes, faixas, pastas, andamento, compasso, regiões e marcadores), não cada detalhe do projeto. Confira antes de tocar.",
+];
+---
+
+<AlternativePage
+  lang="pt"
+  rival="Reaper"
+  title="Alternativa ao Reaper para Playback ao Vivo | LibreTracks"
+  description="Alternativa grátis ao Reaper para playback ao vivo. Importe projetos .rpp num player pronto para o palco com músicas, marcadores, roteamento, MIDI e controle pelo celular."
+  eyebrow="Alternativa ao Reaper para o palco"
+  heading="O Reaper produz muito bem. O rig ao vivo você tem que montar sozinho"
+  intro="Tocar playback no Reaper significa montar o seu próprio sistema: ações personalizadas, templates de roteamento, às vezes scripts. Funciona, mas a manutenção é sua. O LibreTracks já traz esses controles prontos (saltos para marcadores, Vamp, transições, click, guia falada e um remote) e lê os seus arquivos .rpp para você não começar do zero."
+  rows={rows}
+  strengths={strengths}
+  limitsTitle="Onde o Reaper continua ganhando"
+  limits={limits}
+  closing="Importe um .rpp com o qual você já toca e compare quanto tempo leva até estar pronto para tocar. É grátis, então o teste só custa o seu tempo."
+/>

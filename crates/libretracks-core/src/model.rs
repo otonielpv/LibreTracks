@@ -465,6 +465,60 @@ pub struct SongChart {
     /// las sesiones de antes de la importación inteligente.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub source: Option<ChartSource>,
+    /// Seguimiento de la letra propio de esta canción (foco de 1, 2 o 3
+    /// líneas, la sección entera o apagado). Ausente = el general del
+    /// dispositivo. Un valor que esta versión no conoce se lee como ausente.
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "lenient_chart_follow"
+    )]
+    pub follow: Option<ChartFollow>,
+}
+
+/// Qué resalta y mantiene a la vista el seguimiento de la letra. Espeja TS
+/// `SongChart.follow`: `{ "focus": 1 | 2 | 3 | "section" | "off" }`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FollowFocus {
+    Lines(u8),
+    Section,
+    Off,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+pub struct ChartFollow {
+    pub focus: FollowFocus,
+}
+
+impl Serialize for FollowFocus {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        match self {
+            FollowFocus::Lines(count) => serializer.serialize_u8(*count),
+            FollowFocus::Section => serializer.serialize_str("section"),
+            FollowFocus::Off => serializer.serialize_str("off"),
+        }
+    }
+}
+
+impl ChartFollow {
+    /// `None` para cualquier forma que no sea un foco conocido.
+    pub fn from_value(value: &serde_json::Value) -> Option<Self> {
+        let focus = match value.get("focus")? {
+            serde_json::Value::Number(number) => match number.as_u64()? {
+                count @ 1..=3 => FollowFocus::Lines(count as u8),
+                _ => return None,
+            },
+            serde_json::Value::String(text) if text == "section" => FollowFocus::Section,
+            serde_json::Value::String(text) if text == "off" => FollowFocus::Off,
+            _ => return None,
+        };
+        Some(Self { focus })
+    }
+}
+
+fn lenient_chart_follow<'de, D: serde::Deserializer<'de>>(deserializer: D) -> Result<Option<ChartFollow>, D::Error> {
+    let value = Option::<serde_json::Value>::deserialize(deserializer)?;
+    Ok(value.as_ref().and_then(ChartFollow::from_value))
 }
 
 /// El origen de una hoja importada de un servicio. Nunca sincroniza solo:

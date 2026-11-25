@@ -15,7 +15,9 @@ use crate::audio::automation::AutomationDocument;
 use crate::models::view::{musical_position_summary, song_to_view};
 use crate::models::LibraryAssetSummary;
 
-use super::automation_runtime::native_region_jump_trigger_view_seconds;
+use super::automation_runtime::{
+    native_region_jump_trigger_view_seconds, scheduled_jump_fade_out_due,
+};
 use super::{
     build_empty_song, list_library_assets, next_downbeat_after_in_view_timeline,
     place_bundled_audio_and_repoint, plan_audio_settings_change,
@@ -57,6 +59,111 @@ fn delayed_fade_native_jump_keeps_its_musical_trigger() {
     };
 
     assert!((native_region_jump_trigger_view_seconds(&song, &pending) - 4.0).abs() < 1e-9);
+}
+
+fn fade_pending(trigger: JumpTrigger, execute_at_seconds: f64, fade: Option<f64>) -> PendingMarkerJump {
+    PendingMarkerJump {
+        target_marker_id: "region_1".into(),
+        target_marker_name: "Move Demo".into(),
+        target_digit: None,
+        trigger,
+        execute_at_seconds,
+        transition: match fade {
+            Some(duration_seconds) => TransitionType::FadeOut { duration_seconds },
+            None => TransitionType::Instant,
+        },
+    }
+}
+
+/// Every programmed trigger with "fade out" must fade on the native path,
+/// ending on the jump. Before the fix only the legacy fallback faded, so
+/// "next marker + fade out" (and the rest) cut dry in the real app.
+#[test]
+fn every_programmed_trigger_fades_out_before_its_jump() {
+    let triggers = [
+        JumpTrigger::NextMarker,
+        JumpTrigger::NextSection,
+        JumpTrigger::NextCue,
+        JumpTrigger::RegionEnd,
+        JumpTrigger::AfterBars(2),
+        JumpTrigger::AfterBars(4),
+    ];
+    for trigger in triggers {
+        let pending = fade_pending(trigger.clone(), 10.0, Some(2.0));
+        assert_eq!(scheduled_jump_fade_out_due(7.0, &pending), None, "{trigger:?} too early");
+        let at_window = scheduled_jump_fade_out_due(8.0, &pending).expect("window start");
+        assert!((at_window - 2.0).abs() < 1e-9, "{trigger:?} full fade");
+        let late = scheduled_jump_fade_out_due(9.5, &pending).expect("inside window");
+        assert!((late - 0.5).abs() < 1e-9, "{trigger:?} fade ends on the jump");
+        assert_eq!(scheduled_jump_fade_out_due(10.0, &pending), None, "{trigger:?} landed");
+
+        let instant = fade_pending(trigger.clone(), 10.0, None);
+        assert_eq!(scheduled_jump_fade_out_due(9.0, &instant), None, "{trigger:?} instant");
+    }
+}
+
+/// "Immediate" fades from the click, never again from the tick.
+#[test]
+fn immediate_fade_is_not_restarted_by_the_tick() {
+    let pending = fade_pending(JumpTrigger::Immediate, 3.0, Some(2.0));
+    assert_eq!(scheduled_jump_fade_out_due(3.0, &pending), None);
+}
+
+/// A jump armed closer than its fade (next marker 0.5 s away, 2 s fade)
+/// still fades, shortened so it ends on the jump.
+#[test]
+fn fade_armed_inside_its_window_is_shortened() {
+    let pending = fade_pending(JumpTrigger::NextMarker, 1.0, Some(2.0));
+    let seconds = scheduled_jump_fade_out_due(0.5, &pending).expect("due");
+    assert!((seconds - 0.5).abs() < 1e-9);
+}
+
+/// The fade pulls the master down; a jump that never lands must give the
+/// level back (cancel, seek, stop), or the song keeps playing in silence.
+#[test]
+fn abandoned_jump_fade_gives_the_master_back() {
+    let mut session = session_with_song_dir("jump-fade-demo", demo_song());
+    let audio = crate::audio::engine::AudioController::default();
+    session.play(&audio).expect("play");
+    session.seek(9.0, &audio).expect("seek near the region end");
+    session
+        .schedule_region_jump(
+            "region_1",
+            JumpTrigger::RegionEnd,
+            TransitionType::FadeOut {
+                duration_seconds: 4.0,
+            },
+            &audio,
+        )
+        .expect("schedule");
+    session.start_pending_jump_fade_if_due(&audio).expect("tick");
+    assert!(session.pending_jump_fade_started, "region end + fade must fade");
+
+    session.cancel_marker_jump(&audio).expect("cancel");
+    assert!(!session.pending_jump_fade_started);
+
+    session
+        .schedule_region_jump(
+            "region_1",
+            JumpTrigger::RegionEnd,
+            TransitionType::FadeOut {
+                duration_seconds: 4.0,
+            },
+            &audio,
+        )
+        .expect("schedule again");
+    session.start_pending_jump_fade_if_due(&audio).expect("tick");
+    assert!(session.pending_jump_fade_started);
+    session.seek(1.0, &audio).expect("seek away");
+    assert!(!session.pending_jump_fade_started, "seek gives the level back");
+    session.start_pending_jump_fade_if_due(&audio).expect("tick");
+    assert!(!session.pending_jump_fade_started, "out of the window: no fade");
+
+    session.seek(9.0, &audio).expect("back into the window");
+    session.start_pending_jump_fade_if_due(&audio).expect("tick");
+    assert!(session.pending_jump_fade_started);
+    session.stop(&audio).expect("stop");
+    assert!(!session.pending_jump_fade_started, "stop gives the level back");
 }
 
 fn demo_song() -> Song {

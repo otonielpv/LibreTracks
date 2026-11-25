@@ -268,6 +268,9 @@ MPL-2.0, fonts under OFL-1.1, and many MIT/Apache components). See
 [THIRD-PARTY-NOTICES.md](./THIRD-PARTY-NOTICES.md) for the full list, attributions,
 and source offers; full license texts are in [`licenses/`](./licenses/).
 
-One additional permission applies on top of the AGPL, for distribution through
-application stores — see [LICENSE-EXCEPTIONS.md](./LICENSE-EXCEPTIONS.md). It
-grants rights and removes none: the source stays AGPL and public.
+Two additions apply on top of the AGPL, both described in
+[LICENSE-EXCEPTIONS.md](./LICENSE-EXCEPTIONS.md): a permission for distribution
+through application stores, which grants rights and removes none, and an author
+attribution requirement under section 7(b): forks and modified versions, renamed
+or not, must keep the notice "Based on LibreTracks by Otoniel Pérez Velarde" in
+their README and in any About or legal notices screen.

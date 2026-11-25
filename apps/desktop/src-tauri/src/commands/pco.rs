@@ -220,7 +220,10 @@ pub async fn pco_create_arrangement(
     song_id: String,
     write: ArrangementWrite,
 ) -> Result<PcoArrangement, PcoError> {
-    client(&app)?.create_arrangement(&song_id, &write).await
+    let client = client(&app)?;
+    let saved = client.create_arrangement(&song_id, &write).await?;
+    client.ensure_key(&song_id, &saved.id, &write.chord_chart_key).await?;
+    Ok(saved)
 }
 
 /// "Save to Planning Center", replacing the original arrangement: only on the
@@ -232,5 +235,8 @@ pub async fn pco_update_arrangement(
     arrangement_id: String,
     write: ArrangementWrite,
 ) -> Result<PcoArrangement, PcoError> {
-    client(&app)?.update_arrangement(&song_id, &arrangement_id, &write).await
+    let client = client(&app)?;
+    let saved = client.update_arrangement(&song_id, &arrangement_id, &write).await?;
+    client.ensure_key(&song_id, &arrangement_id, &write.chord_chart_key).await?;
+    Ok(saved)
 }

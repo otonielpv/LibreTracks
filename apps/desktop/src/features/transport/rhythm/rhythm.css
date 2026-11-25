@@ -46,9 +46,39 @@
    Sin insets laterales propios: a la izquierda la barra lateral de la app
    ya lleva el del notch, y a la derecha la línea de tiempo y la barra
    superior llegan al borde; apartarse ahí dejaba ~47 px vacíos en un
-   iPhone apaisado. */
+   iPhone apaisado.
+   Una sola altura en las cuatro vistas: antes cada una cedía lo que le
+   sobraba (DAW 243 px, Setlist 195, Live y Compacta 175 en un iPhone 13)
+   y el panel cambiaba de tamaño al cambiar de vista. Para verlo más
+   grande está la pantalla completa. */
 .lt-rhythm-panel--docked.lt-rhythm-panel--short {
-  height: min(62vh, 270px);
+  --lt-rhythm-docked-short-height: min(45vh, 11rem);
+  flex: 0 0 auto;
+  height: var(--lt-rhythm-docked-short-height);
+}
+
+/* Pantalla completa, como la letra: cubre toda la ventana (también la barra
+   de transporte) y el fondo llega a los bordes; solo el contenido se aparta
+   del notch y de la barra de inicio. Por debajo de los editores (70). */
+.lt-rhythm-panel.is-expanded,
+.lt-rhythm-panel--docked.lt-rhythm-panel--short.is-expanded {
+  position: fixed;
+  inset: 0;
+  z-index: 65;
+  height: auto;
+  max-height: none;
+  border-top: 0;
+  padding: var(--lt-safe-area-top, 0px) var(--lt-safe-area-right, 0px) var(--lt-safe-area-bottom, 0px)
+    var(--lt-safe-area-left, 0px);
+}
+
+/* Con toda la pantalla vuelve el objetivo táctil completo. */
+.lt-rhythm-panel.is-touch.is-expanded {
+  --lt-rhythm-target: 44px;
+}
+
+.lt-rhythm-icon.is-active {
+  color: var(--lt-rhythm-accent);
 }
 
 .lt-rhythm-panel--tab {
@@ -89,7 +119,7 @@
    el resto de la altura; los paneles ocultos siguen montados y vuelven tal
    cual al cerrar el ritmo. */
 .lt-setlist-view.is-short.has-rhythm {
-  flex: 0 0 auto;
+  flex: 1 1 auto;
   height: auto;
   grid-template-rows: auto;
 }
@@ -101,8 +131,7 @@
 }
 
 .lt-setlist-view.is-short.has-rhythm + .lt-rhythm-panel--docked {
-  flex: 1 1 auto;
-  height: auto;
+  flex: 0 0 auto;
 }
 
 /* Setlist en escritorio y tablet: la pestaña ocupa todo el ancho de la
@@ -561,6 +590,20 @@
 /* En short la rejilla 4×3 llena el alto. */
 .lt-rhythm-panel--short .lt-rhythm-shots__grid {
   grid-template-rows: repeat(3, minmax(0, 1fr));
+}
+
+/* El mínimo de 34 px de cada pad ganaba a las filas encogidas: en un iPhone
+   las filas medían ~24 px, los pads se montaban unos sobre otros y la
+   rejilla parecía una columna de «+» sin separación. */
+.lt-rhythm-panel--short .lt-rhythm-pad {
+  min-height: 0;
+}
+
+/* Acoplado en el teléfono hay ~70 px para los pads: 6×2 deja filas de dedo
+   (~34 px) en vez de tres de ~22. A pantalla completa vuelve el 4×3. */
+.lt-rhythm-panel--docked.lt-rhythm-panel--short:not(.is-expanded) .lt-rhythm-shots__grid {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  grid-template-rows: repeat(2, minmax(0, 1fr));
 }
 
 /* ── Botón «Ritmo» de la barra superior ─────────────────────────────────

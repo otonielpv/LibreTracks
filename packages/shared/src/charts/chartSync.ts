@@ -277,6 +277,9 @@ export function buildPerformanceBlocks(
   /** The pass playing in the current marker (`ChartPlayback.pass`). */
   currentPass = 0,
 ): { blocks: PerformanceBlock[]; current: number } {
+  // A song without section markers: the whole sheet in the order written,
+  // nothing current (there is nothing to follow it by).
+  if (markers.length === 0) return sheetBlocks(doc);
   const raw = buildMarkerBlocks(doc, links, markers, history, pendingMarkerId, repeatCurrent);
   const blocks: PerformanceBlock[] = [];
   let current = -1;
@@ -299,6 +302,20 @@ export function buildPerformanceBlocks(
     }
   });
   return { blocks, current };
+}
+
+/** The sheet's sections as blocks, for a song without section markers. */
+export function sheetBlocks(doc: ChartDoc): { blocks: PerformanceBlock[]; current: number } {
+  return {
+    blocks: doc.sections.map((section, index) => ({
+      key: `sheet${index}`,
+      markerId: "",
+      label: section.label,
+      section: index,
+      queued: false,
+    })),
+    current: -1,
+  };
 }
 
 function buildMarkerBlocks(

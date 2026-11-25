@@ -1,0 +1,126 @@
+---
+title: Marcadores
+description: "Os marcadores do LibreTracks: seções e cues, como criá-los com tipo e variante, movê-los, transformar uma seção em cue arrastando para a outra linha, e como eles são usados para saltar ao vivo."
+sidebar:
+  order: 3
+---
+
+import Clip from "../../../../../components/guide/Clip.astro";
+
+Os marcadores dividem cada música em partes com nome. São o que você usa para
+**saltar** ao vivo e o que a [guia falada](/pt/docs/voice-guide/) anuncia para a
+banda. Há dois tipos, e cada um vive na sua linha da régua:
+
+| | **Sections** (linha de baixo) | **Cues** (linha de cima) |
+| --- | --- | --- |
+| Para quê | As partes da música: Intro, Verse, Chorus… | Indicações para a banda: *Drums In*, *Last Time*… |
+| Guia falada | Diz o nome e **conta a entrada** ("Chorus, 1, 2, 3, 4") | Diz o cue quando ele chega, sem contagem. Se cai bem no início de uma seção, é dito entre o nome e a contagem |
+| Saltar para ele | Sim, e a banda ouve a contagem antes | Você também pode saltar para ele, mas sem contagem própria |
+| Live View e Remote | Um cartão por seção | Dentro da seção se coincidem no tempo; se está sozinho, um cartão próprio marcado como *Cue* |
+| Saltos MIDI numerados | Contam | Não contam |
+
+Os nomes dos tipos (Intro, Verse, Chorus…) aparecem no app em inglês ou
+espanhol, conforme o idioma do app, e são os que a guia falada pronuncia.
+
+## Criar um marcador
+
+<Clip
+  src="/guide/desktop-en/marker-create.mp4"
+  poster="/guide/desktop-en/marker-create.webp"
+  caption="Botão direito na régua › Create marker › tipo › variante."
+/>
+
+1. **Clique com o botão direito na régua**, no ponto exato onde você quer o
+   marcador.
+2. Escolha **Create marker**.
+3. Escolha o **tipo**. O menu os divide em *Sections* e *Cues*.
+4. Alguns tipos têm **variantes numeradas**: Verse 1 a 6, e Chorus, Bridge e
+   Pre-Chorus 1 a 4. Escolha a certa para a guia falada dizer "Chorus 2" e não
+   só "Chorus".
+
+![O menu de tipos de marcador](/guide/desktop-en/marker-kind-menu.png)
+
+No celular, a barra de ações tem **Section** e **Cue**, que criam o marcador na
+posição do cursor. Você também pode tocar e segurar a régua.
+
+### Tipos de seção
+
+![Seções, com os solos de instrumento](/guide/desktop-en/marker-kinds-sections.png)
+
+Intro, Verse, Pre-Chorus, Chorus, Post-Chorus, Bridge, Breakdown, Drop, Solo,
+**Drum Solo**, **Bass Solo**, **Guitar Solo**, Outro, Acapella, Instrumental,
+Interlude, Refrain, Tag, Vamp, Ending, Exhortation, Rap, Turnaround e
+**Custom** (para o que não se encaixa; você dá o nome e a cor).
+
+### Tipos de cue
+
+![Cues, com Speed Up e Slow Down](/guide/desktop-en/marker-kinds-cues.png)
+
+Get Ready, Build, Slowly Build, Ease Down, All In, Drums In, Break, Hold,
+Softly, Swell, Hits, Last Time, Big Ending, Key Change Up, Key Change Down,
+**Speed Up**, **Slow Down**, Drums, Bass, Guitar, Keys, Ad Lib, Worship Freely e
+Next Song.
+
+Cada tipo tem a sua cor, que é a que você vê na régua, na Live View e no
+Remote.
+
+## Mover um marcador
+
+- **Arraste a bandeirinha** pela régua. Com o
+  [snap](/pt/docs/interface/toolbar/#visão-e-edição) ligado ele gruda na grade;
+  segure <kbd>Shift</kbd> enquanto arrasta para posicioná-lo livremente.
+- **Copiar ao arrastar**: segure <kbd>Alt</kbd> (<kbd>Option</kbd> no Mac)
+  **ao soltar**. Uma cópia do marcador (ou da seleção inteira) cai ali e o
+  original fica onde está. Funciona também na visão Setlist.
+- Para uma posição exata: botão direito › **Exact position...**, e digite o
+  *compasso.tempo* ou os segundos.
+
+### Transformar uma seção em cue, e vice-versa
+
+Arraste o marcador **para cima**, para a linha de cues, ou **para baixo**, para
+a linha de seções. O marcador mantém o nome e o tipo, mas passa a se comportar
+como o outro tipo (veja a tabela acima). Por exemplo, um "Chorus" movido para a
+linha de cues não tem mais contagem de entrada.
+
+<Clip
+  src="/guide/desktop-en/marker-lane-drag.mp4"
+  poster="/guide/desktop-en/marker-lane-drag.webp"
+  caption="Arrastar um marcador de uma linha para a outra muda o tipo dele sem movê-lo no tempo."
+/>
+
+Você pode arrastar na diagonal para mudar de linha e de posição ao mesmo tempo.
+A linha entre as duas fileiras fica bem no meio, então não precisa de precisão.
+
+## Editar e apagar
+
+Botão direito no marcador (ou toque e segure no celular):
+
+- **Jump to This Marker**: move o cursor até o marcador, sem esperar.
+- **Rename** (<kbd>F2</kbd>).
+- **Exact position...**.
+- **Marker type...**: muda o tipo ou a variante.
+- **Color...**: só nos marcadores *Custom*. Os outros pegam a cor do tipo.
+- **Delete** (<kbd>Del</kbd>).
+
+## Saltar entre marcadores ao vivo
+
+Clicar num marcador de seção **agenda um salto** para ele. Quando ele acontece
+é definido pelo ajuste [Marker Jump](/pt/docs/interface/toolbar/#marker-jump): na
+hora, depois de alguns compassos ou quando chega o próximo marcador. Enquanto
+ele espera, **Cancel jump** acende. Para desistir, aperte <kbd>Esc</kbd> ou
+clique no mesmo marcador de novo.
+
+Outras formas de saltar:
+
+- **Teclas numéricas**: <kbd>0</kbd> salta para o primeiro marcador da sessão,
+  <kbd>1</kbd> para o segundo, e assim até <kbd>9</kbd>. Apertar a mesma tecla
+  de novo cancela o salto. <kbd>Shift</kbd>+número faz o mesmo com as músicas.
+- **[Live View](/pt/docs/live-view/)**, com um cartão por marcador.
+- O **[Remote](/pt/docs/remote-control/)** pelo celular.
+- Um **pedal MIDI**: em [MIDI Learn](/pt/docs/interface/settings/#midi-learn), a
+  aba *Markers*.
+- Uma **[faixa de automação](/pt/docs/automation/)**, para o salto acontecer
+  sozinho num ponto exato.
+
+Com a guia falada ligada, quando você agenda um salto a banda ouve o nome da
+seção de destino e a contagem de entrada, e todos entram juntos.

@@ -28,6 +28,9 @@ import { useChartImportStore, type AdjustInput } from "../../chartSources/chartI
 import { ChartAdjustDialog } from "../../chartSources/ChartAdjustDialog";
 import { SaveToPlanningCenterDialog } from "../../chartSources/SaveToPlanningCenterDialog";
 import { useChartSourcesAvailable } from "../../chartSources/useChartSourcesAvailable";
+import { FEATURE_FLAGS } from "@libretracks/shared/featureFlags";
+import { SimpleLyricsEditor } from "./simple/SimpleLyricsEditor";
+import { readEditorMode, storeEditorMode, type ChartEditorMode } from "./simple/editorMode";
 
 type ChartEditorModalProps = {
   region: SongRegionSummary;
@@ -41,6 +44,8 @@ type ChartEditorModalProps = {
   /** A sheet just brought in as it comes (Planning Center from the song
    * menu): shown, and "Adjust to the sequence" opens on it. */
   initialImport?: AdjustInput;
+  /** Simple or Advanced; without it, the last one used on this device. */
+  initialMode?: ChartEditorMode;
 };
 
 /**
@@ -60,6 +65,7 @@ export function ChartEditorModal({
   onSave,
   onClose,
   initialImport,
+  initialMode,
 }: ChartEditorModalProps) {
   const { t } = useTranslation();
   const sourcesAvailable = useChartSourcesAvailable();
@@ -95,6 +101,15 @@ export function ChartEditorModal({
   const [pcoSaveOpen, setPcoSaveOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Simple (parts) or Advanced (ChordPro, links, times): both edit the same
+  // text and links. Without the flag there is only Advanced, as before.
+  const [mode, setModeState] = useState<ChartEditorMode>(() =>
+    FEATURE_FLAGS.simpleLyricsEditor ? (initialMode ?? readEditorMode()) : "advanced",
+  );
+  const setMode = (next: ChartEditorMode) => {
+    setModeState(next);
+    storeEditorMode(next);
+  };
   // Teléfono: escribir en vertical (plan portrait-text-modals).
   const close = usePortraitWhileOpen(onClose);
   // Teléfono en vertical: el marco mide lo que queda sobre el teclado.
@@ -120,14 +135,30 @@ export function ChartEditorModal({
   useLayoutEffect(() => {
     const element = textareaRef.current;
     if (!element) return;
-    // Collapsing to "auto" to measure shrinks the body for a moment, which
-    // clamps its scroll and throws the edited line to the top: put it back.
-    const scroller = element.closest<HTMLElement>(".lt-chart-editor-body");
-    const scrollTop = scroller?.scrollTop ?? 0;
-    element.style.height = "auto";
-    element.style.height = `${element.scrollHeight + 2}px`;
-    if (scroller && scroller.scrollTop !== scrollTop) scroller.scrollTop = scrollTop;
-  }, [text]);
+    const fit = () => {
+      // Collapsing to "auto" to measure shrinks the body for a moment, which
+      // clamps its scroll and throws the edited line to the top: put it back.
+      const scroller = element.closest<HTMLElement>(".lt-chart-editor-body");
+      const scrollTop = scroller?.scrollTop ?? 0;
+      element.style.height = "auto";
+      element.style.height = `${element.scrollHeight + 2}px`;
+      if (scroller && scroller.scrollTop !== scrollTop) scroller.scrollTop = scrollTop;
+    };
+    fit();
+    // A narrower box wraps more lines (the phone turns to portrait right
+    // after the editor opens): measured at the old width, the text below
+    // was cut off and, the box not scrolling itself, out of reach.
+    if (typeof ResizeObserver === "undefined") return;
+    let width = element.clientWidth;
+    const observer = new ResizeObserver(() => {
+      if (element.clientWidth === width) return;
+      width = element.clientWidth;
+      fit();
+    });
+    observer.observe(element);
+    return () => observer.disconnect();
+    // Also when Advanced is shown again: the box mounts then and must be measured.
+  }, [text, mode]);
 
   const setLink = (markerId: string, value: string) => {
     setLinks((current) => {
@@ -264,6 +295,39 @@ export function ChartEditorModal({
     return applyChartTimes(doc, base, timing, taken.times);
   };
 
+  /** The draft as a chart, for the simple editor. */
+  const draftChart = useMemo<SongChart | null>(
+    () => (taken.text.trim() ? { text: taken.text, links: liveLinks, ...(source ? { source } : {}) } : null),
+    [taken.text, liveLinks, source],
+  );
+  const applySimple = (next: SongChart | null) => {
+    setText(next ? withTimes(next.text, next.links) : "");
+    setLinks(next ? next.links : []);
+  };
+  const openPlanningCenter = () =>
+    useChartImportStore.getState().open({
+      region,
+      markers: [...markers],
+      chart,
+      onPicked: (input) =>
+        bringIn(
+          input,
+          input.imported.source ? { ...input.imported.source, importedHash: chartTextHash(input.imported.text) } : undefined,
+        ),
+    });
+  const saveDraft = () => {
+    if (saving || !taken.text.trim()) return;
+    void save({
+      text: taken.text,
+      links: linksToSave(),
+      // Keeps "Update from Planning Center": an edited text no
+      // longer matches `importedHash`, and that is how it shows.
+      ...(source ? { source } : {}),
+      // The song's own lyrics follow is not the editor's business: kept.
+      ...(chart?.follow ? { follow: chart.follow } : {}),
+    });
+  };
+
   /** The times that do not fit their section (a chorus copied with its
    * times) back to the spread; the ones that fit stay. */
   const recalcTimes = () => {
@@ -279,7 +343,7 @@ export function ChartEditorModal({
       onClick={saving ? undefined : close}
     >
       <section
-        className="lt-settings-modal lt-chart-editor"
+        className={`lt-settings-modal lt-chart-editor${FEATURE_FLAGS.simpleLyricsEditor ? " has-modes" : ""}${mode === "simple" ? " is-simple" : ""}`}
         role="dialog"
         aria-modal="true"
         aria-labelledby="lt-chart-editor-title"
@@ -290,10 +354,33 @@ export function ChartEditorModal({
             <span className="lt-settings-modal-eyebrow">{t("liveChart.editorEyebrow")}</span>
             <h2 id="lt-chart-editor-title">{t("liveChart.editorTitle")}</h2>
             <p>{region.name}</p>
+            {FEATURE_FLAGS.simpleLyricsEditor ? (
+              <div className="lt-chart-editor-modes" role="tablist" aria-label={t("simpleLyrics.modeLabel")}>
+                {(["simple", "advanced"] as const).map((option) => (
+                  <button key={option} type="button" role="tab" aria-selected={mode === option} onClick={() => setMode(option)}>
+                    {t(`simpleLyrics.${option}`)}
+                  </button>
+                ))}
+              </div>
+            ) : null}
           </div>
         </header>
 
         <div className="lt-settings-modal-body lt-chart-editor-body">
+          {mode === "simple" ? (
+            <SimpleLyricsEditor
+              chart={draftChart}
+              markers={markers}
+              onChange={applySimple}
+              onSave={saveDraft}
+              onImportFile={() => fileInputRef.current?.click()}
+              onImportPlanningCenter={sourcesAvailable ? openPlanningCenter : null}
+              onSaveToPlanningCenter={
+                sourcesAvailable && taken.text.trim() && (!source || source.provider === "planningCenter") ? () => setPcoSaveOpen(true) : null
+              }
+            />
+          ) : (
+          <>
           <div className="lt-chart-editor-text">
             <div className="lt-chart-editor-row">
               <span className="lt-settings-field-label">{t("liveChart.textLabel")}</span>
@@ -316,26 +403,14 @@ export function ChartEditorModal({
                   <button
                     type="button"
                     className="lt-chart-editor-button"
-                    onClick={() =>
-                      useChartImportStore.getState().open({
-                        region,
-                        markers: [...markers],
-                        chart,
-                        onPicked: (input) =>
-                          bringIn(
-                            input,
-                            input.imported.source
-                              ? { ...input.imported.source, importedHash: chartTextHash(input.imported.text) }
-                              : undefined,
-                          ),
-                      })
-                    }
+                    onClick={openPlanningCenter}
                   >
                     <span className="material-symbols-outlined" aria-hidden="true">library_music</span>
                     {t("chartSources.import.open")}
                   </button>
                 ) : null}
-                {sourcesAvailable && source?.provider === "planningCenter" ? (
+                {/* Also for lyrics not from Planning Center: the song is picked there first. */}
+                {sourcesAvailable && (!source || source.provider === "planningCenter") ? (
                   <button
                     type="button"
                     className="lt-chart-editor-button"
@@ -400,6 +475,12 @@ export function ChartEditorModal({
             {originals.length === 0 ? (
               <p className="lt-chart-editor-hint">{t("liveChart.noMarkers")}</p>
             ) : (
+              <>
+              <div className="lt-chart-editor-links-head" aria-hidden="true">
+                <span>{t("liveChart.columnMarker")}</span>
+                <span>{t("liveChart.columnSection")}</span>
+                <span>{t("liveChart.columnTimes")}</span>
+              </div>
               <ul>
                 {originals.map((marker) => {
                   const link = chartLinkFor(liveLinks, marker.id);
@@ -453,8 +534,11 @@ export function ChartEditorModal({
                   );
                 })}
               </ul>
+              </>
             )}
           </div>
+          </>
+          )}
           {error ? <p className="lt-render-warning" role="alert">{error}</p> : null}
         </div>
 
@@ -471,21 +555,13 @@ export function ChartEditorModal({
             type="button"
             className="is-primary"
             disabled={saving || !taken.text.trim()}
-            onClick={() =>
-              void save({
-                text: taken.text,
-                links: linksToSave(),
-                // Keeps "Update from Planning Center": an edited text no
-                // longer matches `importedHash`, and that is how it shows.
-                ...(source ? { source } : {}),
-              })
-            }
+            onClick={saveDraft}
           >
             {t("liveChart.save")}
           </button>
         </div>
 
-        {pcoSaveOpen && source ? (
+        {pcoSaveOpen ? (
           <SaveToPlanningCenterDialog
             region={region}
             markers={markers}

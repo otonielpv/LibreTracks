@@ -3,10 +3,13 @@ import { useTranslation } from "react-i18next";
 
 import { isAndroidApp } from "../desktopApi";
 import { useTransportStore } from "../store";
-import {
-  createBackGuard,
-  useBackDismissStore,
-} from "./backNavigation";
+import { createBackGuard } from "./backNavigation";
+
+declare global {
+  interface Window {
+    __ltHandleBack?: () => boolean;
+  }
+}
 
 /**
  * Instala el guardián del botón atrás y pinta su aviso de salida.
@@ -15,9 +18,7 @@ import {
  * del árbol; así el monolito pone una línea y no se entera de nada más. Ver
  * `backNavigation.ts` para el porqué del mecanismo.
  *
- * **Sólo Android.** Escritorio no tiene botón atrás de sistema y iOS tampoco;
- * meterles entradas de historial sería cambiarles el comportamiento sin
- * motivo.
+ * **Sólo Android.** Escritorio no tiene botón atrás de sistema y iOS tampoco.
  */
 export function AndroidBackGuard() {
   const { t } = useTranslation();
@@ -29,29 +30,17 @@ export function AndroidBackGuard() {
     }
 
     const guard = createBackGuard({
-      pushEntry: () => window.history.pushState({ ltBackGuard: true }, ""),
-      popEntry: () => window.history.back(),
       isPlaying: () =>
         useTransportStore.getState().playback?.playbackState === "playing",
       setExitHintVisible,
     });
 
-    const onPopState = () => guard.handleBack();
-    window.addEventListener("popstate", onPopState);
-
-    // Rearmar cuando se abre o cierra algo, y cuando arranca o para el
-    // transporte. El estado del transporte se lee del snapshot que ya publica
-    // el store; no hay estado nuevo en ningun sitio.
-    const unsubscribeStack = useBackDismissStore.subscribe(() => guard.sync());
-    const unsubscribeTransport = useTransportStore.subscribe(() =>
-      guard.sync(),
-    );
-    guard.sync();
+    // MainActivity llama a esto en cada pulsación de atrás (ver
+    // `backNavigation.ts`); `false` = que la app salga.
+    window.__ltHandleBack = () => guard.handleBack();
 
     return () => {
-      window.removeEventListener("popstate", onPopState);
-      unsubscribeStack();
-      unsubscribeTransport();
+      delete window.__ltHandleBack;
       guard.dispose();
     };
   }, []);

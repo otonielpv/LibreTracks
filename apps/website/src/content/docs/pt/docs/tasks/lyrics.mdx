@@ -1,0 +1,171 @@
+---
+title: Projeção (ProPresenter, FreeShow, Holyrics)
+description: "Sincronize a letra com o ProPresenter, o FreeShow ou o Holyrics pela rede, sem MIDI: cada seção da música troca o slide antes da hora, seguindo saltos, vamps e arranjos."
+sidebar:
+  order: 9
+---
+
+O LibreTracks pode **trocar a letra no seu programa de apresentação** junto com
+a música: quando chega o Chorus, o programa mostra o Chorus. Ele conversa com o
+**ProPresenter**, o **FreeShow** e o **Holyrics** diretamente pela rede: sem
+portas MIDI virtuais, sem mapear notas para slides e sem nada para programar
+música por música.
+
+Funciona com os **marcadores de seção** que você já tem (Verse 1, Chorus,
+Bridge…): cada um é emparelhado pelo nome com o grupo de mesmo nome na
+apresentação, e o LibreTracks o manda **um pouco antes** de a seção começar,
+para as palavras estarem na tela quando o canto começa. Segue os saltos ao vivo,
+o Vamp e os arranjos como o resto do show.
+
+## 1. Ligar
+
+Abra **Settings › Projection**, ligue **Change the slides of the presentation
+program** e escolha o seu programa. Na primeira vez, um **tutorial passo a
+passo** mostra como ativar a rede naquele programa. Se você já sabe, aperte
+**Skip tutorial**; pode vê-lo de novo quando quiser com **Show the tutorial**.
+
+### ProPresenter
+
+1. No ProPresenter abra **Settings** (Preferences no Mac) › **Network**.
+2. Marque **Enable Network**. Você não precisa do ProPresenter Remote nem de
+   senha.
+3. Copie a **porta** que ele mostra (por exemplo 50001) para o LibreTracks.
+
+### FreeShow
+
+1. No FreeShow abra **Settings › Connections**.
+2. Ative a **REST API** (porta 5506 por padrão).
+3. Se você definiu uma chave, copie-a para o campo **Key** do LibreTracks.
+
+### Holyrics
+
+1. No Holyrics: **Arquivo › Configurações › API Server**.
+2. Marque **API server - Local** (porta 8091). É grátis: o plano pago é só para
+   a API pela internet.
+3. Aperte **Gerenciar permissões**, crie um **token** e marque na coluna
+   **Local**: GetSongs, GetLyrics, ShowLyrics, ActionGoToIndex, ActionNext,
+   SetF8, GetCurrentPresentation e GetSlideDescriptions. Marque também SetF10
+   (**Clear the screen** para preto) e SetF9 (**Clear the text**, mantendo o
+   fundo); sem eles é usado o F8, o papel de parede do Holyrics.
+4. Cole o token no LibreTracks. Ele é guardado no chaveiro do sistema, nunca
+   num arquivo.
+
+Se o programa roda **em outro computador**, digite o IP dele em **Computer**.
+No mesmo computador, deixe `127.0.0.1`. Aperte **Test connection**: você vê a
+versão e quantas músicas ele encontrou, ou o que está errado em palavras
+simples (e, no Holyrics, as permissões exatas que faltam).
+
+Se você não sabe o IP, aperte **Search the network**: o LibreTracks procura o
+programa escolhido nos computadores da sua rede e o lista com a porta; toque
+num para preencher Computer e Port. No iPhone ou iPad, na primeira vez você
+precisa permitir o acesso à **Rede local**.
+
+## 2. Vincular as músicas
+
+Cada música se vincula **sozinha** à apresentação com **o mesmo nome**
+(ignorando acentos, maiúsculas, "(Live)", o número da faixa ou um tom no fim).
+Para conferir, aperte a pastilha **Lyrics** da barra superior › **Link
+songs…**:
+
+- ✔ **vinculada**: pronto.
+- ? **sugestão**: aperte **Use «…»** ou escolha outra da lista. **Accept all
+  suggestions** aceita todas de uma vez.
+- ✗ **não encontrada**: procure pelo nome.
+
+O vínculo é guardado **pelo nome**: uma música exportada como `.ltpkg` continua
+funcionando em outra igreja, em outro computador.
+
+## 3. Como as seções são emparelhadas
+
+No menu da música, **Projection…** mostra cada marcador e o grupo que ele vai
+mandar:
+
+- **Verse 2** prefere o grupo **Verse 2** e, se não houver, cai em **Verse**.
+- **Chorus** combina com **Chorus** e **Chorus 1**; **Refrain** também.
+- As seções que são tocadas, não cantadas (**intro**, **instrumental**,
+  **interlude**, **vamp**, **solo**, **outro**, **ending**…) sem grupo na
+  apresentação **limpam o texto** sozinhas: a letra sai e o fundo fica. Se a
+  apresentação tem um grupo para elas, ele é mostrado.
+- Um marcador que não combina com nada aparece em âmbar e **nada é mandado** (a
+  tela fica como está).
+
+Para corrigir, escolha outro grupo na lista dele, **Clear the screen** (sem
+texto, sem fundo), **Clear the text** (tira a letra e mantém o fundo: útil para
+interlúdios e instrumentais) ou **Do not change**. Se a seção se repete, o
+LibreTracks pergunta se a mudança é **only this time** ou **every time**.
+**Test** manda aquela seção na hora, sem tocar.
+
+As seções repetidas (os refrões de um arranjo) vão para a sua própria
+aparição: o terceiro refrão da música vai para o terceiro refrão da
+apresentação, se houver.
+
+## 4. Os slides de cada seção
+
+Na coluna **Slides** do painel da música, **Edit** abre o editor daquele
+marcador. Cada repetição é editada sozinha (a segunda ponte não mexe na
+primeira).
+
+- **Slides of this marker**: cada um mostra o texto e, no FreeShow e no
+  ProPresenter, a miniatura real (elas aparecem em alguns segundos). Toque nos
+  que pertencem a ele. Por padrão são os do grupo dele; se a sua apresentação
+  repete a ponte quatro vezes seguidas, o LibreTracks vê uma ponte de quatro
+  slides. **One part per repeat** os divide entre as vezes em que a seção
+  volta: cada ponte ganha os seus. **Back to the group's slides** desfaz a
+  escolha.
+- **When it moves to the next one**: **Automatic** (distribuídos em compassos
+  inteiros), **Every N bars**, **Recorded** ou **Only the first**.
+- **Record this section**: a reprodução começa um compasso antes do marcador;
+  toque em **Change** (ou na barra de espaço) em cada troca de slide. Cada
+  toque é mandado na hora para você ver funcionando, e a gravação para sozinha
+  quando a seção termina. **Save recording** deixa a seção em **Recorded**. É
+  guardado em tempos, então segue o andamento.
+
+## Quando a música começa
+
+Se a música não começa exatamente num marcador, **When the song starts**
+decide o que aparece até o primeiro: **Automatic** mostra o slide de título da
+apresentação se houver e uma tela em branco se não (para a letra da música
+anterior não ficar na tela). Você também pode escolher **Clear the screen** ou
+qualquer slide.
+
+## 5. Ao vivo
+
+A pastilha **Lyrics** da barra superior diz como está indo:
+
+- **verde**: conectado;
+- **âmbar**: conectado, mas algumas músicas não têm apresentação;
+- **vermelho**: não conectado ou sem permissões;
+- **cinza**: envio pausado.
+
+Aperte para ver o último envio ("Chorus → Chorus, 18 ms"), **Pause sending**
+(por exemplo quando o operador de projeção quer controlar à mão) e **Refresh**
+depois de mudar apresentações no programa.
+
+Quando uma música termina, a tela é limpa (desligue em Settings › Projection se
+preferir que fique). Pausar nunca limpa.
+
+Com **redundância**, só o principal manda; o reserva assume se o principal cair,
+sem mandar nada em dobro.
+
+## Dicas
+
+- Use a transição **Cut** no programa de apresentação: uma transição longa faz
+  a letra chegar atrasada.
+- Com dois computadores, um **cabo** é melhor; no Wi-Fi, use 5 GHz.
+- O **adiantamento** padrão é **1 tempo**. Mude em Settings › Projection, ou
+  para uma música no painel dela.
+- No **celular**, o painel da música, o editor de slides e Link songs abrem na
+  **vertical** para facilitar a digitação. Ao fechá-los, o app volta para a
+  horizontal.
+
+## Problemas comuns
+
+- **Não conecta**: confira se o programa está aberto com a rede ativada, o IP e
+  a porta (o ProPresenter escolhe a própria porta) e se o firewall do Windows
+  não está bloqueando.
+- **Faltam permissões** (Holyrics): marque as permissões que o Test connection
+  lista em Gerenciar permissões, coluna Local.
+- **Salta para o primeiro refrão**: o programa tem um único grupo "Chorus";
+  tudo bem, o texto é o mesmo. Se não, dê aos grupos os nomes dos seus
+  marcadores.
+- **Chega atrasado**: aumente o adiantamento e use a transição Cut.

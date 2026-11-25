@@ -127,4 +127,29 @@ describe("LyricsWidget", () => {
     expect(lyricsRegionAt(regions, 10)?.id).toBe("a");
     expect(lyricsRegionAt(regions, 45)?.id).toBe("b");
   });
+
+  it("without section markers shows the whole sheet and says how to follow it", () => {
+    const view = { ...songView([region("song", 0, 40, chart)]), sectionMarkers: [] } as SongView;
+    const { container } = render(<LyricsWidget songView={view} getPositionSeconds={() => 12} pendingMarkerId={null} />);
+    expect([...container.querySelectorAll(".lyrics-block-label")].map((node) => node.textContent)).toEqual(["Verso 1", "Coro 1"]);
+    expect(container.querySelector(".lyrics-block.is-current")).toBeNull();
+    expect(container.querySelector(".lyrics-hint")?.textContent).toMatch(/marca|marker/i);
+  });
+
+  it("uses the song's own follow: a whole section highlights all its lines", () => {
+    const followed: SongChart = { ...chart, follow: { focus: "section" } };
+    const { container } = render(
+      <LyricsWidget songView={songView([region("song", 0, 40, followed)])} getPositionSeconds={() => 12} pendingMarkerId={null} />,
+    );
+    expect(currentLines(container)).toEqual(["Primera línea", "Segunda línea"]);
+  });
+
+  it("without the song's own, uses the widget's follow (stored on this device)", () => {
+    window.localStorage.setItem("libretracks.remote.lyrics.follow", "2");
+    const { container } = render(
+      <LyricsWidget songView={songView([region("song", 0, 40, chart)])} getPositionSeconds={() => 2} pendingMarkerId={null} />,
+    );
+    expect(currentLines(container)).toEqual(["Primera línea", "Segunda línea"]);
+    expect(screen.getByRole("button", { name: /Follow|Seguimiento/ }).textContent).toMatch(/2/);
+  });
 });

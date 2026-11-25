@@ -14,6 +14,7 @@ import enMessages from "../shared/i18n/en";
 import { useTransportStore as transportStore } from "../features/transport/store";
 import { useSongStore } from "../features/transport/songStore";
 import { useChartEditorStore } from "../features/transport/charts/chartEditorStore";
+import { useGeneralFollowStore } from "../features/transport/charts/LyricsFollowMenu";
 import {
   DEFAULT_VIEW_MODE,
   TIMELINE_DEFAULT_FOLLOW_PLAYHEAD_ENABLED,
@@ -390,6 +391,7 @@ beforeEach(async () => {
   });
   resetTestDesktopApiMock();
   useMeterStore.setState(INITIAL_METER_STATE);
+  useGeneralFollowStore.setState({ focus: 1 });
   useChartSourceStore.setState({ ...INITIAL_CHART_SOURCE_STATE });
   useChartImportStore.setState({ session: null });
   usePlanImportStore.setState({ open: false });

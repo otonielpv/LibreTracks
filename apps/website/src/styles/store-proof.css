@@ -1,0 +1,309 @@
+/* Ratings, downloads and review quotes (components/StoreProof.astro). Built
+   like the home readouts: label face, hairline grid, teal figures; the stars
+   use the secondary amber so they read as stars, not as UI. */
+
+.store-proof {
+  background: var(--lt-surface-low);
+}
+
+.store-proof-head {
+  margin-bottom: 2rem;
+}
+
+.store-proof-figures {
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr);
+  border: 1px solid var(--lt-border-strong);
+  border-radius: 10px;
+  background: var(--lt-surface);
+  overflow: hidden;
+}
+
+.store-proof-figure {
+  display: grid;
+  align-content: center;
+  justify-items: start;
+  gap: 0.55rem;
+  padding: clamp(1.25rem, 2.6vw, 2rem) clamp(1.25rem, 3vw, 2.5rem);
+  border-right: 1px solid var(--lt-border);
+}
+
+.store-proof-value {
+  color: var(--lt-heading);
+  font: 700 clamp(2.6rem, 1.8rem + 3vw, 4rem) / 1 var(--lt-font-label);
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+}
+
+.store-proof-rating .store-proof-value {
+  color: var(--lt-secondary);
+}
+
+.store-proof-label {
+  color: var(--lt-muted);
+  font: 700 0.72rem/1.2 var(--lt-font-label);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.store-proof-label b {
+  color: var(--lt-text);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Five stars as one glyph run: an empty row with a clipped amber row on top. */
+.store-proof-stars {
+  position: relative;
+  display: inline-block;
+  font-size: 1.35rem;
+  line-height: 1;
+  letter-spacing: 0.12em;
+  white-space: nowrap;
+}
+
+.store-proof-stars::before {
+  content: "★★★★★";
+  color: rgb(255 226 171 / 0.18);
+}
+
+.store-proof-stars-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  overflow: hidden;
+}
+
+.store-proof-stars-fill::before {
+  content: "★★★★★";
+  color: var(--lt-secondary);
+}
+
+.store-proof-stars-small {
+  font-size: 0.95rem;
+}
+
+.store-proof-stores {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.store-proof-stores li + li {
+  border-top: 1px solid var(--lt-border);
+}
+
+.store-proof-stores a {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.2rem 1rem;
+  height: 100%;
+  padding: 1.1rem clamp(1.25rem, 2.6vw, 2rem);
+  color: inherit;
+  text-decoration: none;
+  transition: background-color 120ms ease;
+}
+
+.store-proof-stores a:hover,
+.store-proof-stores a:focus-visible {
+  background: var(--lt-surface-container);
+}
+
+.store-proof-store {
+  color: var(--lt-heading);
+  font: 700 1rem/1.2 var(--lt-font-label);
+}
+
+.store-proof-store-score {
+  grid-row: span 2;
+  align-self: center;
+  color: var(--lt-secondary);
+  font: 700 1.35rem/1 var(--lt-font-label);
+}
+
+.store-proof-store-score b {
+  font-variant-numeric: tabular-nums;
+}
+
+.store-proof-store-detail {
+  color: var(--lt-muted);
+  font-size: 0.875rem;
+}
+
+/* One row of cards that scrolls sideways; the buttons sit under it. */
+.store-proof-carousel {
+  margin-top: 1.5rem;
+}
+
+.store-proof-quotes {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: calc((100% - 2rem) / 3);
+  gap: 1rem;
+  margin: 0;
+  padding: 0 0 0.25rem;
+  list-style: none;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  scroll-behavior: smooth;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+}
+
+.store-proof-quotes::-webkit-scrollbar {
+  display: none;
+}
+
+.store-proof-quotes:focus-visible {
+  outline: 2px solid var(--lt-primary);
+  outline-offset: 4px;
+  border-radius: 10px;
+}
+
+.store-proof-quotes li {
+  scroll-snap-align: start;
+}
+
+.store-proof-carousel-nav {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 0.85rem;
+}
+
+.store-proof-carousel[data-static] .store-proof-carousel-nav {
+  display: none;
+}
+
+.store-proof-carousel-button {
+  display: grid;
+  place-items: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  padding: 0 0 0.15rem;
+  border: 1px solid var(--lt-border-strong);
+  border-radius: 999px;
+  background: var(--lt-surface);
+  color: var(--lt-heading);
+  font: 400 1.5rem/1 var(--lt-font-sans);
+  cursor: pointer;
+  transition: background-color 120ms ease, border-color 120ms ease, opacity 120ms ease;
+}
+
+.store-proof-carousel-button:hover:not(:disabled),
+.store-proof-carousel-button:focus-visible {
+  border-color: var(--lt-primary);
+  background: var(--lt-surface-container);
+}
+
+.store-proof-carousel-button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .store-proof-quotes {
+    scroll-behavior: auto;
+  }
+}
+
+.store-proof-quotes figure {
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  gap: 0.85rem;
+  height: 100%;
+  margin: 0;
+  padding: 1.35rem 1.4rem;
+  border: 1px solid var(--lt-border);
+  border-radius: 10px;
+  background: var(--lt-surface);
+}
+
+.store-proof-quotes blockquote {
+  margin: 0;
+  color: var(--lt-text);
+  font-size: 0.975rem;
+  line-height: 1.6;
+}
+
+.store-proof-quotes blockquote p {
+  margin: 0;
+}
+
+.store-proof-quotes .store-proof-quote-title {
+  margin-bottom: 0.35rem;
+  color: var(--lt-heading);
+  font-weight: 700;
+}
+
+.store-proof-quotes figcaption {
+  display: grid;
+  gap: 0.15rem;
+  padding-top: 0.85rem;
+  border-top: 1px solid var(--lt-border);
+}
+
+.store-proof-author {
+  color: var(--lt-heading);
+  font: 700 0.9rem/1.3 var(--lt-font-label);
+}
+
+.store-proof-source {
+  color: var(--lt-muted);
+  font-size: 0.8rem;
+}
+
+.store-proof-note {
+  max-width: var(--lt-measure);
+  margin: 1.25rem 0 0;
+  color: color-mix(in srgb, var(--lt-muted) 80%, transparent);
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
+
+@media (max-width: 900px) {
+  .store-proof-figures {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .store-proof-figure:nth-child(2) {
+    border-right: 0;
+  }
+
+  .store-proof-stores {
+    grid-column: 1 / -1;
+    grid-template-columns: 1fr 1fr;
+    border-top: 1px solid var(--lt-border);
+  }
+
+  .store-proof-stores li + li {
+    border-top: 0;
+    border-left: 1px solid var(--lt-border);
+  }
+
+  .store-proof-quotes {
+    grid-auto-columns: calc((100% - 1rem) / 2);
+  }
+}
+
+@media (max-width: 520px) {
+  /* A peek of the next card tells people it scrolls. */
+  .store-proof-quotes {
+    grid-auto-columns: 86%;
+  }
+
+  .store-proof-stores {
+    grid-template-columns: 1fr;
+  }
+
+  .store-proof-stores li + li {
+    border-left: 0;
+    border-top: 1px solid var(--lt-border);
+  }
+}
+
+.store-proof-embedded {
+  margin-top: clamp(3rem, 6vw, 4.5rem);
+  padding-top: clamp(2.5rem, 5vw, 3.5rem);
+  border-top: 1px solid var(--lt-border);
+  background: none;
+}

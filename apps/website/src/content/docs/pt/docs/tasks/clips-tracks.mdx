@@ -1,0 +1,223 @@
+---
+title: Clipes e faixas
+description: "Como selecionar, mover, dividir, duplicar, copiar e colar clipes no LibreTracks, e como criar, ordenar, agrupar em pastas e ajustar faixas."
+sidebar:
+  order: 4
+---
+
+import Clip from "../../../../../components/guide/Clip.astro";
+
+Um **clipe** é um pedaço de áudio colocado numa faixa. Uma **faixa** é uma
+linha da timeline com o seu volume, o seu pan e a sua saída. Editar clipes
+**nunca altera os seus arquivos de áudio**: só muda qual parte toca e onde.
+
+O que faz cada botão do cabeçalho da faixa está em
+[Régua, faixas e menus](/pt/docs/interface/timeline/#cabeçalho-da-faixa).
+
+## Selecionar clipes
+
+- **Clique** num clipe: seleciona (e move o cursor para aquele ponto).
+- <kbd>Ctrl</kbd>+**clique**: adiciona aquele clipe à seleção ou o tira dela.
+- <kbd>Shift</kbd>+**clique**: seleciona um **retângulo**, do último clipe em
+  que você tocou até este. Todos os clipes das faixas do meio, naquele trecho
+  de tempo, entram. É o que você precisa depois de dividir várias faixas no
+  mesmo ponto: um gesto e você tem todos os pedaços.
+- <kbd>Ctrl</kbd>+<kbd>A</kbd>: todos os clipes.
+- <kbd>Esc</kbd>: limpa a seleção.
+
+Um clique numa parte vazia de uma faixa move o cursor para lá; arrastar numa
+parte vazia rola a visão.
+
+## Mover clipes
+
+Arraste o clipe. Com vários selecionados, todos se movem juntos.
+
+- **No tempo**, o clipe gruda na grade se o
+  [snap](/pt/docs/interface/toolbar/#visão-e-edição) estiver ligado.
+- Segure <kbd>Ctrl</kbd> enquanto arrasta para as bordas dele **grudarem** no
+  cursor de reprodução, nos marcadores, nas bordas das músicas e nas bordas de
+  outros clipes. Assim um clipe se alinha exatamente com outro.
+- **Para outra faixa**: arraste para cima ou para baixo. Enquanto arrasta você
+  vê em qual faixa ele vai cair. O clipe **não salta por cima de uma pasta**:
+  fica na última faixa válida antes dela. Para levá-lo ao outro lado, abra a
+  pasta ou mova em dois passos.
+- As setas <kbd>←</kbd> <kbd>→</kbd> movem a seleção uma divisão da grade.
+- **Copiar ao arrastar**: segure <kbd>Alt</kbd> (<kbd>Option</kbd> no Mac)
+  **ao soltar**. As cópias caem ali, também em outras faixas, e os originais
+  ficam onde estavam. Um <kbd>Ctrl</kbd>+<kbd>Z</kbd> desfaz.
+
+<Clip
+  src="/guide/desktop-en/clip-to-track.mp4"
+  poster="/guide/desktop-en/clip-to-track.webp"
+  caption="Arrastar um clipe para cima o move para a faixa de cima."
+/>
+
+Um clipe sempre vive dentro de uma música. Se movê-lo o leva para além do fim
+da música, ela é estendida para comportá-lo; se isso a fizesse colidir com a
+próxima, o movimento não acontece e o app diz por quê.
+
+## Dividir, duplicar, copiar e colar
+
+**Dividir** (<kbd>S</kbd>): divide os clipes selecionados na posição do cursor.
+Também pelo menu do clipe, **Split At Cursor**.
+
+<Clip
+  src="/guide/desktop-en/clip-split.mp4"
+  poster="/guide/desktop-en/clip-split.webp"
+  caption="Clique na régua para posicionar o cursor, clique no clipe e aperte S para dividi-lo."
+/>
+
+:::tip[Encurtar um clipe]
+Os clipes de áudio não têm alças para cortar. Para tirar o início ou o fim de
+um, divida com <kbd>S</kbd> no ponto que você quer e apague o pedaço que sobra.
+:::
+
+- **Duplicar** (<kbd>Ctrl</kbd>+<kbd>D</kbd>): coloca uma cópia da seleção logo
+  depois dela, nas mesmas faixas.
+- **Copiar** e **colar** (<kbd>Ctrl</kbd>+<kbd>C</kbd>,
+  <kbd>Ctrl</kbd>+<kbd>V</kbd>): a cópia é colada logo depois do que estiver
+  selecionado naquele momento (ou depois do original, se nada estiver
+  selecionado), nas mesmas faixas.
+- **Apagar** (<kbd>Del</kbd> ou <kbd>Backspace</kbd>).
+- **Cor**: botão direito › **Select colour…**. Com vários clipes selecionados,
+  todos são coloridos.
+
+Tudo pode ser desfeito com <kbd>Ctrl</kbd>+<kbd>Z</kbd>.
+
+## Fades de clipe
+
+Um clipe de áudio pode entrar e sair com fade sozinho, à parte dos fades da
+música.
+
+- **Duração**: arraste para dentro os quadradinhos nos **cantos de cima** do
+  clipe.
+- **Curva**: arraste o **ponto** que aparece em cada fade, em qualquer direção,
+  para deixá-lo mais rápido ou mais lento.
+- **Pelo menu**: botão direito no clipe › **Fades ▸** para digitar os segundos
+  do fade in e do fade out, escolher a curva (**Linear**, **Fast** ou
+  **Slow**) ou **Remove fades**.
+
+Com vários clipes selecionados, a mudança vale para todos de uma vez. No
+celular, as alças só aparecem nos clipes que já estão selecionados.
+
+## Criar faixas
+
+- **Botão direito no espaço abaixo das faixas**: **Add Audio Track**, **Add
+  Folder Track**, **Add MIDI track**, **Add video track** e **Add automation
+  track** (só há uma por sessão).
+- **Botão direito numa faixa** › **Insert Track** ou **Insert Folder Track**:
+  ela é criada logo abaixo.
+- **Soltar áudio** no espaço abaixo das faixas cria uma faixa para ele, e
+  arrastar uma pasta da Library cria uma por arquivo de áudio.
+
+As faixas novas pegam uma cor da paleta, uma diferente a cada vez. Se preferir
+colori-las você mesmo, desligue *Colour new tracks automatically* em Settings ›
+General › Editing.
+
+## Ordenar faixas
+
+Arraste o **cabeçalho** da faixa para cima ou para baixo. Enquanto arrasta, as
+outras faixas abrem espaço para mostrar onde ela vai cair, e a faixa aparece no
+novo lugar com os clipes dela. Com várias faixas selecionadas, todas se movem,
+na ordem em que estão.
+
+<Clip
+  src="/guide/desktop-en/track-reorder.mp4"
+  poster="/guide/desktop-en/track-reorder.webp"
+  caption="Arrastar o cabeçalho de uma faixa a move; as outras abrem espaço para mostrar onde ela vai cair."
+/>
+
+No celular, primeiro ligue o modo de reordenar com o botão das setas acima da
+lista de faixas (veja [No celular e tablet](/pt/docs/interface/mobile/#botões-das-faixas)).
+
+## Pastas
+
+Uma pasta agrupa faixas: por exemplo, todos os microfones da bateria. Ela se
+recolhe para economizar espaço, e o **M**, o **S** e o volume dela afetam todas
+as faixas de uma vez.
+
+- **Colocar uma faixa numa pasta**: arraste-a sobre a linha da pasta, no meio.
+  Se soltar na borda de cima ou de baixo, ela fica acima ou abaixo da pasta,
+  fora dela.
+- **Sem arrastar**: botão direito na faixa › **Indent Into Previous Folder**.
+  Com várias faixas selecionadas, botão direito › **Move to folder…** e escolha
+  uma pasta ou **New folder…**: todas vão de uma vez.
+- **Tirar**: botão direito › **Remove From Folder**.
+- **Saída de áudio compartilhada**: as faixas de dentro em *Inherited
+  (Folder)* saem pela saída da pasta. Você muda a da bateria inteira num lugar
+  só.
+
+O LibreTracks lembra quais pastas você deixou recolhidas.
+
+## Mais ajustes de faixa
+
+- **Selecionar várias faixas**: <kbd>Ctrl</kbd>+clique ou <kbd>Shift</kbd>+clique
+  nos cabeçalhos. O que você mexer numa (M, S, T, volume, pan, saída) vale para
+  todas; volume e pan se movem na mesma proporção, então a mixagem se mantém.
+- **Renomear**: selecione a faixa e aperte <kbd>F2</kbd>.
+- **Cor**: botão direito › **Select colour…**.
+- **Altura**: arraste a borda de baixo do cabeçalho; com <kbd>Alt</kbd>, você
+  muda todas de uma vez, e um clique duplo volta à altura normal. Também
+  <kbd>Alt</kbd>+roda do mouse sobre a faixa (com
+  <kbd>Alt</kbd>+<kbd>Shift</kbd>+roda, todas).
+- **Canais**: botão direito › **Channels…** e escolha **Stereo**, **Mono
+  (sum)**, **Left only** ou **Right only**. *Mono* mistura os dois canais num
+  só, útil para uma faixa que sai por uma saída mono da sua interface. *Left
+  only* e *Right only* tocam um único canal do áudio dos dois lados, no centro.
+  Uma etiqueta *mono*, *L* ou *R* aparece ao lado do nome; **Stereo** desfaz.
+  O arquivo não é tocado.
+- **Apagar**: botão direito › **Delete**, ou <kbd>Del</kbd> com a faixa
+  selecionada. Se ela tem clipes, o app pergunta se você quer apagá-la junto
+  com eles.
+
+## Um arquivo com o click de um lado
+
+Algumas músicas vêm como **um único arquivo estéreo** com o multitrack inteiro
+num canal e o click e a guia falada no outro. Para usá-lo:
+
+1. Arraste o arquivo para uma faixa, como qualquer áudio.
+2. Botão direito na faixa › **Channels…** › **Split L/R channels**.
+3. Você fica com duas faixas, uma embaixo da outra: a original em **Left only**
+   e uma nova em **Right only**. As duas usam o mesmo arquivo, então não ocupam
+   espaço extra no disco, e <kbd>Ctrl</kbd>+<kbd>Z</kbd> desfaz de uma vez.
+4. Dê nomes a elas (por exemplo "Multitrack" e "Click + Guia") e mande a do
+   click para a saída dos fones.
+
+O click e a guia ficam na mesma faixa: quando você
+[analisar a música](/pt/docs/song-analysis/), escolha essa faixa como click e como
+guia, e o LibreTracks os separa para ler cada um.
+
+A opção fica cinza se a faixa não tem áudio estéreo.
+
+## Equalizador de faixa
+
+Cada faixa de áudio e cada **pasta** tem um equalizador paramétrico com até 6
+bandas. O de uma pasta age sobre a soma das faixas dela (com o volume e o pan
+já aplicados), como um EQ de grupo; uma faixa da pasta que vai para outra saída
+fica de fora. Ao renderizar, a mixagem e o stem da pasta levam o EQ dela; o stem
+de uma faixa sozinha, não. Abra-o com o botão **EQ** da faixa: no cabeçalho da
+faixa na visão de arranjo, na tira do mixer das visões Compact e Setlist e, no
+celular, pela barra de seleção com uma faixa selecionada. O botão acende quando
+o equalizador está ligado e alguma banda muda algo.
+
+- **Nós**: arraste um nó para os lados para mudar a frequência e para cima ou
+  para baixo para o ganho. A roda do mouse (ou uma pinça com dois dedos no
+  celular) muda o Q, ou seja, a largura da banda. Segure <kbd>Shift</kbd> para
+  movimentos mais finos. Clique duplo liga ou desliga a banda.
+- **Tipos de banda**: corte de graves e de agudos (12 ou 24 dB/oit), shelf de
+  graves e de agudos, sino e notch. Escolha na faixa da banda, onde você também
+  pode digitar a frequência, o ganho e o Q.
+- **RTA**: atrás da curva, em cinza, o espectro ao vivo do que a faixa entrega
+  depois do equalizador. O botão **RTA** o desliga (fica lembrado para a
+  próxima vez).
+- **Bypass** desliga o equalizador inteiro para comparar; **Reset** volta às
+  bandas iniciais e **Remove EQ** o tira da faixa.
+- **Presets**: o menu do cabeçalho tem alguns de fábrica (voz, baixo, bumbo,
+  violão, tirar graves e telefone) e os seus. **Save as…** guarda a curva atual
+  com um nome; apague os seus com o ícone da lixeira. Carregar um preset pode
+  ser desfeito como qualquer mudança. Os presets são de cada computador: não
+  viajam com a sessão.
+
+Ele age antes do volume e do pan, igual ao vivo, ao renderizar áudio e ao
+nivelar músicas, e viaja com a faixa nas sessões e nos pacotes de música. Toda
+mudança pode ser desfeita com <kbd>Ctrl</kbd>+<kbd>Z</kbd>.

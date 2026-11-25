@@ -1,0 +1,95 @@
+---
+title: Loops de bateria e one shots
+description: "Loops de bateria por passos travados no click da música e one shots para disparar efeitos no LibreTracks: o painel Rhythm, variações por linha, o editor de padrões, os seus próprios sons, MIDI e teclado."
+---
+
+O painel **Rhythm** acrescenta duas coisas para tocar ao vivo sobre a música:
+
+- **Loops**: uma bateria eletrônica por passos (shaker, pandeiro, chimbal…)
+  travada no click da música. Cada linha tem quatro variações (A-D), então você
+  pode mudar o pandeiro no refrão sem mexer no shaker.
+- **One shots**: uma grade de 12 pads em 4 bancos para disparar efeitos soltos
+  (hits, risers, impactos).
+
+Eles não são faixas da sessão: soam sozinhos, como o metrônomo, e o master da
+música não mexe neles.
+
+## Abrir o painel
+
+Aperte **Rhythm** na barra superior. Ele abre o painel da visão em que você
+está: encaixado embaixo na DAW, Live e Compact, e como aba na Setlist. No
+celular ele se encaixa embaixo e mantém o transporte visível. O botão acende
+enquanto um loop ou um one shot está soando, mesmo com o painel fechado.
+
+![Painel Rhythm](/guide/desktop/rhythm-panel.png)
+
+## Loops
+
+1. Escolha um **padrão** na lista. O app traz 12 (pop, balada, rock, worship
+   6/8, valsa, shuffle, dembow, cajón…).
+2. Aperte **▶** para começar e **■** para parar. Começar espera o próximo
+   compasso (ou tempo, conforme a quantização); parar é imediato.
+3. Em cada linha: o nome a liga ou desliga, e **A B C D** mudam a variação dela
+   (no celular, com uma lista ao lado dos passos). Uma mudança pedida pisca até
+   entrar no compasso.
+
+Opções do cabeçalho:
+
+- **Follow song / Free**: seguindo a música, os passos caem na grade do click,
+  também em rampas de andamento e mudanças de compasso. Em *Free* o loop tem
+  andamento próprio, que você define com **Tap**.
+- **With the song**: o loop começa quando você aperta Play e para quando a
+  música para. Desligado, só o próprio botão o controla.
+- **Quantize**: quando entram os inícios e as mudanças de variação: no
+  compasso, no tempo ou no próximo passo.
+- **Volume** do loop.
+
+### Um loop para cada música
+
+No editor, **Save ▾ → Assign to this song** copia o padrão para a música.
+Quando a música chega, o loop entra no primeiro compasso dela, e viaja com a
+sessão quando você a exporta (`.ltset`, `.ltpkg`), com os seus próprios sons.
+
+## O editor de padrões
+
+Abra com **✎** no cabeçalho do painel.
+
+![Editor de padrões](/guide/desktop/rhythm-editor.png)
+
+- **Toque** num passo para ligá-lo ou desligá-lo. **Segure** (ou botão
+  direito) para mudar a intensidade: suave, normal, acento.
+- **Arraste** para pintar vários passos seguidos.
+- **Variation A-D**: você edita aquela variação em todas as linhas.
+- Compassos (1, 2 ou 4), fórmula de compasso, subdivisão (semicolcheias ou
+  tercinas), swing e o BPM do modo livre. No celular eles ficam recolhidos
+  atrás do botão de ajustes, para a grade inteira caber.
+- **▶** toca o padrão como está, sem salvar.
+- **Save ▾**: na biblioteca, nesta música ou como padrão novo.
+- **Edit kit**: muda os sons do kit (até 8), a cor, o volume e o grupo de
+  choke.
+
+## One shots
+
+Toque num pad para dispará-lo. Com **✎** na barra de bancos você entra no modo
+de edição: tocar num pad abre os ajustes dele e arrastar um sobre outro os
+troca de lugar.
+
+Cada pad tem sample, nome, cor, volume, **modo** (*One shot* toca até o fim;
+*Hold* toca enquanto você aperta), **quantização** (imediata, tempo ou
+compasso) e **grupo de choke**. **Stop all** os silencia com um fade curto.
+
+## Os seus próprios sons e pacotes
+
+No seletor de samples, **Import file…** adiciona um som seu (WAV, MP3,
+FLAC…). Limites: 10 s para um som de loop e 30 s para um one shot.
+**Download sounds** mostra os pacotes grátis.
+
+## MIDI e teclado
+
+Cada controle do painel pode ser mapeado no modo
+[MIDI Map](/pt/docs/live-control-flow/): começar o loop, ligar linhas, variações,
+pads (com a velocity; soltar a nota solta um pad *Hold*), bancos e volumes. Os
+LEDs do controlador seguem o estado.
+
+Atalhos padrão: **Alt+L** começa ou para o loop e **Alt+1…4** colocam todas as
+linhas na variação A-D. Os pads são atribuídos em Settings → Shortcuts.

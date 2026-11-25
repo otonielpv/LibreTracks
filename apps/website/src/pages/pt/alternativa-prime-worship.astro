@@ -1,0 +1,101 @@
+---
+import AlternativePage from "../../components/AlternativePage.astro";
+
+const rows = [
+  [
+    "Modelo",
+    "Serviço por assinatura com catálogo próprio.",
+    "Software grátis e de código aberto (AGPL-3.0). Sem mensalidade, sem conta.",
+  ],
+  [
+    "De onde vêm as faixas",
+    "Do catálogo deles, prontas para tocar.",
+    "De onde você trouxer: produzidas pela sua equipe, compradas ou exportadas da sua DAW.",
+  ],
+  [
+    "Onde roda",
+    "Pensado para tablet e celular.",
+    "Windows, macOS, Linux, Android e iOS.",
+  ],
+  [
+    "Internet",
+    "Catálogo e conta na nuvem.",
+    "Tudo local. Depois de instalado, funciona offline.",
+  ],
+  [
+    "Personalizar o arranjo",
+    "Dentro do que cada música do catálogo permitir.",
+    "Controle total: seus stems, seus marcadores, sua mixagem e suas saídas.",
+  ],
+  [
+    "Guia falada e click",
+    "Incluídos.",
+    "Incluídos: guia falada em inglês ou espanhol e metrônomo, com saídas independentes.",
+  ],
+  [
+    "Custo a longo prazo",
+    "Recorrente enquanto você usar.",
+    "Nenhum. O programa e as sessões são seus.",
+  ],
+];
+
+const strengths = [
+  [
+    "Sem assinatura",
+    "Para equipes pequenas ou orçamentos apertados, tirar uma mensalidade da conta anual muda tudo.",
+  ],
+  [
+    "Guia falada",
+    "Anuncia a próxima seção e conta a entrada da banda antes do tempo forte, além de avisos falados onde você quiser.",
+  ],
+  [
+    "Tom por música",
+    "Transponha cada música para quem estiver cantando no dia, escolhendo com o botão T quais stems acompanham a mudança.",
+  ],
+  [
+    "O repertório inteiro num arquivo",
+    "Um .ltset leva a sessão completa (músicas, biblioteca, automação e formas de onda), para você preparar em casa e abrir sem mudanças no computador do local.",
+  ],
+];
+
+const limits = [
+  "O LibreTracks não tem catálogo. Se o seu fluxo depende de baixar músicas prontas e licenciadas, o Prime faz isso e aqui você não vai encontrar.",
+  "As faixas são por sua conta. Se a equipe não produz nem compra multitracks, o problema de conseguir o áudio continua.",
+  "Um serviço por assinatura vem com suporte e tudo integrado. Aqui, o suporte é a documentação, o repositório no GitHub e o grupo da comunidade.",
+  "Trocar tem um custo real de aprendizado. Experimente num ensaio durante a semana antes de levar para o domingo.",
+  "A interface do app e a guia falada estão em inglês e espanhol, não em português.",
+];
+
+const faq = [
+  [
+    "Existe uma alternativa grátis ao Prime para playback no louvor?",
+    "O LibreTracks é grátis e de código aberto e cobre reprodução multitrack, click, guia falada, mudança de tom, MIDI e controle remoto. Encaixa quando a sua equipe já tem ou produz os próprios stems.",
+  ],
+  [
+    "O LibreTracks inclui músicas de louvor?",
+    "Não. O LibreTracks é o app de reprodução, não um catálogo de músicas. Você traz áudio que a sua equipe criou ou obteve com os direitos adequados.",
+  ],
+  [
+    "O LibreTracks funciona offline durante o culto?",
+    "Sim. O app, os projetos e o áudio rodam localmente depois da instalação. Não precisa de conta nem de internet para tocar.",
+  ],
+];
+---
+
+<AlternativePage
+  lang="pt"
+  rival="Prime"
+  title="Alternativa Grátis ao Prime Worship | LibreTracks"
+  description="Alternativa grátis e de código aberto ao Prime Worship com suas próprias faixas, click, guia falada, mudança de tom, MIDI e controle pelo celular. Funciona offline e sem assinatura."
+  eyebrow="Alternativa grátis ao Prime"
+  heading="Alternativa grátis ao Prime Worship para tocar multitracks"
+  intro="O Prime junta o catálogo de músicas e o player num único serviço pago. Se a sua equipe já tem os próprios stems, só o player basta. O LibreTracks é exatamente isso: guia falada, click, mudança de tom por música, MIDI e remote no celular, de graça, com código aberto e funcionando offline."
+  heroImage="/screenshots/Live-View-Phone.png"
+  heroAlt="Controles do LibreTracks para o louvor ao vivo num celular"
+  rows={rows}
+  strengths={strengths}
+  limitsTitle="Onde o Prime cobre algo que nós não"
+  limits={limits}
+  faq={faq}
+  closing="Monte uma música que vocês já tocam, coloque os marcadores de seção e experimente num ensaio. Não há conta para criar nem teste que expire."
+/>

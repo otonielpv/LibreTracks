@@ -420,6 +420,48 @@ TEST_CASE("nearby sections prioritize the section and cue over the count") {
     }
 }
 
+TEST_CASE("an intro a bar into a song is announced from the song start") {
+    // Two songs: [0, 4s) ending with a marker at 1s, then [4s, 16s) whose intro
+    // sits one bar (2s at 120 BPM) after its start. Playback starts at the
+    // second song. The name may not borrow the first song's tail (never played
+    // here): it opens the song at 4s and the count keeps the beats that fit.
+    auto bank = make_marked_bank();
+    bank->sections[static_cast<std::size_t>(MarkerKind::Intro)]
+        .base.samples.assign(static_cast<int>(kSampleRate * 0.6), 0.6f);
+    auto session = make_session(MarkerKind::Ending, 1.0);
+    Region first;
+    first.id = "a";
+    first.start_frame = 0;
+    first.end_frame = 4 * kSampleRate;
+    Region second;
+    second.id = "b";
+    second.start_frame = 4 * kSampleRate;
+    second.end_frame = 16 * kSampleRate;
+    session.songs[0].regions = {first, second};
+    Marker intro;
+    intro.id = "intro";
+    intro.kind = MarkerKind::Intro;
+    intro.frame = 6 * kSampleRate;
+    session.songs[0].markers.push_back(intro);
+
+    VoiceGuideRenderer r;
+    r.set_clip_bank(bank);
+    r.set_config({true, 1.0f, "monitor", 1, true});
+    std::array<std::vector<float>, 4> ch;
+    for (auto& c : ch) c.assign(static_cast<std::size_t>(8 * kSampleRate), 0.0f);
+    constexpr int block = 1024;
+    for (Frame start = 4 * kSampleRate; start < 8 * kSampleRate; start += block) {
+        const int frames = static_cast<int>(std::min<Frame>(block, 8 * kSampleRate - start));
+        float* out[4] = {ch[0].data() + start, ch[1].data() + start,
+                         ch[2].data() + start, ch[3].data() + start};
+        r.render(out, 4, frames, static_cast<double>(kSampleRate), start, &session, {});
+    }
+    CHECK(r.diagnostics().announcements_fired == 1);
+    CHECK(ch[2][4 * kSampleRate + kSampleRate / 4] == doctest::Approx(0.54f));
+    // Beats at 4.0 and 4.5s fall under the name: only "3, 4" remain.
+    CHECK(r.diagnostics().counts_fired == 2);
+}
+
 TEST_CASE("a jump to a Custom destination plays only the count") {
     auto bank = make_marked_bank();
     // Custom has no recording in a real bank.

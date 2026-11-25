@@ -43,6 +43,13 @@ export function ReviewView({
           {review.rows.some((row) => row.confidence !== "high") ? (
             <p className="lt-chart-import-legend">{t("chartSources.import.legend")}</p>
           ) : null}
+          {/* Which column is the song (its markers) and which the sheet (its sections). */}
+          <div className="lt-chart-import-head" aria-hidden="true">
+            <span>{t("chartSources.import.columnMarker")}</span>
+            <span>{t("chartSources.import.columnSection")}</span>
+            <span />
+            <span>{t("chartSources.import.columnLine")}</span>
+          </div>
           <ul className="lt-chart-import-rows" aria-label={t("chartSources.import.reviewTitle")}>
             {review.rows.map((row) => (
               <li key={row.markerId} className={row.repeatOf ? "is-repeat" : undefined} data-testid="chart-import-row">

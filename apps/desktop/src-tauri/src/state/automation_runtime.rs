@@ -76,6 +76,29 @@ pub(super) fn native_region_jump_trigger_view_seconds(
     }
 }
 
+/// Seconds of fade out to start now for a programmed jump, or `None` when it
+/// is not due (or has no fade). The fade ends on `execute_at`; when the jump
+/// was armed inside its own window the fade is shortened to what is left.
+/// "Immediate" fades from the click (`start_immediate_jump_fade`), not here.
+pub(super) fn scheduled_jump_fade_out_due(
+    position_seconds: f64,
+    pending_jump: &PendingMarkerJump,
+) -> Option<f64> {
+    let TransitionType::FadeOut { duration_seconds } = pending_jump.transition else {
+        return None;
+    };
+    if pending_jump.trigger == JumpTrigger::Immediate {
+        return None;
+    }
+    let duration_seconds = duration_seconds.max(0.0);
+    let execute_at = pending_jump.execute_at_seconds;
+    let fade_start = (execute_at - duration_seconds).max(0.0);
+    if position_seconds + 0.001 < fade_start || position_seconds >= execute_at {
+        return None;
+    }
+    Some((execute_at - position_seconds).clamp(0.0, duration_seconds))
+}
+
 impl DesktopSession {
     pub fn upsert_automation_cue(
         &mut self,
@@ -1307,6 +1330,59 @@ impl DesktopSession {
         Ok(())
     }
 
+    /// Starts the fade out of the programmed song/marker jump once the
+    /// playhead enters its window (`execute_at - duration`). Only the native
+    /// path needs this: the legacy fallback fades through the audio model.
+    pub(super) fn start_pending_jump_fade_if_due(
+        &mut self,
+        audio: &AudioController,
+    ) -> Result<(), DesktopError> {
+        if self.pending_jump_fade_started {
+            return Ok(());
+        }
+        let Some(pending) = self.engine.pending_marker_jump() else {
+            return Ok(());
+        };
+        let Some(seconds) = scheduled_jump_fade_out_due(self.engine.position_seconds(), pending)
+        else {
+            return Ok(());
+        };
+        audio.start_master_fade(0.0, seconds)?;
+        self.pending_jump_fade_started = true;
+        Ok(())
+    }
+
+    /// "Immediate + fade out" fades from the click itself; the native jump
+    /// was armed for the end of that fade (`native_region_jump_trigger_view_seconds`).
+    pub(super) fn start_immediate_jump_fade(
+        &mut self,
+        was_playing: bool,
+        trigger: &JumpTrigger,
+        transition: &TransitionType,
+        audio: &AudioController,
+    ) -> Result<(), DesktopError> {
+        if !was_playing || *trigger != JumpTrigger::Immediate {
+            return Ok(());
+        }
+        if let TransitionType::FadeOut { duration_seconds } = transition {
+            audio.start_master_fade(0.0, *duration_seconds)?;
+            self.pending_jump_fade_started = true;
+        }
+        Ok(())
+    }
+
+    /// The programmed jump will not land where its fade out was heading
+    /// (cancelled, replaced, seek): give the master its level back.
+    pub(super) fn restore_gain_after_abandoned_jump_fade(
+        &mut self,
+        audio: &AudioController,
+    ) -> Result<(), DesktopError> {
+        if std::mem::take(&mut self.pending_jump_fade_started) {
+            audio.start_master_fade(1.0, 0.0)?;
+        }
+        Ok(())
+    }
+
     pub(super) fn schedule_native_marker_jump(
         &self,
         audio: &AudioController,
@@ -1316,8 +1392,8 @@ impl DesktopSession {
         let target_seconds = source_song
             .marker_by_id(&pending_jump.target_marker_id)
             .map(|marker| warp_timeline_seconds_at(source_song, marker.start_seconds));
-        let trigger_seconds =
-            warp_timeline_seconds_at(source_song, pending_jump.execute_at_seconds);
+        // Same as regions: "immediate + fade" lands when the fade ends.
+        let trigger_seconds = native_region_jump_trigger_view_seconds(source_song, pending_jump);
         if jump_debug_logging_enabled() {
             eprintln!(
                 "[LT_JUMP_DEBUG][state] native_marker_schedule target={} source_execute={:.9} view_execute={:.9} view_target={:?}",

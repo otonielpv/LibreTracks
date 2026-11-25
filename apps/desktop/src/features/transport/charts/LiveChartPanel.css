@@ -198,6 +198,12 @@
   font-size: 0.7rem;
 }
 
+.lt-live-chart-hint {
+  margin: 0 0 0.6rem;
+  color: rgb(var(--lt-c-8a9893, 138 152 147));
+  font-size: 0.75rem;
+}
+
 .lt-live-chart-empty-actions {
   display: flex;
   flex-wrap: wrap;
@@ -345,6 +351,20 @@
   font-weight: 700;
 }
 
+/* A focus of several lines (2, 3 or the whole section) is one block: no gap
+   or rounded corners between its lines. */
+.lt-chart-line.is-current:has(+ .lt-chart-line.is-current) {
+  margin-bottom: 0;
+  padding-bottom: 0.35em;
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.lt-chart-line.is-current + .lt-chart-line.is-current {
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
+}
+
 .lt-chart-comment {
   margin: 0 0 0.3em;
   color: rgb(var(--lt-c-8fa29c, 143 162 156));
@@ -423,7 +443,7 @@
 
 .lt-chart-editor-body {
   display: grid;
-  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
   align-items: start;
   gap: 1rem;
   min-height: 0;
@@ -521,11 +541,26 @@
 
 /* Fixed columns on every row: with an "auto" last column, a marker without
    lyrics (no times badge) got a wider, shifted select than the rest. */
-.lt-chart-editor-links li {
+.lt-chart-editor-links li,
+.lt-chart-editor-links-head {
   display: grid;
-  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.3fr) 12.5rem;
+  grid-template-columns: minmax(5rem, 0.9fr) minmax(7rem, 1.3fr) 10.5rem;
   align-items: center;
   gap: 0.45rem;
+}
+
+/* Column names: the song's markers, the sheet's sections, passes and times. */
+.lt-chart-editor-links-head {
+  padding-bottom: 0.3rem;
+  border-bottom: 1px solid rgb(var(--lt-c-ffffff, 255 255 255) / 0.06);
+  color: rgb(var(--lt-c-bacac5, 186 202 197));
+  font: 600 10px/1.3 "Space Grotesk", sans-serif;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.lt-chart-editor-links-head span {
+  min-width: 0;
 }
 
 .lt-chart-editor-times {
@@ -816,6 +851,10 @@
     grid-template-columns: minmax(0, 1fr) auto;
     row-gap: 0.25rem;
   }
+
+  .lt-chart-editor-links-head {
+    display: none;
+  }
   .lt-chart-editor-links li .lt-chart-editor-marker {
     grid-column: 1 / -1;
   }
@@ -841,6 +880,12 @@
   white-space: nowrap;
 }
 
+/* "Even spread" wraps instead of being cut when the column is narrow. */
+.lt-chart-editor-extra .lt-chart-editor-times.is-auto {
+  white-space: normal;
+  line-height: 1.15;
+}
+
 .lt-chart-editor-links select.lt-chart-editor-passes {
   flex: none;
   width: auto;
@@ -851,4 +896,153 @@
   color: var(--lt-accent);
   padding: 0.3rem 0.35rem;
   font: 700 0.72rem/1 "Space Grotesk", sans-serif;
+}
+
+/* "Follow" menu in the lyrics toolbar (LyricsFollowMenu). Portalled by
+   PopoverShell so the panel never clips; above full-screen lyrics (z 80). */
+.lt-lyrics-follow {
+  position: relative;
+  display: inline-flex;
+}
+
+.lt-pads-popover.lt-lyrics-follow-panel {
+  z-index: 95;
+  width: 22rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 0.75rem;
+}
+
+.lt-lyrics-follow-header {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: var(--lt-accent);
+  font: 700 0.72rem/1 "Space Grotesk", sans-serif;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.lt-lyrics-follow-header .material-symbols-outlined {
+  font-size: 16px;
+}
+
+.lt-lyrics-follow-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.lt-lyrics-follow-section + .lt-lyrics-follow-section {
+  padding-top: 0.75rem;
+  border-top: 1px solid rgb(var(--lt-c-ffffff, 255 255 255) / 0.08);
+}
+
+.lt-lyrics-follow-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  min-height: 1.5rem;
+}
+
+.lt-lyrics-follow-label {
+  color: var(--lt-accent-soft);
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+/* "Like all songs": a switch, not another option. */
+.lt-lyrics-follow-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.15rem 0.2rem;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: rgb(var(--lt-accent-soft-rgb) / 0.65);
+  font-size: 0.74rem;
+  cursor: pointer;
+}
+
+.lt-lyrics-follow-switch:hover {
+  color: var(--lt-accent-soft);
+}
+
+.lt-lyrics-follow-switch-track {
+  position: relative;
+  width: 1.75rem;
+  height: 1rem;
+  border-radius: 999px;
+  background: rgb(var(--lt-c-ffffff, 255 255 255) / 0.16);
+  transition: background 120ms ease;
+}
+
+.lt-lyrics-follow-switch-thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 0.75rem;
+  height: 0.75rem;
+  border-radius: 50%;
+  background: var(--lt-accent-soft);
+  transition: transform 120ms ease;
+}
+
+.lt-lyrics-follow-switch.is-on .lt-lyrics-follow-switch-track {
+  background: var(--lt-accent);
+}
+
+.lt-lyrics-follow-switch.is-on .lt-lyrics-follow-switch-thumb {
+  transform: translateX(0.75rem);
+  background: rgb(var(--lt-c-0a0a0a, 10 10 10));
+}
+
+/* Segmented control: one track, the lit segment filled. */
+.lt-lyrics-follow-segments {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 2px;
+  padding: 2px;
+  border-radius: 6px;
+  background: rgb(var(--lt-c-ffffff, 255 255 255) / 0.06);
+}
+
+.lt-lyrics-follow-segments button {
+  min-height: 2rem;
+  padding: 0 0.25rem;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: rgb(var(--lt-accent-soft-rgb) / 0.7);
+  font-size: 0.76rem;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease;
+}
+
+.lt-lyrics-follow-segments button:hover {
+  background: rgb(var(--lt-c-ffffff, 255 255 255) / 0.08);
+  color: var(--lt-accent-soft);
+}
+
+.lt-lyrics-follow-segments button.is-active {
+  background: var(--lt-accent);
+  color: rgb(var(--lt-c-0a0a0a, 10 10 10));
+}
+
+/* The song follows all songs: show which one, without claiming it. */
+.lt-lyrics-follow-segments.is-inherited button.is-active {
+  background: rgb(var(--lt-accent-rgb) / 0.16);
+  color: var(--lt-accent);
+  box-shadow: inset 0 0 0 1px rgb(var(--lt-accent-rgb) / 0.4);
+}
+
+.lt-mobile .lt-lyrics-follow-segments button {
+  min-height: 2.5rem;
 }

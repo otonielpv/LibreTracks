@@ -7,15 +7,73 @@
 import SiteLayout from "../layouts/SiteLayout.astro";
 
 interface Props {
-  lang: "es" | "en";
+  lang: "es" | "en" | "pt";
 }
 
 const { lang } = Astro.props;
 const es = lang === "es";
-const docs = es ? "/es/docs" : "/docs";
-const cards = `/guide/cards/${lang}`;
+const pt = lang === "pt";
+const docs = es ? "/es/docs" : pt ? "/pt/docs" : "/docs";
+// The card images carry app screenshots, and the app has no Portuguese UI.
+const cards = `/guide/cards/${pt ? "en" : lang}`;
 
-const t = es
+const PT = {
+  t: {
+    title: "Guias do LibreTracks: aprenda a usar passo a passo",
+    description:
+      "Guias passo a passo do LibreTracks com vídeo e capturas: sua primeira música, o celular, click e guia só nos fones, marcadores e guia falada, o show ao vivo, tom e andamento, vídeo, Remote e compartilhar sessões.",
+    eyebrow: "Guias",
+    heading: "Aprenda o LibreTracks passo a passo",
+    intro:
+      "Comece pelo vídeo da sua primeira música e siga na ordem: cada guia leva à página com as capturas de tudo o que você precisa tocar.",
+    startHere: "Comece aqui",
+    video: "Vídeo",
+    walkthroughs: "Guias passo a passo",
+    walkthroughsIntro: "Na ordem em que você vai precisar deles.",
+    articles: "Planejar o show",
+    articlesIntro: "Artigos para pensar o sistema inteiro antes de chegar ao local.",
+    reference: "Procurando um botão específico?",
+    referenceBody: "A documentação explica a tela inteira, botão por botão.",
+    referenceCta: "Ir para a documentação",
+    read: "Ver o guia",
+  },
+  featured: [
+    {
+      href: `${docs}/start/first-song/`,
+      image: `${cards}/video-desktop.webp`,
+      meta: "Vídeo · 4 min · Computador",
+      title: "Sua primeira música",
+      body: "Dos stems ao palco: criar a sessão, trazer o áudio, marcadores, click, guia falada e tocar na Visão Live.",
+    },
+    {
+      href: `${docs}/mobile/`,
+      image: `${cards}/video-mobile.webp`,
+      meta: "Vídeo · 3 min · Celular e tablet",
+      title: "Primeiros passos no celular",
+      body: "A mesma música montada pelo celular ou tablet, no Android e no iPhone/iPad.",
+    },
+  ],
+  walkthroughs: [
+    { href: `${docs}/tasks/library/`, image: "library", title: "Trazer o áudio e montar músicas", body: "Importe os stems, organize em pastas e arraste uma pasta para criar a música com uma faixa por arquivo." },
+    { href: `${docs}/audio-routing-metronome/`, image: "routing", title: "Click e guia só nos fones", body: "Escolha a interface, ative as saídas e mande a música para a mesa e o click para a banda." },
+    { href: `${docs}/tasks/markers/`, image: "markers", title: "Marcadores e guia falada", body: "Seções para saltar, avisos para a banda e uma voz que anuncia cada parte e conta a entrada." },
+    { href: `${docs}/live-view/`, image: "live", title: "Tocar ao vivo", body: "A Visão Live, saltos para marcadores e músicas, Vamp para estender um final e cancelar um salto a tempo." },
+    { href: `${docs}/pitch-and-warp/`, image: "pitch", title: "Mudar tom e andamento", body: "Transponha uma música sem desafinar o click e a guia, ou toque mais rápido sem mudar o tom." },
+    { href: `${docs}/tasks/video/`, image: "video", title: "Projetar vídeo", body: "Vídeos sincronizados com a música no projetor ou na TV, com o assistente de tela e o preto de emergência." },
+    { href: `${docs}/remote-control/`, image: "remote", title: "Controlar pelo celular", body: "O Remote no navegador do celular ou tablet: transporte, saltos e mixagem para a banda inteira." },
+    { href: `${docs}/integration-ecosystem/`, image: "share", title: "Levar a sessão para outro aparelho", body: "Exporte uma música ou a sessão inteira com o áudio, passe para o celular ou envie para o seu Google Drive." },
+  ],
+  articles: [
+    { href: "/pt/guias/tocar-playback-ao-vivo/", meta: "4 passos · 6 min", title: "Como tocar com playback ao vivo", body: "Stems, click, guia falada, ordem das músicas, ensaio e um plano B." },
+    { href: "/pt/guias/roteamento-audio-multitrack/", meta: "Checklist · 5 min", title: "Roteamento de áudio multitrack ao vivo", body: "Planeje as saídas, separe a mixagem do público dos avisos e confira tudo antes da passagem de som." },
+    { href: "/pt/guias/programa-playback-ao-vivo/", meta: "6 passos · 6 min", title: "Programa grátis para playback ao vivo", body: "O que faz um programa de playback, como preparar os stems, o click só para a banda e como tocar pelo computador ou pelo celular." },
+    { href: "/pt/guias/multitracks-gratis/", meta: "5 passos · 5 min", title: "Multitracks grátis: onde conseguir", body: "Fontes legais de multitracks gratuitos, como fazer os seus a partir da sua DAW ou gravações e como tocá-los." },
+  ],
+};
+
+const t = pt
+  ? PT.t
+  : es
   ? {
       title: "Guías de LibreTracks: aprende a usarlo paso a paso",
       description:
@@ -55,7 +113,9 @@ const t = es
       read: "Read the guide",
     };
 
-const featured = es
+const featured = pt
+  ? PT.featured
+  : es
   ? [
       {
         href: `${docs}/start/first-song/`,
@@ -89,7 +149,9 @@ const featured = es
       },
     ];
 
-const walkthroughs = es
+const walkthroughs = pt
+  ? PT.walkthroughs
+  : es
   ? [
       { href: `${docs}/tasks/library/`, image: "library", title: "Traer el audio y montar canciones", body: "Importa los stems, ordénalos en carpetas y arrastra una carpeta para crear la canción con una pista por audio." },
       { href: `${docs}/audio-routing-metronome/`, image: "routing", title: "Click y guía solo a los oídos", body: "Elige la interfaz, activa sus salidas y manda la música a la mesa y el click a la banda." },
@@ -111,7 +173,9 @@ const walkthroughs = es
       { href: `${docs}/integration-ecosystem/`, image: "share", title: "Take the session to another computer", body: "Export a song or the whole session with its audio, move it to your phone or upload it to Google Drive." },
     ];
 
-const articles = es
+const articles = pt
+  ? PT.articles
+  : es
   ? [
       { href: "/es/guias/lanzar-pistas-en-directo/", meta: "4 pasos · 6 min", title: "Cómo lanzar pistas en directo", body: "Stems, click, voz guía, orden de canciones, ensayo y un plan de respaldo." },
       { href: "/es/guias/salidas-audio-multitrack/", meta: "Checklist · 5 min", title: "Cómo rutear audio multitrack en directo", body: "Planifica las salidas, separa la mezcla del público de los avisos y compruébalo antes de la prueba de sonido." },

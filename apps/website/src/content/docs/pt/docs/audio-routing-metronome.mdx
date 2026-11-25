@@ -1,0 +1,114 @@
+---
+title: Saídas de áudio e metrônomo
+head:
+  - tag: title
+    content: "Saídas da Interface de Áudio, Click e Metrônomo | LibreTracks"
+description: "Como escolher a interface de áudio no LibreTracks, ativar as saídas, mandar cada faixa para uma saída diferente (click e guia para os fones, música para a mesa) e configurar o metrônomo."
+---
+
+import Clip from "../../../../components/guide/Clip.astro";
+
+Ao vivo, o comum é separar o que o público ouve do que a banda ouve: a
+**música** vai para a mesa de som e o **click** e a **guia** vão só para os
+fones in-ear dos músicos. O LibreTracks faz isso mandando cada faixa para uma
+saída diferente da sua interface de áudio.
+
+O metrônomo e a interface de áudio não são alternativas: o **metrônomo** é o
+click que o LibreTracks gera a partir do andamento e da fórmula de compasso de
+cada música, e a **interface de áudio** é o hardware que o leva, junto com a
+música, para fora do computador. Com quatro saídas você já tem 1-2 para a mesa
+e 3-4 para click e guia.
+
+Se você procura um plano completo, dos stems à mesa, com níveis e passagem de
+som, veja o guia
+[Roteamento de áudio multitrack ao vivo](/pt/guias/roteamento-audio-multitrack/).
+
+## 1. Escolha a interface de áudio
+
+Em **Settings › Audio** escolha o sistema de áudio e o dispositivo. Para o ao
+vivo, uma interface dedicada é melhor que a placa de som do computador. O que
+cada ajuste significa está em [Settings › Audio](/pt/docs/interface/settings/#audio).
+
+## 2. Ative as saídas
+
+Na mesma aba, **Hardware outputs** mostra todos os canais que a sua interface
+realmente tem: dois numa interface estéreo, oito, dezesseis ou trinta e dois em
+interfaces USB e mesas digitais.
+
+![Hardware outputs em Settings › Audio](/guide/desktop-en/settings-audio-2.png)
+
+1. Marque os canais que você vai usar (**Select all** e **Clear** ajudam).
+2. Aperte **Apply**. A interface reabre uma única vez com todas as mudanças;
+   **Discard** deixa tudo como estava.
+
+Só os canais marcados aparecem depois como saídas nas faixas.
+
+## 3. Mande cada faixa para a sua saída
+
+No cabeçalho de cada faixa, o seletor de saída:
+
+![O seletor de saída de uma faixa](/guide/desktop-en/track-route-list.png)
+
+- **Master**: a saída principal (os dois primeiros canais). Passa pelo master
+  da música.
+- **Out 3**, **Out 4**…: um canal físico, em mono.
+- **Out 3/4**…: um par de canais, em estéreo.
+- **Inherited (Folder)**: só em faixas dentro de uma pasta. A faixa sai por
+  onde a pasta dela sair. Quando você coloca uma faixa numa pasta, ela fica
+  assim sozinha.
+
+:::tip[Dica: roteie a pasta, não cada faixa]
+Coloque o click e a guia numa pasta, mande a pasta para a saída dos fones e
+deixe as faixas em *Inherited (Folder)*. Se amanhã você trocar de interface, só
+mexe num seletor.
+:::
+
+Uma faixa estéreo que vai para uma saída mono toca inteira se você escolher
+**Channels… › Mono (sum)** no menu dela (botão direito).
+
+Uma divisão típica:
+
+| O quê | Saída |
+| --- | --- |
+| Stems da música | Master (para a mesa) |
+| Click, contagens, guias faladas | Out 3/4 (para os fones) |
+| Metrônomo e guia falada | A mesma saída dos fones |
+
+## O metrônomo
+
+O LibreTracks tem o seu próprio metrônomo: não é preciso importar nenhum
+arquivo de click. Ele segue o [andamento e a fórmula de compasso](/pt/docs/tasks/tempo/)
+de cada música, incluindo as mudanças no meio da música.
+
+- O botão **Click** da barra superior o liga e desliga.
+- A **seta** ao lado abre os ajustes dele.
+
+<Clip
+  src="/guide/desktop-en/metronome-settings.mp4"
+  poster="/guide/desktop-en/metronome-settings.webp"
+  caption="A seta ao lado de “Click” abre os ajustes do metrônomo."
+/>
+
+![Os ajustes do metrônomo](/guide/desktop-en/metronome-popover.png)
+
+- **Enable metronome**: o mesmo que o botão *Click*.
+- **Metronome output**: para qual saída ele vai. Coloque na dos fones, não no
+  Master.
+- **Metronome volume**.
+- **Accent enabled**: o primeiro tempo de cada compasso soa diferente. O
+  **som** e a **afinação** dele são escolhidos à parte.
+- **Beat sound** e **Beat pitch**: os demais tempos.
+- **Subdivision**: colcheias, tercinas ou semicolcheias entre os tempos, com
+  som, afinação e volume próprios. Útil em baladas lentas.
+
+O metrônomo não passa pelo master da música: abaixar o master de uma música
+não abaixa o click.
+
+## A guia falada
+
+A voz que anuncia as seções tem saída e volume próprios, na seta ao lado de
+**Guide**. Veja [Guia falada](/pt/docs/voice-guide/).
+
+## MIDI
+
+Controladores, pedais e faixas MIDI estão explicados em [MIDI](/pt/docs/tasks/midi/).

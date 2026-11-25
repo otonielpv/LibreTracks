@@ -70,7 +70,11 @@ export function PackCatalog({ onInstalled, confirm }: { onInstalled?: () => void
   return (
     <div className="lt-pack-catalog" data-testid="pack-catalog">
       <span className="lt-rhythm-field__label">{t("rhythm.packs.title")}</span>
-      {catalog.offline ? <p className="lt-pack-catalog__note">{t("rhythm.packs.offline")}</p> : null}
+      {catalog.offline ? (
+        <p className="lt-pack-catalog__note">{t("rhythm.packs.offline")}</p>
+      ) : catalog.packs.length === 0 ? (
+        <p className="lt-pack-catalog__note">{t("rhythm.packs.none")}</p>
+      ) : null}
       {catalog.packs.map((pack) => {
         const p = progress[pack.id];
         const busy = p !== undefined && !p.done;

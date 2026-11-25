@@ -1,0 +1,109 @@
+---
+title: Compact View
+description: "A Compact View do LibreTracks: uma coluna por música com o botão de play e o master dela, um mixer compartilhado, arrastar áudio e pacotes, filtrar as faixas da música ativa e reordenar o repertório."
+---
+
+import Legend from "../../../../components/guide/Legend.astro";
+
+A **Compact View** mostra o mesmo projeto da DAW view, mas organizado por
+música: uma coluna por música, com os clipes, o botão de play e o volume dela,
+e um mixer embaixo. O que você muda numa visão aparece na hora na outra.
+
+É a visão para **ensaiar o repertório** e ajustar a mixagem sem se perder na
+timeline. Para editar (mover clipes, colocar marcadores, mudar andamentos) use a
+DAW view.
+
+Abra com o segundo botão da [barra de ferramentas](/pt/docs/interface/toolbar/) ou
+com <kbd>Tab</kbd>, que percorre as três visões (DAW, Compact e Live;
+<kbd>Shift</kbd>+<kbd>Tab</kbd> vai no sentido contrário).
+
+![A Compact View com os seus controles numerados](/guide/desktop-en/compact-view.png)
+
+<Legend>
+
+1. **Alça**: arraste a música por ela para levá-la a outro lugar do
+   repertório. Com a alça selecionada, as setas do teclado a movem um lugar de
+   cada vez.
+2. **Play** da música: toca na hora se nada estiver tocando, ou agenda o salto
+   para ela se outra música estiver tocando.
+3. **Nome**, BPM e tom. Clique para selecionar a música; botão direito para o
+   menu dela.
+4. **Master** da música, com o medidor.
+5. Os **clipes** da música, na ordem das faixas.
+6. **Borda da coluna**: arraste para deixar a coluna mais larga ou mais
+   estreita.
+7. **+ New song**: uma música vazia no fim do repertório.
+8. **Import .ltpkg**: adiciona uma música exportada.
+9. **Mixer** compartilhado por todas as músicas.
+
+</Legend>
+
+## Músicas
+
+- **Selecionar**: clique no cabeçalho da coluna. Os controles de transposição e
+  warp da barra de ferramentas passam a agir sobre aquela música. A coluna que
+  está tocando também leva uma barra colorida à esquerda.
+- **Tocar**: com tudo parado, o botão de play da coluna começa aquela música do
+  início. Se outra estiver tocando, ele agenda o salto com o ajuste
+  [Song Transition](/pt/docs/interface/toolbar/#song-transition), igual a
+  <kbd>Shift</kbd>+número.
+- **Menu** (botão direito no cabeçalho): renomear, tom da música, mudar o BPM,
+  exportar a música e apagá-la. Apagar uma música também apaga os clipes e as
+  mudanças de andamento dela; se ela tem clipes, pede confirmação.
+- **Reordenar**: arraste a música pela alça. Ela se move inteira, com o áudio,
+  os marcadores e o andamento.
+
+### Adicionar músicas
+
+- **+ New song**, depois das colunas: uma música vazia.
+- **Import .ltpkg**: uma música exportada, adicionada no fim.
+- **Arrastar do gerenciador de arquivos**: um `.ltpkg` solto em qualquer lugar
+  da faixa de músicas é importado no fim (uma coluna fantasma mostra onde ele
+  vai cair). Um projeto do Reaper (`.rpp`) ou do Ableton (`.als`) também pode
+  ser solto aqui.
+
+### Soltar áudio numa música
+
+Arraste áudio da [Library](/pt/docs/tasks/library/) ou do gerenciador de arquivos
+para a coluna de uma música: cada arquivo cria o seu clipe dentro daquela
+música, e a sua própria faixa se precisar. Enquanto arrasta você vê um espaço
+por arquivo.
+
+As faixas criadas assim **se apagam sozinhas quando ficam sem clipes**, então
+experimentar não deixa faixas vazias para trás. As faixas que você mesmo cria
+nunca são apagadas sozinhas.
+
+## O mixer
+
+![Uma tira do mixer compacto](/guide/desktop-en/compact-mixer.png)
+
+<Legend>
+
+1. **Nome** da faixa ou da pasta. Nas pastas, quantas faixas ela tem; expanda
+   para ver as tiras delas.
+2. **M**, **S** e **T** (mute, solo e transposição).
+3. **Pan**.
+4. **Volume** em dB, com o medidor.
+5. **Saída de áudio**.
+
+</Legend>
+
+É a mesma mixagem da DAW view e do Remote: qualquer mudança aparece nos três.
+
+- **Só as faixas da música ativa**: o botão do funil na barra de ferramentas
+  (só aparece nesta visão) esconde as tiras das faixas que não têm clipes na
+  música que está tocando. Útil em sessões com muitas músicas. Fora de qualquer
+  música, não esconde nada.
+- **Selecionar**: clique no nome de uma tira; <kbd>Ctrl</kbd>+clique e
+  <kbd>Shift</kbd>+clique para várias. O que você mexer numa vale para todas,
+  como na DAW view.
+- **Reordenar**: arraste uma tira pelo nome. Se soltar no meio de uma pasta,
+  ela vai para dentro.
+- **Menu** (botão direito): o mesmo menu de faixa da DAW view.
+- **Altura**: arraste a borda de cima do mixer para deixá-lo mais alto ou mais
+  baixo. O LibreTracks lembra.
+
+## No celular e tablet
+
+A Compact View também está no celular, com **Mixer** para abrir o mixer
+embaixo. Veja [No celular e tablet](/pt/docs/interface/mobile/#compact-view-e-live-view).

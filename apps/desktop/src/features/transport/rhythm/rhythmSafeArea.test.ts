@@ -44,6 +44,27 @@ describe("insets del notch en el panel Ritmo", () => {
     expect(rule(".lt-loop-editor .lt-step-grid .lt-step-cell")).toContain("touch-action: none");
   });
 
+  it("el panel acoplado mide lo mismo en las cuatro vistas del teléfono", () => {
+    // Antes el Setlist lo estiraba (flex 1) y el DAW le daba 62vh.
+    expect(rule(".lt-rhythm-panel--docked.lt-rhythm-panel--short")).toContain("flex: 0 0 auto");
+    expect(rule(".lt-setlist-view.is-short.has-rhythm + .lt-rhythm-panel--docked")).not.toContain("height: auto");
+    expect(rule(".lt-setlist-view.is-short.has-rhythm + .lt-rhythm-panel--docked")).not.toContain("flex: 1");
+  });
+
+  it("los pads del teléfono no se montan: sin mínimo propio y 6×2 en el acoplado", () => {
+    expect(rule(".lt-rhythm-panel--short .lt-rhythm-pad")).toContain("min-height: 0");
+    const docked = rule(".lt-rhythm-panel--docked.lt-rhythm-panel--short:not(.is-expanded) .lt-rhythm-shots__grid");
+    expect(docked).toContain("repeat(6");
+    expect(docked).toContain("repeat(2");
+  });
+
+  it("a pantalla completa cubre la ventana y aparta el contenido del notch", () => {
+    const expanded = rule(".lt-rhythm-panel.is-expanded,\n.lt-rhythm-panel--docked.lt-rhythm-panel--short.is-expanded");
+    expect(expanded).toContain("position: fixed");
+    expect(expanded).toContain("inset: 0");
+    expect(expanded).toContain("--lt-safe-area-left");
+  });
+
   it("el kit no se oculta en el teléfono", () => {
     expect(rule(".lt-loop-editor--short .lt-loop-editor__identity .lt-loop-editor__kit")).not.toContain("display: none");
   });

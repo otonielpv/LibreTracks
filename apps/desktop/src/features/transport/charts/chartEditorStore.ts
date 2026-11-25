@@ -3,6 +3,7 @@ import { create } from "zustand";
 import type { SectionMarkerSummary, SongChart, SongRegionSummary } from "@libretracks/shared/models";
 
 import type { AdjustInput } from "../../chartSources/chartImportStore";
+import type { ChartEditorMode } from "./simple/editorMode";
 
 /**
  * El editor de letra y acordes abierto, fuera del panel que lo abre.
@@ -25,6 +26,8 @@ export type ChartEditorSession = {
   /** Una hoja recién traída tal cual (Planning Center desde el menú de la
    * canción): el editor la muestra y abre «Ajustar a la secuencia». */
   initialImport?: AdjustInput;
+  /** "Write lyrics" opens the simple editor whatever was used last. */
+  initialMode?: ChartEditorMode;
 };
 
 type ChartEditorState = {

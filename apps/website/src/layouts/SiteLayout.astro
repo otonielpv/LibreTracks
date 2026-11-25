@@ -13,18 +13,18 @@ interface Props {
   schema?: boolean;
   /** Additional page-specific JSON-LD objects. */
   structuredData?: Record<string, unknown> | Record<string, unknown>[];
+  /** AggregateRating for the SoftwareApplication schema; only on pages that show the rating. */
+  aggregateRating?: Record<string, unknown>;
 }
 
-const { title, description, lang = "en", noIndex = false, image, schema = false, structuredData } = Astro.props;
+const { title, description, lang = "en", noIndex = false, image, schema = false, structuredData, aggregateRating } = Astro.props;
 const isSpanish = lang === "es";
 const isPortuguese = lang === "pt";
-// Pick the copy for the page language. Portuguese covers only the pages with
-// the most Brazilian traffic (home, download, Playback comparison), so every
-// other link from a /pt/ page goes to the English section.
+// Pick the copy for the page language.
 const L = (en: string, es: string, pt: string) => (isSpanish ? es : isPortuguese ? pt : en);
 const socialCard = image ?? (isSpanish ? "/og-image.png" : "/og-image-en.png");
 const prefix = isSpanish ? "/es" : isPortuguese ? "/pt" : "";
-const sectionPrefix = isSpanish ? "/es" : "";
+const sectionPrefix = prefix;
 
 const currentPath = Astro.url.pathname;
 
@@ -36,27 +36,30 @@ const PAGE_GROUPS: Partial<Record<Locale, string>>[] = [
   { en: "/", es: "/es", pt: "/pt" },
   { en: "/download", es: "/es/download", pt: "/pt/download" },
   { en: "/playback-multitracks-alternative", es: "/es/alternativa-playback-multitracks", pt: "/pt/alternativa-playback-multitracks" },
-  { en: "/alternatives", es: "/es/alternativas" },
-  { en: "/ableton-live-alternative", es: "/es/alternativa-ableton-live" },
-  { en: "/reaper-live-alternative", es: "/es/alternativa-reaper-directo" },
-  { en: "/prime-worship-alternative", es: "/es/alternativa-prime-worship" },
-  { en: "/ableset-alternative", es: "/es/alternativa-ableset" },
-  { en: "/guides", es: "/es/guias" },
-  { en: "/guides/run-backing-tracks-live", es: "/es/guias/lanzar-pistas-en-directo" },
-  { en: "/guides/multitrack-audio-routing", es: "/es/guias/salidas-audio-multitrack" },
-  { en: "/guides/backing-track-software", es: "/es/guias/programa-secuencias-en-vivo" },
-  { en: "/guides/free-multitracks", es: "/es/guias/multitracks-gratis" },
+  { en: "/alternatives", es: "/es/alternativas", pt: "/pt/alternativas" },
+  { en: "/ableton-live-alternative", es: "/es/alternativa-ableton-live", pt: "/pt/alternativa-ableton-live" },
+  { en: "/reaper-live-alternative", es: "/es/alternativa-reaper-directo", pt: "/pt/alternativa-reaper-ao-vivo" },
+  { en: "/prime-worship-alternative", es: "/es/alternativa-prime-worship", pt: "/pt/alternativa-prime-worship" },
+  { en: "/ableset-alternative", es: "/es/alternativa-ableset", pt: "/pt/alternativa-ableset" },
+  { en: "/guides", es: "/es/guias", pt: "/pt/guias" },
+  { en: "/guides/run-backing-tracks-live", es: "/es/guias/lanzar-pistas-en-directo", pt: "/pt/guias/tocar-playback-ao-vivo" },
+  { en: "/guides/multitrack-audio-routing", es: "/es/guias/salidas-audio-multitrack", pt: "/pt/guias/roteamento-audio-multitrack" },
+  { en: "/guides/backing-track-software", es: "/es/guias/programa-secuencias-en-vivo", pt: "/pt/guias/programa-playback-ao-vivo" },
+  { en: "/guides/free-multitracks", es: "/es/guias/multitracks-gratis", pt: "/pt/guias/multitracks-gratis" },
   // English only: the stats page has no Spanish twin to switch to.
   { en: "/download/stats" },
+  { en: "/admin/analytics", es: "/es/admin/analytics" },
 ];
 
 const bare = currentPath.replace(/\/$/, "") || "/";
 const group = PAGE_GROUPS.find((row) => Object.values(row).includes(bare));
-// Pages outside the table (privacy, stats) exist in en and es under the same
-// slug, so the counterpart is the `/es` prefix swapped in or out.
+// Pages outside the table (privacy) exist in every locale under the same
+// slug, so the counterpart is the locale prefix swapped in or out.
+const neutralPath = currentPath.replace(/^\/(es|pt)(?=\/|$)/, "") || "/";
 const alternates: Partial<Record<Locale, string>> = group ?? {
-  en: currentPath.replace(/^\/es(?=\/|$)/, "") || "/",
-  es: isSpanish ? currentPath : currentPath === "/" ? "/es/" : `/es${currentPath}`,
+  en: neutralPath,
+  es: neutralPath === "/" ? "/es/" : `/es${neutralPath}`,
+  pt: neutralPath === "/" ? "/pt/" : `/pt${neutralPath}`,
 };
 
 // hreflang must point at the other page's canonical URL exactly, and canonicals
@@ -113,6 +116,7 @@ const softwareSchema = {
     name: "otonielpv",
     url: "https://github.com/otonielpv",
   },
+  ...(aggregateRating ? { aggregateRating } : {}),
 };
 
 // Google picks the site name it shows above the URL in search results from this
@@ -204,10 +208,10 @@ const pageSchemas = structuredData
         </a>
         <nav class="nav-links" aria-label={L("Primary navigation", "Navegación principal", "Navegação principal")}>
           <a href={`${sectionPrefix}/docs/`}>{L("Docs", "Documentación", "Documentação")}</a>
-          <a href={`${sectionPrefix}/${isSpanish ? "guias" : "guides"}/`}>
+          <a href={`${sectionPrefix}/${isSpanish || isPortuguese ? "guias" : "guides"}/`}>
             {L("Guides", "Guías", "Guias")}
           </a>
-          <a href={`${sectionPrefix}/${isSpanish ? "alternativas" : "alternatives"}/`}>
+          <a href={`${sectionPrefix}/${isSpanish || isPortuguese ? "alternativas" : "alternatives"}/`}>
             {L("Alternatives", "Alternativas", "Alternativas")}
           </a>
           {languageLinks.length > 1 && (
@@ -310,8 +314,8 @@ const pageSchemas = structuredData
           <nav class="site-footer-links" aria-label={L("Footer navigation", "Enlaces del pie", "Links do rodapé")}>
             <a href={`${prefix}/download/`}>{L("Downloads", "Descargas", "Downloads")}</a>
             <a href={`${sectionPrefix}/docs/`}>{L("Docs", "Documentación", "Documentação")}</a>
-            <a href={`${sectionPrefix}/${isSpanish ? "guias" : "guides"}/`}>{L("Guides", "Guías", "Guias")}</a>
-            <a href={`${sectionPrefix}/${isSpanish ? "alternativas" : "alternatives"}/`}>
+            <a href={`${sectionPrefix}/${isSpanish || isPortuguese ? "guias" : "guides"}/`}>{L("Guides", "Guías", "Guias")}</a>
+            <a href={`${sectionPrefix}/${isSpanish || isPortuguese ? "alternativas" : "alternatives"}/`}>
               {L("Alternatives", "Alternativas", "Alternativas")}
             </a>
             <a href={`${sectionPrefix}/privacy/`}>{L("Privacy", "Privacidad", "Privacidade")}</a>

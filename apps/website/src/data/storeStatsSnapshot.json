@@ -1,0 +1,11 @@
+{
+  "$comment": "Último recuento conocido, solo para builds sin acceso a /api/store/stats (primer despliegue, sin red). La web siempre intenta la API primero. Ver src/lib/storeStats.ts.",
+  "updatedAt": "2026-11-25T09:00:00.000Z",
+  "ratings": {
+    "count": 18,
+    "average": 5,
+    "appstore": { "count": 9, "average": 5, "countries": 7 },
+    "play": { "count": 9, "average": 5 }
+  },
+  "downloads": { "appstore": 1092, "play": 962, "github": 7327, "total": 9381 }
+}

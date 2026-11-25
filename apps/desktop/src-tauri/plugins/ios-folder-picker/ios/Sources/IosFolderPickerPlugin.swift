@@ -3,6 +3,7 @@ import Foundation
 import ObjectiveC.runtime
 import PhotosUI
 import Security
+import StoreKit
 import Tauri
 import UIKit
 import UniformTypeIdentifiers
@@ -568,6 +569,21 @@ final class IosFolderPickerPlugin: Plugin {
   // publishes it as one more endpoint, so midir lists it with no further
   // work. Resolves when the user closes the panel (Done or swipe down), so
   // Rust can re-list ports right then.
+
+  // Asks iOS for the "rate this app" sheet. iOS decides on its own whether to
+  // show it (at most 3 times a year per user) and never says if it did, so
+  // this resolves as soon as the request is handed over. Rust only calls it
+  // after checking that no audio is playing (commands/store_review.rs).
+  @objc public func requestStoreReview(_ invoke: Invoke) throws {
+    DispatchQueue.main.async {
+      guard let scene = self.activeViewController()?.view.window?.windowScene else {
+        invoke.reject("No active window scene for the review request")
+        return
+      }
+      SKStoreReviewController.requestReview(in: scene)
+      invoke.resolve()
+    }
+  }
 
   private var bluetoothMidiInvoke: Invoke?
   private var bluetoothMidiNavigation: UINavigationController?

@@ -121,8 +121,12 @@ function isChordTokens(tokens: readonly string[]): boolean {
  * bracketed chord at the very end ("Gracia Sublime [C]") is a key annotation,
  * not inline chords.
  */
-function isInlineChordPro(text: string): boolean {
-  const matches = [...text.matchAll(/\[([^\]\s]{1,16})\]/g)].filter((match) => isChord(match[1]));
+function isInlineChordPro(text: string, exact = false): boolean {
+  // Typed in the simple editor, brackets always mean ChordPro, even around
+  // something that is not a chord name.
+  const matches = exact
+    ? [...text.matchAll(/\[([^\]]{1,16})\]/g)]
+    : [...text.matchAll(/\[([^\]\s]{1,16})\]/g)].filter((match) => isChord(match[1]));
   if (matches.length === 0) return false;
   if (matches.length >= 2) return true;
   const match = matches[0];
@@ -165,13 +169,13 @@ type Classified =
   | { type: "inline"; text: string }
   | { type: "lyrics"; line: SourceLine };
 
-function classify(line: SourceLine, measure: MeasureText): Classified {
+function classify(line: SourceLine, measure: MeasureText, exact = false): Classified {
   const text = lineText(line);
   if (!text) return { type: "blank" };
-  if (META_RE.test(text)) return { type: "meta" };
+  if (!exact && META_RE.test(text)) return { type: "meta" };
   // A lone icon ("×", "•", "★") copied from a web page.
-  if ([...text].length === 1 && !/[\p{L}\p{N}|/%-]/u.test(text)) return { type: "meta" };
-  if (isInlineChordPro(text) && !parseSectionHeader(text)) return { type: "inline", text };
+  if (!exact && [...text].length === 1 && !/[\p{L}\p{N}|/%-]/u.test(text)) return { type: "meta" };
+  if (isInlineChordPro(text, exact) && !parseSectionHeader(text)) return { type: "inline", text };
   const header = parseSectionHeader(text);
   if (header) return { type: "header", label: header.label, chords: [] };
 
@@ -181,6 +185,9 @@ function classify(line: SourceLine, measure: MeasureText): Classified {
     return { type: "chords", chords: lineWords.filter((word) => isChord(word.text)) };
   }
   if (isTabLine(text)) return { type: "tab", text: tabText(line, measure) };
+  // One part typed by hand: a header is a line with only the name; "INTRO
+  // C G" written inside a part is text, not a new part.
+  if (exact) return { type: "lyrics", line };
 
   // "INTRO; son notas para mejor comprensión" / "Coro: más suave": a header,
   // then a note for the musician.
@@ -217,7 +224,9 @@ function mergeChords(
   chords: readonly Word[],
   lyric: SourceLine,
   measure: MeasureText,
+  exact = false,
 ): ChartSegment[] {
+  if (exact) return mergeChordsExact(chords, lyric);
   // The lyric as one string, with each character's x.
   let text = "";
   const xs: number[] = [];
@@ -295,6 +304,36 @@ function mergeChords(
   return trimSegments(segments);
 }
 
+/**
+ * Text typed in a monospaced box (the simple lyrics editor): every chord sits
+ * exactly over the character it starts on, so nothing is snapped or spread.
+ * A chord longer than its syllable pushes the next one right; the editor pads
+ * the lyric for it with spaces between words and with `_` inside a word
+ * ("Gsus4 C" over "a____mor"), and that padding is dropped here.
+ */
+function mergeChordsExact(chords: readonly Word[], lyric: SourceLine): ChartSegment[] {
+  const words = [...lyric.fragments].sort((left, right) => left.x - right.x).map((fragment) => fragment.text).join("");
+  // A chord past the end of the words keeps the space before it ("casa [B]").
+  const text = words.padEnd(Math.max(0, ...chords.map((chord) => Math.round(chord.x))), " ");
+  const positions = chords
+    .map((chord) => ({ chord: chord.text, index: Math.max(0, Math.round(chord.x)) }))
+    .sort((left, right) => left.index - right.index);
+  const segments: ChartSegment[] = [];
+  let cursor = 0;
+  let pending: string | null = null;
+  for (const { chord, index } of positions) {
+    if (index > cursor || pending !== null) segments.push({ chord: pending, text: text.slice(cursor, index) });
+    pending = chord;
+    cursor = index;
+  }
+  segments.push({ chord: pending, text: text.slice(cursor) });
+  return trimSegments(
+    segments.map((segment, index) =>
+      index < segments.length - 1 ? { ...segment, text: segment.text.replace(/_+$/, "") } : segment,
+    ),
+  );
+}
+
 /** Drops the alignment padding at both ends and collapses inner runs of spaces. */
 function trimSegments(segments: ChartSegment[]): ChartSegment[] {
   const out = segments.map((segment) => ({ ...segment, text: segment.text.replace(/\s{2,}/g, " ") }));
@@ -345,10 +384,24 @@ function plainLyric(line: SourceLine): ChartLine {
   return { kind: "lyrics", segments: [{ chord: null, text: lineText(line) }] };
 }
 
+export type AnalyzeOptions = {
+  /**
+   * The body of one part typed in a monospaced box, not a whole sheet: chords
+   * sit exactly over their character (no snapping), there is no title, key or
+   * clutter to find, and every line the user wrote is kept.
+   */
+  exact?: boolean;
+};
+
 /** Lines → chart document. Exported for the tests; use the importers below. */
-export function analyzeSongSheet(lines: readonly SourceLine[], measure: MeasureText = uniformMeasure): ChartDoc {
+export function analyzeSongSheet(
+  lines: readonly SourceLine[],
+  measure: MeasureText = uniformMeasure,
+  options: AnalyzeOptions = {},
+): ChartDoc {
+  const exact = options.exact === true;
   const doc: ChartDoc = { title: null, artist: null, key: null, sections: [] };
-  const all = lines.map((line) => ({ line, kind: classify(line, measure) }));
+  const all = lines.map((line) => ({ line, kind: classify(line, measure, exact) }));
   const musicPages = new Set<number>();
   const lyricsPerPage = new Map<number, number>();
   for (const { line, kind } of all) {
@@ -376,7 +429,7 @@ export function analyzeSongSheet(lines: readonly SourceLine[], measure: MeasureT
     ({ kind, line }) => kind.type === "lyrics" && /\p{L}{2}/u.test(lineText(line)),
   );
   const consumed = new Set<SourceLine>();
-  if (preambleLyrics.length > 0) {
+  if (!exact && preambleLyrics.length > 0) {
     const biggest = preambleLyrics.reduce((best, entry) => (entry.line.size > best.line.size ? entry : best));
     const others = preambleLyrics.filter((entry) => entry !== biggest);
     const bodySize = lines.reduce((sum, line) => sum + line.size, 0) / Math.max(1, lines.length);
@@ -425,7 +478,7 @@ export function analyzeSongSheet(lines: readonly SourceLine[], measure: MeasureT
     if (consumed.has(line)) continue;
     // Many sheets repeat the title at the top of every page.
     if (doc.title && lineText(line).startsWith(doc.title) && kind.type !== "header") continue;
-    const keyMatch = KEY_RE.exec(lineText(line));
+    const keyMatch = exact ? null : KEY_RE.exec(lineText(line));
     if (keyMatch) {
       doc.key ??= keyMatch[1];
       continue;
@@ -448,9 +501,12 @@ export function analyzeSongSheet(lines: readonly SourceLine[], measure: MeasureT
         break;
       case "chords": {
         const next = classified[index + 1];
-        if (next && next.kind.type === "lyrics" && !next.line.breakBefore && !consumed.has(next.line)) {
+        // In a typed part, a lyric that happens to be a part's name ("Coro"
+        // under its chord) is still the lyric of that chord line.
+        const lyricNext = next && (next.kind.type === "lyrics" || (exact && next.kind.type === "header"));
+        if (next && lyricNext && !next.line.breakBefore && !consumed.has(next.line)) {
           if (needsOwnSection()) open(unlabeledVerse);
-          target().lines.push({ kind: "lyrics", segments: mergeChords(kind.chords, next.line, measure) });
+          target().lines.push({ kind: "lyrics", segments: mergeChords(kind.chords, next.line, measure, exact) });
           index += 1;
         } else {
           target().lines.push(chordOnlyLine(kind.chords));

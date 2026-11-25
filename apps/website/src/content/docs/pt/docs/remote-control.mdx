@@ -1,0 +1,244 @@
+---
+title: Remote personalizado
+description: "Controle o LibreTracks pelo navegador de um tablet ou celular: conectar, transporte, saltos, marcadores, mixer, metrônomo, guia e pads, e como montar as suas próprias abas de widgets."
+---
+
+import Legend from "../../../../components/guide/Legend.astro";
+
+O **Remote** é o LibreTracks no navegador de outro aparelho: um tablet na
+estante de partitura, o celular do baterista, o do diretor musical. Não há
+nada para instalar. Ele controla a mesma sessão que você tem aberta no
+computador: o que você aperta no Remote acontece no computador, e o que
+acontece no computador aparece no Remote.
+
+O Remote **não toca áudio**. O som sempre sai do computador; o Remote é só um
+controle.
+
+## Conectar
+
+1. No LibreTracks, aperte **Remote** na barra lateral.
+2. O computador e o tablet precisam estar na **mesma rede** (o mesmo Wi-Fi, ou
+   o computador cabeado no mesmo roteador).
+3. No tablet, **escaneie o QR code** com a câmera, ou digite um dos dois
+   endereços no navegador.
+
+![O painel de conexão do Remote no computador](/guide/desktop-en/remote-modal.png)
+
+- **IP URL** funciona em qualquer aparelho.
+- **Hostname URL (.local)** é mais fácil de lembrar e não muda se o roteador
+  der outro IP ao computador, mas nem todo aparelho entende: se não abrir, use
+  o do IP.
+
+Você pode conectar **vários aparelhos ao mesmo tempo**, cada um com a sua
+própria disposição de tela. O LibreTracks precisa ficar aberto no computador
+enquanto você usa o Remote.
+
+:::tip[Se não conectar]
+Confira se os dois estão na mesma rede e se o Wi-Fi não é uma rede de
+"convidados" (essas costumam isolar os aparelhos uns dos outros). No Windows,
+se o firewall estiver bloqueando o Remote, o próprio painel avisa, com um botão
+**Allow through the firewall** (o Windows pede confirmação de administrador).
+:::
+
+No **celular**, o Remote foi pensado para ser usado **na vertical**. Se você o
+abrir na horizontal, ele pede para girar, com a opção **Use it in landscape
+anyway**. No tablet funciona dos dois jeitos.
+
+## A aba Controls
+
+É a primeira coisa que você vê. Assim o LibreTracks a organiza num tablet:
+
+![A aba Controls do Remote num tablet](/guide/remote-en/remote-controls.png)
+
+<Legend>
+
+1. **Abas**: Controls, Mixer e Tools. Você pode mudá-las, adicionar mais e
+   renomeá-las (veja [Montar as suas abas](#montar-as-suas-abas)).
+2. **Estado**: um ponto verde tocando, âmbar em pausa e cinza parado. Se a
+   conexão com o computador cair, ele diz **Connecting…** ou **No connection**
+   em vez de mostrar a última coisa que ouviu.
+3. **Tela cheia**: esconde esta barra para dar todo o espaço aos controles (no
+   Android também pede tela cheia ao navegador). Fica uma pastilha com a aba
+   atual: toque nela para trocar de aba ou trazer a barra de volta.
+4. **Edit layout**: abre o editor para mover, adicionar ou tirar blocos. No
+   celular é só o lápis.
+5. **Tamanho**: **A−** e **A+** aumentam ou diminuem o Remote inteiro (quatro
+   níveis), sem mudar onde as coisas estão. Útil quando você olha de longe. No
+   celular eles ficam na barra do editor.
+6. **Indicadores**: tempo, compasso e tempo do compasso, BPM, fórmula de
+   compasso e a música que está tocando.
+7. **Transporte**: Play, Pause, Stop, **Fade out** (abaixa a música e para;
+   toque de novo para parar na hora; veja
+   [Fade out and stop](/pt/docs/interface/main-screen/#fade-out-and-stop)), e os
+   interruptores de **Click** e **Guide**. O Play fica verde tocando e o Pause
+   âmbar em pausa.
+8. **Timeline** da música, com os marcadores e o cursor. Arraste para se
+   mover. O botão no canto liga o **Tap to seek**: com ele ligado, um toque na
+   timeline move o cursor para lá.
+9. **Teclas ao vivo**: **VAMP** o liga e desliga. **Vamp mode** (repetir a
+   seção atual ou um número de compassos), **Jump** (quando um salto para
+   marcador acontece: **Immediate**, depois de alguns **Bars** ou no **Next**
+   marcador) e **Song** (quando e como você passa para outra música: na hora,
+   depois de alguns compassos, no próximo marcador ou no fim, com **Clean cut**
+   ou **Fade out**) mostram o valor e abrem as opções quando tocados. Enquanto
+   um salto espera, a tecla Jump vira **Cancel jump** e diz para onde ia.
+10. As **músicas** do repertório, com o tom se tiverem. Toque numa para
+    selecioná-la.
+11. **Transpose** muda o tom da música selecionada em semitons.
+12. **Jump to Song**: escolha a música na lista e salte para ela com a
+    transição que você definiu.
+13. **Hide markers…**: entra num modo em que os marcadores escondidos também
+    aparecem; um toque esconde ou mostra um marcador neste aparelho (sem
+    saltar, e sem tirá-lo da sessão). **Done** sai, e o botão conta quantos
+    estão escondidos.
+14. Os **marcadores** da música. Toque num para saltar para ele conforme o
+    Jump. A seção que está tocando acende na cor dela com uma etiqueta **NOW**
+    e uma barra que se enche até a próxima; a que vai tocar depois leva a
+    etiqueta **NEXT**. Os **cues** aparecem com borda tracejada, para a banda
+    vê-los chegando.
+
+</Legend>
+
+As opções de cada tecla abrem num painel flutuante sobre a disposição; ele fecha
+tocando fora, com o `×` ou com `Escape`.
+
+Os saltos, o Vamp e as transições funcionam como no computador: os detalhes
+estão em [Controle ao vivo](/pt/docs/live-control-flow/).
+
+## A aba Mixer
+
+![A aba Mixer do Remote](/guide/remote-en/remote-mixer.png)
+
+<Legend>
+
+1. **Active song only**: mostra só as faixas que tocam na música atual.
+   Desligado, todas aparecem.
+2. **Master da música**: o volume da música selecionada (o mesmo do
+   computador). Não afeta o click nem a guia.
+3. **Faixa**: o nome dela, na cor dela (as pastas se destacam pela sua).
+4. **Pan**: esquerda, centro ou direita. O valor acima do fader também é o
+   botão de centro; um toque duplo no fader faz o mesmo.
+5. **Volume** em dB, com o medidor.
+6. **M** (mute), **S** (solo) e **T** (se a faixa segue a
+   [transposição](/pt/docs/pitch-and-warp/)).
+
+</Legend>
+
+As **pastas** têm a sua própria tira: o fader dela move todas as faixas de
+dentro.
+
+As tiras rolam para o lado com o dedo quando não cabem: cabem umas quatro no
+celular e sete ou oito no tablet.
+
+## A aba Tools
+
+![A aba Tools do Remote](/guide/remote-en/remote-tools.png)
+
+<Legend>
+
+1. **Metrônomo**: liga/desliga, volume, saída, acento, o som e a afinação do
+   acento e do tempo, e a subdivisão com som e volume próprios. Veja
+   [Saídas de áudio e metrônomo](/pt/docs/audio-routing-metronome/).
+2. **Guia falada**: liga/desliga, volume, saída, idioma, quantos compassos
+   antes ela anuncia e se conta a entrada. Veja [Guia falada](/pt/docs/voice-guide/).
+3. **Pads de ambiente**: liga/desliga, pacote, saída, tom (ou seguir o da
+   música), volume, fade in e out, e se param com a reprodução. Veja
+   [Pads de ambiente](/pt/docs/ambient-pads/).
+
+</Legend>
+
+Cada painel **se recolhe** quando você toca no título dele: recolhido, fica só
+com o interruptor e libera o espaço. Cada aparelho lembra.
+
+Os pacotes de pads são baixados e gerenciados no computador; o Remote mostra os
+que você já tem instalados.
+
+## Montar as suas abas
+
+Cada músico precisa de coisas diferentes: o baterista quer o click e
+marcadores grandes; o diretor quer os saltos e as músicas. Com **Edit layout**
+você monta a sua própria tela com blocos (**widgets**) e a distribui em quantas
+abas quiser.
+
+![A barra do editor de layout e os controles de um widget](/guide/remote-en/remote-edit.png)
+
+<Legend>
+
+1. **Done**: guarda as mudanças e sai do editor.
+2. **Cancel**: sai, desfazendo tudo o que você mudou desde que entrou.
+3. **Free position** / **Push down**: como os widgets são posicionados. Em
+   *Free position* eles podem se sobrepor e nada se move sozinho. Em *Push
+   down*, soltar um widget sobre outro empurra aquele (e os de baixo) para
+   abrir espaço.
+4. **Tab height**: deixa a barra de abas mais alta, para acertar com o dedo.
+5. **Export**, **Import** e **Reset layout** (veja abaixo).
+6. Cada **aba**: `‹ ›` a reordenam, o lápis a renomeia e o `×` a apaga (a
+   última não pode ser apagada).
+7. **+ Tab**: adiciona uma aba vazia.
+8. A **barra de título** do widget: arraste para mover o widget.
+9. **Largura** (`↔`) e **altura** (`↕`) com botões, e **Remove** para apagar o
+   widget.
+10. **Canto**: arraste para redimensionar com o dedo.
+
+</Legend>
+
+Quando você entra no editor, a **paleta de widgets** abre embaixo. Arraste um
+widget para o lugar dele na grade (você vê o espaço que ele vai ocupar) ou toque
+nele para adicioná-lo no fim. **Hide widgets** guarda a paleta se ela estiver
+atrapalhando; **Show widgets** a abre de novo.
+
+![A paleta de widgets](/guide/remote-en/remote-palette.png)
+
+Eles estão agrupados assim:
+
+- **Information**: os indicadores juntos ou um por um (tempo,
+  compasso/tempo, BPM, fórmula de compasso, nome da música, nome do projeto).
+- **Transport**: o transporte inteiro ou cada botão sozinho (Play, Pause,
+  Stop, Fade out, Click, Guide), a timeline e **Black**, que apaga a saída de
+  [vídeo](/pt/docs/tasks/video/) (o projetor) e a traz de volta com outro toque.
+- **Live control**: o painel de controle inteiro ou as partes dele (Vamp, Jump
+  config, Song transition, Song and transpose), o botão Jump to song, a grade
+  de marcadores e indicadores para a banda: **próxima seção**, **próxima
+  música**, **tom**, barras de progresso **até a próxima seção ou música** e
+  contagens regressivas **em segundos ou compassos**.
+- **Songs**: a **visão compacta de músicas**, com os clipes (a música ativa ou
+  **todas**, numa fileira que rola para o lado). O botão de play dela começa a
+  música, ou salta para ela com a transição configurada se outra estiver
+  tocando.
+- **Lyrics & chords**: a letra da música que está tocando, acompanhando linha
+  por linha, com botões para o tamanho e para esconder os acordes. A letra é
+  adicionada pela [Live View](/pt/docs/live-view/#letra-e-acordes) do computador.
+- **Mixer**: o mixer inteiro ou as partes dele (filtro de música, master da
+  música, faders).
+- **Tools**: metrônomo, guia falada e pads.
+- **Layout**: **títulos** e **notas** com o seu texto, **espaço em branco**,
+  **separadores** (linha, tracejado ou só espaço) e **grupos**. Solte um widget
+  dentro de um grupo (a moldura dele acende) e ele se move junto; arraste para
+  fora para separá-lo. Tirar um grupo não tira o que está dentro.
+
+Cada widget se adapta ao seu tamanho: se você o deixar pequeno, as listas
+longas (marcadores, faders) rolam dentro dele em vez de encolherem até ficarem
+ilegíveis.
+
+### Onde o seu layout é salvo
+
+O layout é salvo **naquele navegador, naquele aparelho**. Outro tablet, ou
+outro navegador no mesmo aparelho, começa com o layout padrão, adaptado ao
+tamanho dele (celular, tablet ou tela grande).
+
+- **Export** baixa o seu layout como um arquivo `.json`.
+- **Import** carrega um `.json` exportado, por exemplo no tablet de outro músico
+  ou num aparelho novo.
+- **Reset layout** volta ao layout padrão daquele aparelho.
+
+Se você limpar os dados do navegador, o layout se perde: exporte uma cópia
+quando ele estiver pronto.
+
+## Dicas para o show
+
+- Monte a tela **no mesmo aparelho e na mesma orientação** que você vai usar
+  no palco, e no mesmo nível de tamanho.
+- Coloque o essencial (play, marcadores, saltos) onde não precise rolar.
+- Se puder, ligue o computador ao roteador por cabo e use um Wi-Fi dedicado para
+  os tablets. Um Wi-Fi lotado atrasa os toques.
+- Desligue o bloqueio automático do tablet durante o show.

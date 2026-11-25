@@ -1,6 +1,8 @@
 ---
 import SiteLayout from "../layouts/SiteLayout.astro";
 import StoreBadges from "./StoreBadges.astro";
+import StoreProof from "./StoreProof.astro";
+import { loadStoreStats } from "../lib/storeStats";
 import "../styles/home.css";
 
 // The locales used to be hand-synced copies of the same 200-line page.
@@ -10,12 +12,34 @@ interface Props {
 }
 
 const { lang } = Astro.props;
+const storeStats = await loadStoreStats();
+const proofLocale = lang === "es" ? "es-ES" : lang === "pt" ? "pt-BR" : "en-US";
+const proofNumber = new Intl.NumberFormat(proofLocale, { useGrouping: "always" } as Intl.NumberFormatOptions);
+const proofAverage = new Intl.NumberFormat(proofLocale, { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(storeStats.ratings.average);
+const proofWords = lang === "es"
+  ? { ratings: "valoraciones", downloads: "descargas", stars: "de 5 estrellas" }
+  : lang === "pt"
+  ? { ratings: "avaliações", downloads: "downloads", stars: "de 5 estrelas" }
+  : { ratings: "ratings", downloads: "downloads", stars: "out of 5 stars" };
+// Google shows stars in results only when the rating is visible on the page;
+// this page shows it in the hero line and in StoreProof. ratingCount counts
+// every rating, reviewCount only the ones with text.
+const aggregateRating = storeStats.ratings.count > 0
+  ? {
+      "@type": "AggregateRating",
+      ratingValue: Number(storeStats.ratings.average.toFixed(1)),
+      bestRating: 5,
+      worstRating: 1,
+      ratingCount: storeStats.ratings.count,
+      reviewCount: storeStats.reviews.count,
+    }
+  : undefined;
 const es = lang === "es";
 const pt = lang === "pt";
 const prefix = es ? "/es" : pt ? "/pt" : "";
-// Docs, guides and screenshots exist in English and Spanish only. The app has
-// no Portuguese interface either, so the Portuguese page shows the English UI.
-const docsPrefix = es ? "/es" : "";
+// Screenshots exist in English and Spanish only. The app has no Portuguese
+// interface either, so the Portuguese page shows the English UI.
+const docsPrefix = prefix;
 const shots = `/screenshots/home/${es ? "es" : "en"}`;
 
 const PT = {
@@ -26,7 +50,7 @@ const PT = {
   h1: "Player multitrack para tocar ao vivo",
   lead: "LibreTracks é um programa grátis para tocar com playback e multitracks. Organiza o show por músicas: faixas, click, guia falada, marcadores e saídas de áudio. Prepare na timeline, ensaie na Visão Compacta e toque ao vivo com saltos musicais, mudança de tom e andamento, MIDI e controle remoto pelo celular.",
   download: "Baixar grátis",
-  howTo: "Como usar (em inglês)",
+  howTo: "Como usar",
   heroAlt: "Timeline do LibreTracks com três músicas, marcadores de seção e faixas com forma de onda",
   phoneAlt: "Visão Live do LibreTracks no celular com os marcadores da música",
   facts: [
@@ -56,8 +80,8 @@ const PT = {
     ["live", "Visão Live", "Legível do palco", "As seções da música em botões grandes, com o marcador atual, o próximo e o modo de salto à vista. Um toque dispara a seção.", "Visão Live do LibreTracks com os marcadores da música em botões grandes", 1200, 750],
     ["remote", "Remote", "Controle de outro aparelho", "Abra o controle remoto no celular ou tablet para comandar o transporte, saltar entre seções e ajustar a mixagem sem tocar no computador.", "Controles do Remote do LibreTracks: transporte, saltos, músicas e marcadores", 1200, 659],
   ],
-  viewsPrimary: "Sua primeira música (vídeo, em inglês)",
-  viewsSecondary: "Todos os guias (em inglês)",
+  viewsPrimary: "Sua primeira música (vídeo)",
+  viewsSecondary: "Todos os guias",
   workflowEyebrow: "Fluxo",
   workflowTitle: "Das faixas ao repertório pronto para tocar.",
   workflow: [
@@ -91,14 +115,16 @@ const PT = {
   ],
   alternatives: [
     ["/pt/alternativa-playback-multitracks/", "Alternativa grátis ao Playback"],
-    ["/alternatives/", "Outras alternativas (em inglês)"],
-    ["/ableton-live-alternative/", "vs Ableton Live (em inglês)"],
-    ["/ableset-alternative/", "vs AbleSet (em inglês)"],
+    ["/pt/alternativas/", "Outras alternativas grátis"],
+    ["/pt/alternativa-ableton-live/", "vs Ableton Live"],
+    ["/pt/alternativa-reaper-ao-vivo/", "vs Reaper"],
+    ["/pt/alternativa-ableset/", "vs AbleSet"],
+    ["/pt/alternativa-prime-worship/", "vs Prime"],
   ],
   ctaTitle: "Leve suas faixas para o próximo show.",
   ctaLead: "Baixe o LibreTracks, importe seus multitracks e tenha o repertório pronto para ensaiar hoje.",
-  ctaDocs: "Ler a documentação (em inglês)",
-  guidesPath: "/guides/",
+  ctaDocs: "Ler a documentação",
+  guidesPath: "/pt/guias/",
 };
 
 const t = pt
@@ -275,7 +301,7 @@ const t = pt
 
 ---
 
-<SiteLayout title={t.title} description={t.description} lang={lang} schema>
+<SiteLayout title={t.title} description={t.description} lang={lang} schema aggregateRating={aggregateRating}>
   <main class="home">
     <section class="home-hero">
       <div class="site-shell home-hero-grid">
@@ -290,6 +316,18 @@ const t = pt
             <a class="button-link" href={t.guidesPath}>{t.howTo}</a>
           </div>
           <StoreBadges lang={lang} />
+          {storeStats.ratings.count > 0 && (
+            <a class="home-proof" href="#store-proof-title" data-store-proof data-locale={proofLocale}>
+              <span class="store-proof-stars home-proof-stars" role="img" aria-label={`${proofAverage} ${proofWords.stars}`}>
+                <span class="store-proof-stars-fill" style={`width: ${(storeStats.ratings.average / 5) * 100}%`} data-stat-stars></span>
+              </span>
+              <b data-stat="ratings.average" data-format="decimal">{proofAverage}</b>
+              <span>·</span>
+              <span><b data-stat="ratings.count">{proofNumber.format(storeStats.ratings.count)}</b> {proofWords.ratings}</span>
+              <span>·</span>
+              <span><b data-stat="downloads.total">{proofNumber.format(storeStats.downloads.total)}</b> {proofWords.downloads}</span>
+            </a>
+          )}
         </div>
         <div class="home-stage">
           <img
@@ -309,6 +347,8 @@ const t = pt
         </div>
       </div>
     </section>
+
+    <StoreProof lang={lang} />
 
     <section class="home-readouts" aria-label={t.badge}>
       <dl class="site-shell">

@@ -1,0 +1,73 @@
+---
+// Portuguese pair of /guides/free-multitracks/. We do not host third-party
+// tracks, so this answers where to get them legally and ends at the player.
+import GuidePage from "../../../components/GuidePage.astro";
+
+const sections = [
+  {
+    heading: "1. Antes de baixar: o que é um multitrack e quais direitos ele tem",
+    paragraphs: [
+      "Um multitrack é uma música dividida em stems: bateria, baixo, teclado, guitarras, backing vocals, click e guia, cada um no seu arquivo. Para tocar junto ao vivo você precisa dos arquivos e de um player que os mande separados para a mesa de P.A. e para os fones da banda.",
+      "Grátis não quer dizer livre de direitos. A música tem compositores e a gravação tem dono. Baixe apenas de quem pode compartilhar e, se você toca em público, confira qual licença cobre essa execução na sua igreja ou no local.",
+    ],
+    checklist: [
+      "Desconfie de pacotes com centenas de músicas conhecidas de graça.",
+      "Leia a licença: uso pessoal, ensaio e execução ao vivo são coisas diferentes.",
+      "Anote de onde veio cada música.",
+    ],
+  },
+  {
+    heading: "2. Multitracks grátis e legais",
+    paragraphs: [
+      "Muitos artistas e gravadoras de louvor liberam os multitracks de um single para que as igrejas possam tocá-lo. Procure no site oficial do artista, nas redes sociais ou na página do lançamento: costumam incluir click e guia.",
+      "As lojas de multitracks quase sempre têm músicas de amostra ou uma seção de downloads grátis, e algumas dão uma música no cadastro. É uma boa forma de experimentar o formato antes de comprar.",
+      "Para praticar mixagem ou testar um P.A. existem bibliotecas de multitracks com licenças educacionais, como a da Cambridge Music Technology: centenas de músicas em stems separados, grátis para uso não comercial.",
+    ],
+  },
+  {
+    heading: "3. Faça os seus próprios multitracks",
+    paragraphs: [
+      "A fonte mais confiável é você. Se a sua banda grava um ensaio num gravador multipista, cada microfone já é um stem. Se alguém da equipe produz numa DAW (Ableton Live, Reaper, Logic, FL Studio, Cubase), exporte cada faixa desde o início da música com a mesma duração.",
+      "O LibreTracks importa projetos do Ableton Live (.als) e do Reaper (.rpp) diretamente, com as faixas e os marcadores, então não precisa exportar à mão.",
+    ],
+    checklist: [
+      "Exporte cada faixa desde o compasso 1, mesmo que comece em silêncio.",
+      "A mesma taxa de amostragem em todos os arquivos.",
+      "Click e guia em faixas próprias, separados da música.",
+    ],
+    media: { src: "/guide/desktop-en/library-folder-to-song.mp4", poster: "/guide/desktop-en/library-folder-to-song.webp", alt: "Uma pasta de stems transformada em música no LibreTracks", width: 1800, height: 1058, type: "video" as const },
+  },
+  {
+    heading: "4. Separe em stems uma gravação que já é sua",
+    paragraphs: [
+      "Se você só tem a mixagem estéreo da sua própria gravação, separadores de stems com IA de código aberto (o Demucs, por exemplo) extraem voz, bateria, baixo e o resto em faixas separadas. O resultado não tem qualidade de estúdio, mas basta para tirar a voz principal ou reforçar um instrumento que falta.",
+      "Faça isso apenas com áudio sobre o qual você tem direitos. Separar uma música comercial não muda quem é dono da gravação.",
+    ],
+  },
+  {
+    heading: "5. Toque ao vivo de graça",
+    paragraphs: [
+      "Com os multitracks numa pasta, arraste-a para o LibreTracks e a música é montada com uma faixa por arquivo. Adicione marcadores de seção, mande o click e a guia falada para os fones e a música para a mesa, e mude o tom se precisar.",
+      "O LibreTracks é grátis e de código aberto, sem assinatura e sem conta, no Windows, macOS, Linux, Android e iOS.",
+    ],
+    media: { src: "/guide/articles/en/live-view.webp", alt: "Visão Live do LibreTracks tocando um multitrack com marcadores de seção", width: 1600, height: 940 },
+  },
+];
+---
+
+<GuidePage
+  title="Multitracks Grátis: Onde Baixar de Forma Legal | LibreTracks"
+  description="Onde conseguir multitracks grátis e legais para tocar ao vivo, como fazer os seus a partir da sua DAW ou gravações e em qual player grátis tocá-los."
+  lang="pt"
+  eyebrow="Multitracks grátis"
+  heading="Multitracks grátis: onde conseguir e como tocar"
+  intro="Procurar multitracks grátis leva rápido a pacotes duvidosos. Este guia reúne as fontes legais que existem, como fazer os seus a partir do que você já tem e como tocá-los ao vivo num player grátis."
+  hero={{ src: "/guide/articles/en/compact-view.webp", alt: "Multitracks organizados por música na Visão Compacta do LibreTracks", width: 1600, height: 940 }}
+  sections={sections}
+  related={[
+    { href: "/pt/download/", label: "Baixar o LibreTracks grátis" },
+    { href: "/pt/guias/programa-playback-ao-vivo/", label: "Programa de playback grátis" },
+    { href: "/pt/docs/tasks/library/", label: "Trazer o áudio e montar músicas" },
+  ]}
+  nextGuide={{ href: "/pt/guias/programa-playback-ao-vivo/", label: "Programa de playback grátis para tocar ao vivo" }}
+/>

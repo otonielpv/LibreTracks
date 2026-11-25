@@ -1,0 +1,218 @@
+---
+title: LibreTracks no celular
+description: "O que muda no LibreTracks no Android, iPhone e iPad: onde as sessões ficam (armazenamento interno, cartão SD ou pendrive), importar áudio sem copiar, gestos de toque, o botão voltar, saída de áudio e levar sessões do computador."
+---
+
+import Clip from "../../../../components/guide/Clip.astro";
+import TutorialVideo from "../../../../components/guide/TutorialVideo.astro";
+
+O LibreTracks no celular ou tablet é **o mesmo app** do computador: o mesmo
+motor de áudio, o mesmo formato de sessão e as mesmas visões DAW, Compact e
+Live. Uma sessão montada no computador abre do jeito que está no celular, e
+vice-versa.
+
+Ele é instalado pelo **Google Play** no Android e pela **App Store** no
+iPhone e iPad (veja [Requisitos do sistema](/pt/docs/system-requirements/)). No
+celular o app roda sempre **na horizontal**.
+
+Este vídeo monta uma música do começo ao fim no celular (em inglês):
+
+<TutorialVideo
+  src="/video/first-steps-mobile.mp4"
+  poster="/video/first-steps-mobile.webp"
+  title="Sua primeira música no LibreTracks, no celular"
+  duration="3:00"
+/>
+
+Esta página trata do que muda: o armazenamento, o dedo no lugar do mouse e a
+saída de áudio. O que faz cada botão na tela de toque está em
+[No celular ou tablet](/pt/docs/interface/mobile/).
+
+## Tela inicial
+
+Ao abrir o app você vê **Your sessions**, a lista de sessões salvas no
+aparelho. Dali você cria uma sessão nova, abre uma existente ou importa um
+`.ltset`. O ícone de lixeira apaga uma sessão do aparelho, com o áudio e o
+cache dela; a sessão que está aberta não pode ser apagada.
+
+A **Demo song** abre uma sessão de exemplo que vem com o app, com duas
+músicas e seis faixas, para experimentar o transporte, a mixagem e os saltos
+sem importar nada. Ela sempre abre a mesma sessão: apertar várias vezes não
+cria cópias.
+
+## Importar áudio sem copiar
+
+Como no computador, quando você importa áudio a sessão **usa os seus arquivos
+originais** em vez de duplicá-los. Assim um multitrack ocupa no celular o que
+os arquivos ocupam e nada mais.
+
+![O ajuste Import without copying audio into the session](/guide/mobile-en/settings-import-no-copy.png)
+
+O ajuste é **Settings → General → Editing → Import without copying audio
+into the session**, e vem ligado por padrão.
+
+- Se você mover ou apagar um arquivo original, a faixa dele fica muda e o
+  arquivo aparece em **Missing files**, onde você pode vinculá-lo de novo.
+- Arquivos que estão **na nuvem** (Google Drive, ou "Recentes" no seletor de
+  arquivos, por exemplo) não podem ser lidos diretamente: esses são sempre
+  copiados.
+- **Desligue** se preferir que cada arquivo de áudio seja copiado para a
+  sessão; por exemplo, se você vai apagar os originais do celular depois de
+  importar. Só afeta o que você importar dali em diante.
+- Apagar uma faixa ou uma sessão **nunca** apaga os seus arquivos originais:
+  só o que está dentro da pasta da sessão é apagado.
+
+Quando você importa vários arquivos, cada um aparece na biblioteca assim que
+começa a ser preparado, com o seu progresso, sem esperar o lote inteiro.
+
+## As suas pastas na Library
+
+A Library no celular também tem **Your folders**: com **Add folder** você
+escolhe uma pasta do celular (ou do cartão SD) e navega por ela pelo app, sem
+importar arquivo por arquivo pelo seletor.
+
+- **Toque** nos arquivos de áudio para selecioná-los e aperte **Add to
+  timeline**: cada um vai para uma faixa nova na posição do cursor.
+- O botão **+** de cada pasta adiciona a pasta inteira **como uma música** no
+  cursor, com o nome dela e uma faixa por arquivo de áudio.
+- A pasta continua salva mesmo se você fechar o app ou reiniciar o celular.
+  Quando você a remove da Library, o LibreTracks devolve a permissão de acesso
+  que você concedeu.
+- **In this session** funciona como um acordeão: ao expandir, o áudio da
+  sessão ocupa a Library inteira e as suas pastas saem da frente; ao recolher,
+  elas voltam.
+
+## Onde as sessões ficam (Android)
+
+Se o seu Android tem um **cartão microSD**, ou você conecta um **pendrive ou
+HD USB (OTG)**, pode guardar as sessões ali em vez de no armazenamento interno.
+Isso se define em **Settings → General → Storage → Where to keep sessions**. Se
+o celular só tem armazenamento interno, o ajuste não aparece.
+
+- A lista mostra cada volume com o nome que o Android dá (por exemplo
+  "Cartão SD SanDisk" ou "Unidade USB") e o espaço livre que resta.
+- **Só afeta sessões novas.** As que você já tem continuam abrindo de onde
+  estão, e todas aparecem juntas em "Your sessions".
+- **O cache de áudio vai junto com as sessões.** É o que mais ocupa espaço,
+  então, quando você escolhe o cartão, o cache também fica lá e não enche o
+  armazenamento interno.
+- Se você **tirar o cartão ou o pendrive**, o LibreTracks percebe na hora:
+  avisa em Settings e guarda as sessões novas no armazenamento interno até
+  você conectá-lo de novo. Quando ele volta a ser montado, tudo se atualiza
+  sozinho, sem reiniciar o app.
+
+O LibreTracks guarda as sessões numa pasta própria em cada volume, então não
+pede nenhuma permissão de armazenamento.
+
+:::caution[Pendrives e cartões]
+Espere um salvamento terminar antes de desconectar um pendrive. Se ele for
+removido no meio, a sessão fica como estava no último salvamento completo e não
+se perde, mas as mudanças que ainda não foram salvas, sim.
+:::
+
+## Gestos na timeline
+
+No computador você usa o mouse e o botão direito. No celular funciona assim:
+
+| Gesto | O que faz |
+| --- | --- |
+| **Um dedo** | Rola em qualquer direção: para os lados anda no tempo, para cima e para baixo percorre as faixas. |
+| **Pinça com dois dedos** | Só zoom. |
+| **Toque** | Seleciona o que está embaixo: um clipe, um marcador, uma faixa ou uma música. Tocar num lugar vazio limpa a seleção. |
+| **Arrastar algo já selecionado** | Move. Você toca primeiro e depois arrasta, para que um deslize acidental não mova o áudio. |
+| **Tocar e segurar** | Abre o menu no ponto exato onde você pôs o dedo. |
+
+Não há modos de navegar e editar para alternar: tudo depende de o que você
+arrasta estar selecionado ou não.
+
+### A barra de ações
+
+O que o botão direito mostra no computador aparece no celular numa **barra
+flutuante** acima da timeline. Quando você toca em algo, a barra mostra o que
+você pode fazer com aquilo e, sem nada selecionado, oferece **adicionar** uma
+seção, um cue, áudio ou vídeo. Se houver mais ações do que cabem, o botão de
+pontos abre a lista completa. A seta recolhe a barra para ver mais timeline.
+
+Com **várias faixas selecionadas**, a barra inclui um botão de mixagem que
+muda o volume, o pan, a saída e a transposição de todas de uma vez. Volume e
+pan se movem de forma relativa e mantêm a mixagem que já tinham.
+
+<Clip
+  src="/guide/mobile-en/track-select-mix.mp4"
+  poster="/guide/mobile-en/track-select-mix.webp"
+  caption="Selecionando duas faixas e mixando as duas juntas"
+/>
+
+### Faixas e pastas
+
+Arrastar uma faixa no celular **só muda a ordem dela**. Para colocar faixas
+numa pasta, selecione-as e escolha **Move to folder…** no menu delas, para uma
+pasta existente ou uma nova. Para tirá-las, **Remove From Folder**. Assim você
+não precisa acertar o meio da linha da pasta com o dedo.
+
+## O botão voltar (Android)
+
+O botão voltar do Android **fecha primeiro o que você tem aberto** (um ajuste,
+um menu, um painel) em vez de sair do app. Se nada estiver aberto e algo
+estiver tocando, o primeiro toque avisa ("Playing. Press back again to exit.")
+e é preciso um segundo toque para sair, para você não cortar um ensaio sem
+querer.
+
+## Saída de áudio
+
+Em **Settings → Audio** você escolhe a saída. Se você conectar uma
+**interface de áudio USB** (com um cabo OTG no Android, ou com o adaptador de
+câmera ou USB-C no iPhone e iPad), ela aparece ali com os seus canais e é
+roteada como no computador (veja [Saídas de áudio e metrônomo](/pt/docs/audio-routing-metronome/)).
+Um celular tem um único sistema de áudio, então não há seletor de ASIO ou WASAPI.
+
+No **Android** há também um ajuste **Low latency**:
+
+![O ajuste Low latency no Android](/guide/mobile-en/settings-low-latency.png)
+
+- **Desligado** (o padrão), o LibreTracks usa a saída de reprodução normal do
+  Android. Por isso você ouve os ajustes de som do sistema, como Dolby Atmos,
+  o equalizador ou o efeito surround, como em qualquer player de música. Se
+  não quiser, desative-os nos ajustes de som do Android.
+- **Ligado**, ele usa a saída rápida do Android: menos atraso, principalmente
+  com interfaces USB, mas sem os efeitos do sistema e, em celulares modestos,
+  com risco de falhas. Ligue se você toca ao vivo junto com as faixas e nota
+  o atraso.
+
+Se o app ficar um bom tempo sem uso, o celular pode adormecer o áudio para
+economizar bateria; quando você voltar, **Resume** o acorda (veja
+[Solução de problemas](/pt/docs/help/troubleshooting/#aparece-the-app-was-idle)).
+
+## MIDI e vídeo
+
+- **MIDI**: conecte um controlador ou uma interface MIDI por USB (OTG no
+  Android, um adaptador no iPhone e iPad). No iPhone e iPad você também pode
+  mandar e receber MIDI **por Wi-Fi** com um Mac (Configuração de Áudio e MIDI →
+  Rede). Veja [MIDI](/pt/docs/tasks/midi/).
+- **Vídeo**: os vídeos são adicionados da galeria ou dos arquivos com o botão
+  **Add** da barra de ações, e saem para um projetor ou uma TV conectados por
+  cabo: USB-C para HDMI (o celular precisa ter saída de vídeo por USB-C) ou o
+  adaptador Lightning Digital AV; no iPhone e iPad também por AirPlay, por
+  enquanto experimental (calibre o atraso no local). **Settings → Video** tem
+  um guia para conectar. Bloquear o celular desliga o projetor. Veja
+  [Vídeo no projetor](/pt/docs/tasks/video/).
+
+## Cache de áudio
+
+O áudio que não é WAV (MP3, FLAC…) é preparado uma vez e guardado no cache,
+para carregar na hora da próxima vez. No celular a pasta do cache não pode ser
+mudada: ela sempre vai com o volume onde você guarda as sessões. Em
+**Settings** você vê o tamanho dele, define um limite e o limpa.
+
+## Levar sessões do computador para o celular
+
+O jeito mais fácil é montar a sessão no computador e levá-la para o celular:
+
+- **Exporte a sessão como `.ltset`** e abra com **Import session** na tela
+  inicial. Num celular modesto, o modo **Optimized** leva o áudio já preparado
+  e a sessão abre sem espera. Mais em
+  [Requisitos do sistema](/pt/docs/system-requirements/#fazer-uma-sessão-grande-carregar-mais-rápido).
+- **Pelo Google Drive**: exporte para o Drive pelo computador e, no celular,
+  **Import session → Google Drive**. Os arquivos ficam no seu próprio Drive,
+  não em nenhum servidor do LibreTracks. A conta também precisa estar
+  conectada no celular (veja [A nuvem](/pt/docs/integration-ecosystem/#a-nuvem-google-drive-onedrive-e-dropbox)).

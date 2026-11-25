@@ -1,0 +1,148 @@
+---
+title: Letra e acordes do Planning Center
+description: "Traga a letra e os acordes da sua conta do Planning Center para as músicas da sua sessão: o LibreTracks os ajusta aos marcadores de cada música, entende nomes diferentes para a mesma seção e deixa você conferir antes de salvar."
+sidebar:
+  order: 10
+---
+
+Se a sua igreja guarda as músicas no **Planning Center Services**, o
+LibreTracks pode trazer a letra e os acordes delas para a
+[letra e acordes](/pt/docs/live-view/#letra-e-acordes) de cada música. Nada para
+exportar e nenhum texto para copiar: procure a música, escolha o arranjo,
+confira e pronto.
+
+O que importa é que **a letra segue a sua música, não a cifra**. O Planning
+Center pode escrever Intro, Verse, Chorus; se a sua música vai Intro, Verse,
+Verse, Chorus, a Live mostra Intro, Verse, Verse, Chorus.
+
+## 1. Conectar a conta
+
+Abra o painel **Cloud** (as contas do Drive, OneDrive e Dropbox). O **Planning
+Center** fica embaixo: aperte **Connect with Planning Center**, entre no
+navegador e volte ao app. Você vai ver o seu nome e a sua organização.
+
+- A conta é sua: o LibreTracks **lê** músicas, arranjos e planos, e só escreve
+  quando você aperta **Save to Planning Center**.
+- O acesso fica guardado no cofre de credenciais do sistema, não na sessão nem
+  em nenhum arquivo.
+- Se o seu usuário não tem acesso ao **Services** na organização, o app avisa:
+  peça a quem administra o Planning Center.
+- **Disconnect** tira o acesso deste aparelho.
+
+## 2. Importar a letra de uma música
+
+1. Abra o editor de letra da música (menu da música, **Lyrics and chords**), ou
+   no menu da música **Lyrics from Planning Center…**.
+2. Aperte **From Planning Center…**. A busca já vem com o nome da música.
+3. Escolha a música e depois o arranjo. Um arranjo só com PDF aparece como
+   **PDF only** e não pode ser escolhido: não há texto para trazer.
+4. A cifra chega ao editor **como está no Planning Center**, intacta.
+   **Adjust to the sequence** abre para você ver o que ela mudaria; aplique, ou
+   cancele e mantenha a cifra como está.
+
+### Ajustar à sequência
+
+Funciona igual para Planning Center, PDF, texto ou ChordPro: fica no editor de
+letra e não muda nada até você apertar **Apply**.
+
+- **Mudanças na cifra**: o que será tirado ou movido, um por um (as barras de
+  repetição `// … //`, um "CHORUS" vazio que repete um já escrito, uma cópia
+  idêntica, acordes escritos no cabeçalho, marcas de página).
+- **A música marcador por marcador**, na ordem em que toca, com a seção da
+  cifra que cada um vai mostrar, a primeira linha e quantas vezes ela toca
+  dentro do marcador (**×2**: um refrão longo cantado duas vezes). Os
+  marcadores duvidosos dizem **Check** ou **Unsure**.
+- Quando você muda a seção de um marcador, ela fica como você deixou e o resto
+  se reajusta em volta. O **×N** também pode ser mudado.
+- Se a cifra está em outro tom, a caixa **transpose** leva os acordes para o tom
+  da sua música.
+- Sem marcadores de seção, **Apply without linking**, ou crie-os antes com o
+  [Analyze song](/pt/docs/song-analysis/).
+
+## 3. Como as seções são emparelhadas
+
+Os marcadores da música mandam: eles estão sobre o áudio. Para cada marcador o
+LibreTracks procura a seção da cifra que pertence ali:
+
+- **Nomes diferentes para a mesma parte**: Chorus, Coro, Estribillo, Refrão e
+  Refrain são a mesma parte; também Interlude, Instrumental e Turnaround; e
+  Ending, Outro e Coda. Ele lê inglês, espanhol e português, números romanos
+  ("Verse II") e enfeites como "Chorus (x2)" ou "Final chorus".
+- **Números**: um marcador **Verse 2** prefere a seção **Verse 2**. Um
+  marcador sem número lê a cifra em ordem.
+- **Repetições**: se a cifra escreve o refrão uma vez e a música o canta três,
+  os três marcadores mostram aquele refrão.
+- **A sequência do Planning Center** diz qual de dois versos é qual quando os
+  seus marcadores dizem só "Verse".
+- **Partes sem letra**: uma intro ou um instrumental sem seção na cifra ficam
+  sem letra, em silêncio. Um marcador cantado sem seção avisa.
+- As formas curtas do Planning Center (V1, C, PC, B) são lidas na sequência
+  dele, nunca no nome de um marcador: um marcador chamado "C" não é um refrão.
+
+| O seu marcador | Combina na cifra com |
+| --- | --- |
+| Chorus, Refrain, Estribillo | Chorus, Coro, Refrão |
+| Interlude, Instrumental | Interlude, Instrumental, Turnaround |
+| Ending, Outro | Ending, Outro, Coda |
+| Pre-Chorus | Pre-Chorus, Pre-Coro |
+| Bridge | Bridge, Puente, Ponte |
+
+O mesmo emparelhamento é usado ao importar um PDF ou texto.
+
+## 4. Atualizar pelo Planning Center
+
+Numa música importada, o editor de letra oferece **Update from Planning
+Center**. Se o arranjo não mudou, ele avisa. Se mudou, você vê quais seções
+foram **adicionadas**, **tiradas** ou **mudadas**; **Bring to the editor**
+coloca a cifra nova como vem e abre **Adjust to the sequence** com cada
+marcador mantendo a sua seção.
+
+Se você editou a letra no LibreTracks depois de importá-la, um aviso diz que
+essas mudanças vão se perder. Ele nunca atualiza sozinho.
+
+## 5. Importar um plano inteiro
+
+Para deixar o culto de domingo pronto de uma vez: na linha do Planning Center
+do painel Cloud, **Import a plan…**.
+
+1. Escolha o tipo de culto e um dos próximos planos.
+2. Cada música do plano é emparelhada com uma música da sessão pelo título
+   ("(Live)" ou um tom no nome não importam). Corrija um par no menu dele, ou
+   deixe como **Not in the session**.
+3. **Prepare** lê cada arranjo, com a sequência e o tom que o plano diz. Você
+   pode **Stop** a qualquer momento.
+4. **Apply the clear ones and review the rest** salva as músicas em que tudo
+   encaixa com certeza e abre a revisão das outras, uma por uma. Ou **Review
+   one by one** todas elas.
+
+Cada música é salva inteira ou não é salva: parar no meio não deixa letra pela
+metade.
+
+## 6. Salvar no Planning Center
+
+Com a cifra corrigida e ajustada à sua música, **Save to Planning Center** (no
+editor de letra) a manda de volta com a sequência da sua música, para ninguém
+precisar corrigi-la lá à mão.
+
+Também funciona para letras que **não vieram do Planning Center** (escritas no
+LibreTracks ou importadas de um arquivo): primeiro procure a música no Planning
+Center e escolha **Save as a new arrangement** ou o arranjo a substituir. Dali
+em diante a letra fica vinculada àquela música.
+
+- Por padrão ele cria um **arranjo novo** na música (com o nome que você
+  escolher): o original fica como está para todos.
+- **Replace the arrangement** é uma escolha à parte: mostra o que muda, avisa
+  se o arranjo mudou no Planning Center desde que você o importou e pede
+  confirmação, porque todos que o usam vão ver.
+- Você precisa de permissão para editar músicas na sua organização.
+- Ele nunca salva sozinho: só com o botão.
+
+## Problemas comuns
+
+- **O Planning Center não aparece**: esta versão do app ainda não o inclui.
+- **"Your user has no access to Services"**: peça acesso ao Services na sua
+  organização do Planning Center.
+- **Um verso cai no lugar errado**: mude na revisão. Se os seus marcadores
+  dizem "Verse 1" e "Verse 2", o emparelhamento é mais seguro.
+- **"PDF only"**: aquele arranjo não tem a letra como texto no Planning Center.
+  Importe o PDF com **Import file…** no editor.

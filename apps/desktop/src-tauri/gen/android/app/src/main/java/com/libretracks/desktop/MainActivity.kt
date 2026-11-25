@@ -107,6 +107,38 @@ class MainActivity : TauriActivity() {
   override fun onWebViewCreate(webView: android.webkit.WebView) {
     super.onWebViewCreate(webView)
     RendererGoneGuard.install(this, webView)
+    installBackHandler(webView)
+  }
+
+  // ── Botón atrás ──────────────────────────────────────────────────────────
+  //
+  // El de WryActivity solo sabe navegar el historial del WebView o salir. La
+  // página cerraba sus overlays con entradas de historial de mentira, pero
+  // Chromium se salta las que no nacen de un gesto del usuario y atrás
+  // acababa cerrando la app con un panel delante. Ahora se le pregunta a la
+  // página (window.__ltHandleBack, en AndroidBackGuard.tsx): true = la página
+  // la gastó; si no, lo de siempre.
+  override val handleBackNavigation: Boolean
+    get() = false
+
+  private fun installBackHandler(webView: android.webkit.WebView) {
+    val callback = object : androidx.activity.OnBackPressedCallback(true) {
+      override fun handleOnBackPressed() {
+        webView.evaluateJavascript(
+          "(function(){try{return !!(window.__ltHandleBack && window.__ltHandleBack() === true);}catch(e){return false;}})()",
+        ) { result ->
+          if (result == "true") return@evaluateJavascript
+          if (webView.canGoBack()) {
+            webView.goBack()
+            return@evaluateJavascript
+          }
+          isEnabled = false
+          onBackPressedDispatcher.onBackPressed()
+          isEnabled = true
+        }
+      }
+    }
+    onBackPressedDispatcher.addCallback(this, callback)
   }
 
   // Android warns before it kills. Ignoring that warning is how importing a
@@ -285,6 +317,12 @@ class MainActivity : TauriActivity() {
   // método de instancia para no cargar OrientationBridge desde un hilo nativo.
   fun setScreenOrientation(mode: Int) {
     OrientationBridge.set(this, mode)
+  }
+
+  // Hoja de valoración de Google Play (StoreReviewBridge). Lo llama Rust
+  // (platform/android_store_review.rs) solo con el audio parado.
+  fun requestStoreReview() {
+    StoreReviewBridge.request(this)
   }
 
   // "Guardar como" del sistema con el tipo MIME del fichero.

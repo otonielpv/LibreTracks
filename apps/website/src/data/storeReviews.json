@@ -1,0 +1,143 @@
+{
+  "$comment": "Reseñas reales copiadas literalmente de App Store Connect y de la API de Google Play. No corregir ortografía ni editar el texto. Las de Play se siguen acumulando solas en D1; este fichero es la semilla y la copia de seguridad. Las de Play sin autor vienen de los CSV mensuales de Play Console, que no traen el nombre.",
+  "reviews": [
+    {
+      "id": "appstore-co-ronpmusic-2026-11-23",
+      "store": "appstore",
+      "country": "CO",
+      "author": "Ronpmusic",
+      "rating": 5,
+      "date": "2026-11-23",
+      "version": "1.17.1",
+      "language": "es",
+      "title": "La mejor de las mejores en secuencias y uso de stems multitracks",
+      "text": "Está muy completa cada día las actualizaciones son mejores es muy intuitiva y de muy fácil manejo. Felicidades a su creador. 100/100"
+    },
+    {
+      "id": "play-5766b0f5-655a-4578-a84f-e77c8c6163df",
+      "store": "play",
+      "author": "Sergio Castellanos",
+      "rating": 5,
+      "date": "2026-11-23",
+      "version": "1.17.1",
+      "language": "es",
+      "text": "Increíble app, llena de funciones utiles, con una curva de aprendizaje muy interesante, sencilla pero a la vez compleja depende de todo lo que quieras lograr, la sigo utilizando como mi daw principal para multitracks"
+    },
+    {
+      "id": "play-38a0e3b4-4051-4950-9d74-5bf99df26288",
+      "store": "play",
+      "author": "Jonathan Hernández",
+      "rating": 5,
+      "date": "2026-11-23",
+      "version": "1.17.1",
+      "language": "es",
+      "text": "exelente muy buena 👌"
+    },
+    {
+      "id": "play-dd3a3eb9-5882-4375-a854-39247c82e92c",
+      "store": "play",
+      "author": "Elvis Garcia",
+      "rating": 5,
+      "date": "2026-11-23",
+      "language": "es",
+      "text": "exelente aplicación me a parecido perfecta"
+    },
+    {
+      "id": "appstore-co-mejor-que-playback-2026-11-15",
+      "store": "appstore",
+      "country": "CO",
+      "author": "Mejor que playback",
+      "rating": 5,
+      "date": "2026-11-15",
+      "version": "1.17.1",
+      "language": "es",
+      "title": "Muy estable",
+      "text": "Lo mejor en opciones gratis"
+    },
+    {
+      "id": "play-a16a0621-e11e-4aa6-83e8-29fe012dbacd",
+      "store": "play",
+      "author": null,
+      "rating": 5,
+      "date": "2026-11-10",
+      "version": "1.16.0",
+      "language": "es",
+      "text": "exelente aplicación, sin publicidad ni restricciones. Realmente útil para los que tenemos conocimientos en dirección musical y herramientas de audio."
+    },
+    {
+      "id": "play-ecadbfe4-1e11-4a80-aee3-ca21d4f838d5",
+      "store": "play",
+      "author": null,
+      "rating": 5,
+      "date": "2026-11-06",
+      "version": "1.15.0",
+      "language": "es",
+      "text": "La mejor app para reproducir secuencias 👌🏻"
+    },
+    {
+      "id": "appstore-gt-ricardcutzh-2026-11-04",
+      "store": "appstore",
+      "country": "GT",
+      "author": "ricardcutzh",
+      "rating": 5,
+      "date": "2026-11-04",
+      "version": "1.15.0",
+      "language": "en",
+      "title": "New Option for MT",
+      "text": "I am playing around with the application and functionality so far has been great! I am looking forward to have it as a replacement for playback"
+    },
+    {
+      "id": "appstore-ec-andrsxd-2026-10-28",
+      "store": "appstore",
+      "country": "EC",
+      "author": "Andrsxd",
+      "rating": 5,
+      "date": "2026-10-28",
+      "version": "1.15.0",
+      "language": "es",
+      "title": "Genial",
+      "text": "Es una app con muchas opciones!"
+    },
+    {
+      "id": "play-5ba4bd98-d805-4e70-ad25-3854e1782cdb",
+      "store": "play",
+      "author": null,
+      "rating": 5,
+      "date": "2026-10-23",
+      "version": "1.14.0",
+      "language": "es",
+      "text": "Que buena aplicación de verdad"
+    },
+    {
+      "id": "play-15386d97-4edd-4168-9f64-b01416a70417",
+      "store": "play",
+      "author": null,
+      "rating": 5,
+      "date": "2026-10-22",
+      "version": "1.14.0",
+      "language": "es",
+      "text": "la mejor Opción y herramienta en multitracl"
+    },
+    {
+      "id": "play-85feee1b-c77f-4335-9f82-3259e372c19a",
+      "store": "play",
+      "author": null,
+      "rating": 5,
+      "date": "2026-10-15",
+      "language": "es",
+      "text": "Súper está bien optimizada, es fácil de usar y me encantó la interfaz"
+    },
+    {
+      "id": "appstore-pe-paulwam-2026-10-07",
+      "store": "appstore",
+      "country": "PE",
+      "author": "Paulwam",
+      "rating": 5,
+      "date": "2026-10-07",
+      "version": "1.13.0",
+      "language": "es",
+      "title": "E X C E L E N T E trabajo",
+      "text": "Muy útil y gratis"
+    }
+  ]
+}

@@ -1,0 +1,242 @@
+---
+title: Régua, faixas e menus
+description: "Como ler a régua do LibreTracks (músicas, marcadores de cue, marcadores de seção, mudanças de andamento), o que faz cada controle do cabeçalho de uma faixa e o que oferece cada menu do botão direito."
+sidebar:
+  order: 3
+---
+
+import Legend from "../../../../../components/guide/Legend.astro";
+
+Abaixo da barra de ferramentas fica a timeline: a **régua** em cima, os
+**cabeçalhos das faixas** à esquerda e os **clipes** à direita. Quase tudo o
+que você edita aqui se faz com o **botão direito**, que abre um menu diferente
+conforme onde você clica.
+
+## A régua
+
+![A régua com uma música, os dois tipos de marcador e uma mudança de andamento](/guide/desktop-en/ruler.png)
+
+<Legend>
+
+1. **Música**: cada barra com nome é uma música da sessão (o app também as
+   chama de *regiões*). Clique para selecioná-la e arraste para movê-la.
+   Arraste-a para além do meio de outra música e elas trocam de lugar: as
+   outras se reorganizam para mostrar a nova ordem, que é aplicada quando você
+   solta. **Move earlier** e **Move later**, no menu dela (botão direito;
+   tocar e segurar no celular), fazem o mesmo um passo de cada vez. A letra à
+   direita do nome, se houver, é o tom dela.
+2. **Marcadores de cue** (linha de cima): *Drums In*, *Last Time*… Não são
+   destinos de salto. A [guia falada](/pt/docs/voice-guide/) os anuncia e o
+   [Remote](/pt/docs/remote-control/) os mostra para a banda.
+3. **Marcadores de seção** (linha de baixo): *Intro*, *Verse*, *Chorus*…
+   Clique num para saltar para ele. Quando o salto acontece é definido por
+   [Marker Jump](/pt/docs/interface/toolbar/#marker-jump).
+4. **Mudança de andamento**: a partir daquele ponto a música toca em outro
+   BPM. As mudanças de fórmula de compasso são parecidas, com a fórmula no
+   lugar do BPM.
+
+</Legend>
+
+Os números da régua são a posição em compassos (*1.1.00*) e, abaixo, o tempo
+decorrido. Clique na régua, longe dos marcadores, para mover o cursor.
+
+## Cabeçalho da faixa
+
+![Os controles do cabeçalho de uma faixa de áudio](/guide/desktop-en/track-header.png)
+
+<Legend>
+
+1. **Nome** da faixa. Selecione-a e aperte <kbd>F2</kbd> para renomear.
+2. **M** (mute): silencia a faixa.
+3. **S** (solo): toca só esta faixa e outras que estejam em solo. Quando
+   alguma faixa está em solo, o **S riscado** acima das faixas acende em
+   amarelo e tira todos os solos de uma vez, inclusive os de dentro de pastas
+   recolhidas. A visão Compact e a Setlist têm o mesmo botão no mixer delas.
+4. **Volume** em decibéis. 0 dB é o volume original do áudio. Dê um clique
+   duplo no fader para voltar a 0 dB.
+5. **Saída de áudio**: por onde a faixa toca. *Master* é a saída principal;
+   *Out 3/4*, *Out 5*… são saídas físicas da sua interface;
+   *Inherited (Folder)* usa a saída da pasta em que ela está. Veja
+   [Saídas de áudio e metrônomo](/pt/docs/audio-routing-metronome/).
+6. **T** (transposição): com o warp da música ligado, decide se esta faixa
+   muda de tom quando você transpõe. Desligue no click ou na guia para eles
+   não desafinarem. Veja [o botão T](/pt/docs/pitch-and-warp/).
+7. **Pan**: esquerda/direita. *C* é o centro; clique duplo para voltar ao
+   centro.
+8. **Medidor** de nível da faixa, com uma barra por canal: esquerdo e direito.
+   Veja [abaixo](#o-medidor).
+
+</Legend>
+
+Com várias faixas selecionadas (<kbd>Ctrl</kbd>+clique ou <kbd>Shift</kbd>+clique
+nos cabeçalhos), mexer em qualquer um desses controles muda todas elas. Volume e
+pan se movem na mesma proporção em todas, então o equilíbrio da mixagem se
+mantém.
+
+### O medidor
+
+![O medidor estéreo de uma faixa enquanto toca](/guide/desktop-en/track-meter-stereo.png)
+
+O medidor tem **duas barras**, uma por canal, para você ver de relance onde a
+faixa está: com o pan para a esquerda, a barra esquerda sobe mais. Se o sinal
+clipar, o topo do **canal que clipa** acende em vermelho, e uma linhazinha
+branca segura o pico mais alto por um momento.
+
+Se você deixar a faixa **mono**, **só esquerda** ou **só direita** (botão
+direito na faixa › *Channels…*), o medidor vira **uma única barra**, e volta a
+duas com *Stereo*. O mesmo vale para o mixer da [Compact View](/pt/docs/compact-view/).
+
+Para mudar a altura de uma faixa, arraste a borda de baixo dela. Com
+<kbd>Alt</kbd> você muda todas de uma vez, e um clique duplo volta à altura
+normal.
+
+### Pastas
+
+![O cabeçalho de uma pasta](/guide/desktop-en/folder-header.png)
+
+<Legend>
+
+1. **Abrir ou fechar** a pasta (**+** / **−**). Fechada, você vê um único
+   bloco com o número de faixas que ela tem.
+2. **Saída da pasta**: as faixas de dentro que estão em *Inherited (Folder)*
+   saem por aqui. Você muda a saída da bateria inteira, por exemplo, num lugar
+   só.
+
+</Legend>
+
+Os controles **M**, **S** e volume da pasta afetam todas as faixas dela.
+
+## Menus do botão direito
+
+### Numa música
+
+![O menu de uma música](/guide/desktop-en/menu-song.png)
+
+- **Rename Song** (<kbd>F2</kbd>).
+- **Song key**: o tom dela. Aparece ao lado do nome e é transposto junto.
+- **Key change at cursor ▸**: a música muda de tom a partir de onde está o
+  cursor (o último refrão um tom acima, por exemplo). Veja
+  [Mudanças de tom](/pt/docs/tasks/songs/#mudanças-de-tom).
+- **Arrangement**: abre o editor de [arranjo](/pt/docs/arrangements/).
+- **Split song at cursor** (<kbd>Shift</kbd>+<kbd>S</kbd>): divide em duas
+  músicas na posição do cursor.
+- **Change Original BPM**: o andamento em que o áudio foi gravado, usado pelo
+  [warp](/pt/docs/pitch-and-warp/).
+- **Song Fades ▸**: o fade in e o fade out da música, em segundos. Você também
+  pode defini-los arrastando os cantos da música na régua. Veja
+  [Fade in e fade out](/pt/docs/tasks/songs/#fade-in-e-fade-out).
+- **Voice Guide Count-in ▸**: como a guia falada conta a entrada desta música,
+  se você quiser diferente do ajuste global. Veja
+  [Guia falada](/pt/docs/voice-guide/#ligar-e-configurar).
+- **Export Song**: salva como `.ltpkg` para levar a outra sessão.
+- **Render audio…**: exporta a mixagem dela em WAV, inteira ou faixa por faixa.
+- **Analyze song (tempo, key and sections)…**: lê o click, o tom e a guia
+  falada e sugere o andamento, o tom e os marcadores. Veja
+  [Analisar música](/pt/docs/song-analysis/).
+- **Delete Song** (<kbd>Del</kbd>).
+
+### Num marcador
+
+![O menu de um marcador](/guide/desktop-en/menu-marker.png)
+
+- **Jump to This Marker**: move o cursor até o marcador.
+- **Rename** (<kbd>F2</kbd>).
+- **Exact position...**: digite a posição exata, como *compasso.tempo* ou em
+  segundos.
+- **Marker type...**: Intro, Verse, Chorus… ou um cue como *Drums In*. O tipo
+  define a cor e o que a guia falada diz.
+- **Delete**.
+
+### Num marcador de andamento
+
+![O menu de um marcador de andamento](/guide/desktop-en/menu-tempo-marker.png)
+
+Os marcadores de andamento (a bandeirinha com o BPM, na parte de baixo da
+régua) têm um menu próprio:
+
+- **Change BPM**: o andamento a partir daquele marcador.
+- **Ramp to the next marker**: em vez de saltar de uma vez, o andamento sobe
+  ou desce aos poucos até o do próximo marcador e chega a ele exatamente ali.
+  O marcador é desenhado inclinado na régua, e o metrônomo e a guia falada
+  seguem a rampa. Precisa de outro marcador de BPM depois dele. Veja
+  [Andamento e fórmula de compasso](/pt/docs/tasks/tempo/#acelerar-ou-desacelerar-o-andamento-aos-poucos).
+- **Delete Marker**.
+
+### Vários marcadores de uma vez
+
+![Três marcadores selecionados na régua](/guide/desktop-en/ruler-marker-selection.png)
+
+<kbd>Ctrl</kbd>+clique num marcador o adiciona ou tira da seleção sem agendar
+o salto, e <kbd>Shift</kbd>+clique seleciona todos os marcadores entre o último
+clicado e este (seções, cues, andamento e fórmula de compasso). Com vários
+selecionados:
+
+- Arraste qualquer um para mover o grupo inteiro.
+- <kbd>Del</kbd> os apaga e <kbd>Ctrl</kbd>+<kbd>D</kbd> os duplica depois do
+  grupo, em compassos inteiros.
+- O botão direito abre o menu do grupo.
+
+No celular, com **Select by area** ligado, toque nos marcadores ou arraste o
+dedo pela régua para adicioná-los.
+
+Os marcadores também podem ser arrastados pela régua para movê-los.
+
+### Numa mudança de andamento
+
+![O menu de uma mudança de andamento](/guide/desktop-en/menu-tempo.png)
+
+- **Change BPM** daquele trecho.
+- **Delete Marker**: o trecho volta ao andamento anterior.
+
+### Na régua vazia
+
+![O menu da régua](/guide/desktop-en/menu-ruler.png)
+
+- **Create marker** no ponto em que você clicou. Você escolhe o tipo antes.
+- **Change Timeline BPM**: o andamento inicial da sessão.
+- **Create time-signature marker**: uma mudança de fórmula de compasso (para
+  6/8, por exemplo) a partir daquele ponto.
+- **Create automation**: uma ação automática naquele ponto. Veja
+  [Automação](/pt/docs/automation/).
+- **Clear Timeline Selection**.
+
+Se você primeiro arrastar na régua para selecionar um trecho, a primeira opção
+vira **Create Song From Selection**.
+
+### Numa faixa
+
+![O menu de uma faixa](/guide/desktop-en/menu-track.png)
+
+- **Insert Track** e **Insert Folder Track**, logo abaixo.
+- **Reset track height**.
+- **Rename** (<kbd>F2</kbd>) e **Select colour…**.
+- **Channels…**: estéreo, mono (soma), só esquerda ou só direita, e **Split
+  L/R channels** para um arquivo com o click de um lado.
+- **Delete**.
+- **Indent Into Previous Folder** e **Remove From Folder**.
+- **Add MIDI track**: para mandar notas ou program changes para teclados,
+  luzes ou software externo.
+
+O menu de uma pasta é o mesmo.
+
+### Num clipe
+
+![O menu de um clipe](/guide/desktop-en/menu-clip.png)
+
+- **Split At Cursor** (<kbd>S</kbd>): divide o clipe na posição do cursor.
+- **Duplicate** (<kbd>Ctrl</kbd>+<kbd>D</kbd>).
+- **Select colour…**.
+- **Delete** (<kbd>Del</kbd>).
+
+Dividir, mover ou duplicar clipes **nunca altera os seus arquivos de áudio**:
+só muda qual parte do áudio toca e onde.
+
+### Na faixa de automação
+
+![O menu da faixa de automação](/guide/desktop-en/menu-automation.png)
+
+- **Create automation here**.
+- **Manage mix scenes...**: salva mixagens inteiras para aplicá-las de uma vez.
+- **Remove automation track**: também apaga toda a automação dela.
+
+Veja [Automação](/pt/docs/automation/).

@@ -351,3 +351,16 @@ describe("a section sung twice inside one marker", () => {
     expect(at(4.5).passes).toBeUndefined();
   });
 });
+
+describe("a song without section markers", () => {
+  it("shows one block per sheet section, in order, none current", () => {
+    const doc = parseChordPro(["{section: Verso}", "Uno", "{section: Coro}", "Dos", "{section: Puente}", "Tres"].join("\n"));
+    const { blocks, current } = buildPerformanceBlocks(doc, [], [], [], null);
+    expect(blocks.map((block) => [block.label, block.section])).toEqual([
+      ["Verso", 0],
+      ["Coro", 1],
+      ["Puente", 2],
+    ]);
+    expect(current).toBe(-1);
+  });
+});

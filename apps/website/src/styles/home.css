@@ -111,6 +111,33 @@
   border-radius: 6px;
 }
 
+/* ── Store proof line (hero) ───────────────────────────────────────────── */
+.home-proof {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem 0.6rem;
+  margin-top: 1.1rem;
+  color: var(--lt-muted);
+  font: 500 0.9rem/1.3 var(--lt-font-label);
+  text-decoration: none;
+}
+
+.home-proof b {
+  color: var(--lt-heading);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.home-proof .home-proof-stars {
+  font-size: 1.05rem;
+}
+
+.home-proof:hover b,
+.home-proof:focus-visible b {
+  color: var(--lt-primary);
+}
+
 /* ── Readouts ──────────────────────────────────────────────────────────── */
 .home-readouts {
   border-bottom: 1px solid var(--lt-border-strong);

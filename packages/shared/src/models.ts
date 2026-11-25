@@ -446,7 +446,15 @@ export type SongChart = {
   /** Where it was imported from, for "Update from Planning Center". Absent
    * for charts written or imported from a file. Mirrors Rust `ChartSource`. */
   source?: ChartSource;
+  /** This song's own lyrics follow (focus of 1, 2 or 3 lines, the whole
+   * section, or off). Absent = the device's general one. Mirrors Rust
+   * `ChartFollow`; an unknown value is read as absent. */
+  follow?: ChartFollow;
 };
+
+/** What the lyrics follow highlights and keeps in view. */
+export type FollowFocus = 1 | 2 | 3 | "section" | "off";
+export type ChartFollow = { focus: FollowFocus };
 
 /** The service a chart was imported from. It never syncs on its own. */
 export type ChartSource = {

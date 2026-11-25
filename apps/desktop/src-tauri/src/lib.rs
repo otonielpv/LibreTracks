@@ -356,6 +356,7 @@ pub fn run() {
             commands::system::healthcheck,
             commands::system::is_debug_build,
             commands::system::set_screen_orientation,
+            commands::store_review::request_store_review,
             commands::app_close::exit_app,
             commands::app_close::cancel_app_close,
             commands::system::get_telemetry_platform,

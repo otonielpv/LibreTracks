@@ -45,6 +45,7 @@ function renderEditor(initial: SongChart = chart) {
   const onSave = vi.fn(async () => {});
   render(
     <ChartEditorModal
+      initialMode="advanced"
       region={region}
       markers={markers}
       chart={initial}
@@ -198,6 +199,7 @@ describe("ChartEditorModal adjust to the sequence", () => {
     const onSave = vi.fn(async () => {});
     render(
       <ChartEditorModal
+        initialMode="advanced"
         region={region}
         markers={markers}
         chart={null}

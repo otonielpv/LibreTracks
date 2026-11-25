@@ -1,0 +1,272 @@
+---
+title: No celular e tablet
+description: "A interface do LibreTracks no Android e iOS, tela por tela: tela inicial, botões exclusivos do celular, a barra de ações, selecionar faixas e clipes, menus de tocar e segurar, Library, Compact View e Live View."
+sidebar:
+  order: 6
+---
+
+import Legend from "../../../../../components/guide/Legend.astro";
+import Clip from "../../../../../components/guide/Clip.astro";
+
+No celular e no tablet, o LibreTracks é o mesmo app do computador: o mesmo
+motor, o mesmo formato de sessão e as mesmas visões. O app é sempre usado **na
+horizontal**. O que muda é como você o toca:
+
+- **Não há botão direito**: **toque e segure** para abrir o menu de algo.
+- **Não há menu File**: as opções dele estão na barra lateral.
+- As ações do que você selecionou aparecem numa **barra flutuante** embaixo.
+
+Esta página percorre essas diferenças. Os gestos, onde as sessões ficam e a
+saída de áudio estão em [LibreTracks no celular](/pt/docs/mobile/).
+
+## Tela inicial
+
+![A tela inicial no celular](/guide/mobile-en/landing.png)
+
+<Legend>
+
+1. **Sessions**: a lista das suas sessões, para abrir outra sem sair da que
+   está aberta.
+2. **Save**: salva a sessão aberta.
+3. **File**: importar uma música, gerenciar a nuvem, exportar a sessão e
+   salvá-la como template. Veja [abaixo](#o-botão-file).
+4. **Library**: o áudio da sessão.
+5. **Settings**.
+6. **Tutorial**: os tours guiados, adaptados à tela de toque.
+7. **Create**: uma sessão nova.
+8. **Import session**: abre um `.ltset`, do celular ou do seu Google Drive.
+9. **Cloud**: conecte ou desconecte a sua conta do Google Drive e apague o que
+   você enviou.
+10. **Demo song**: uma sessão de exemplo com duas músicas, para experimentar
+    sem importar nada.
+
+</Legend>
+
+O **Remote** não está nesta barra: ele serve para controlar o computador *pelo*
+celular, com o navegador. Veja [Remote personalizado](/pt/docs/remote-control/).
+
+### O botão File
+
+![As opções do botão File](/guide/mobile-en/file-actions.png)
+
+- **Import song**: adiciona uma música `.ltpkg` à sessão aberta.
+- **Cloud**: gerencia a sua conta do Google Drive (conectar, desconectar,
+  apagar o que você enviou).
+- **Export session…**: a sessão inteira, com o áudio, num `.ltset`.
+- **Save as template…**.
+
+As duas últimas só ficam ativas com uma sessão aberta. Como no computador, com
+a nuvem conectada **Import** e **Export** perguntam se você quer usar o
+celular ou o seu Google Drive.
+
+## A tela de trabalho
+
+![A DAW view no celular](/guide/mobile-en/daw-overview.png)
+
+<Legend>
+
+1. **BPM** da música sob o cursor.
+2. **Tap**: bata junto para calcular o andamento.
+3. **Fórmula de compasso**.
+4. **Desfazer** e **refazer**.
+5. **Transporte**, metrônomo, guia falada e pads, como no computador. Veja
+   [a barra superior](/pt/docs/interface/main-screen/#transporte).
+6. **Posição** em compassos e em tempo.
+7. **CPU**: a carga do motor de áudio. Toque para ver os detalhes.
+8. **Botões das faixas**. Veja [abaixo](#botões-das-faixas).
+9. **Barra de ações**: sem nada selecionado, serve para **adicionar**. Veja
+   [abaixo](#adicionar).
+
+</Legend>
+
+Abaixo da barra superior fica a mesma [barra de ferramentas](/pt/docs/interface/toolbar/)
+do computador; deslize sobre ela para ver os grupos que não cabem.
+
+### Botões das faixas
+
+![Os botões acima da lista de faixas](/guide/mobile-en/track-header-actions.png)
+
+<Legend>
+
+1. **Reordenar faixas**: liga um modo em que você arrasta as faixas para mudar
+   a ordem. Toque de novo para sair.
+2. **Faixas mais baixas**.
+3. **Faixas mais altas**.
+4. **Travar a régua**: com o cadeado ligado, tocar na régua não move o cursor.
+   Evita saltos acidentais enquanto você toca ao vivo.
+
+</Legend>
+
+### Adicionar
+
+Sem nada selecionado, a barra de ações oferece **Section** (um marcador de
+seção no cursor), **Cue** (um marcador de cue) e **Audio** (importar áudio
+para a sessão). O botão **…** mostra todas as opções:
+
+![Todas as opções de Add](/guide/mobile-en/add-sheet.png)
+
+Além de seção, cue e áudio, há **Video from the gallery** e **Video from
+files**, para adicionar um vídeo que é projetado com a música (veja
+[Vídeo no projetor](/pt/docs/tasks/video/)).
+
+A seta **⌄** recolhe a barra para ver mais da timeline.
+
+### Medidor de recursos
+
+![Os detalhes do medidor de recursos](/guide/mobile-en/resource-panel.png)
+
+No celular a pastilha **CPU** mostra a **carga de áudio**: a parte do tempo de
+cada bloco de som de que o motor precisa para processá-lo. Acima de 100 % você
+ouve falhas. **Audio dropouts** conta as que já houve.
+
+## Selecionar uma faixa
+
+Toque no **nome** de uma faixa para selecioná-la. A barra de ações muda e
+mostra o que você pode fazer com ela:
+
+![Uma faixa selecionada e a sua barra de ações](/guide/mobile-en/track-selected.png)
+
+<Legend>
+
+1. A **faixa selecionada**, destacada.
+2. O que está selecionado.
+3. **Ações rápidas**: inserir faixa, inserir pasta, redefinir a altura…
+4. **Mais ações**: o menu completo da faixa.
+5. **Mix**: mostra os controles de mixagem ao lado da barra. Veja abaixo.
+6. **Select by area**: desenhe um retângulo com o dedo para selecionar várias
+   coisas de uma vez (veja abaixo).
+7. **Limpar seleção**.
+8. **Esconder** a barra.
+
+</Legend>
+
+No celular os cabeçalhos das faixas mostram só **M** e **S**. O resto da
+mixagem aparece quando você seleciona a faixa: uma linha acima dela com o
+**T**, o volume, o pan e a saída. O botão **Mix** traz esses controles para o
+lado da barra de ações:
+
+![Os controles de mixagem da faixa selecionada](/guide/mobile-en/track-mix.png)
+
+<Clip
+  src="/guide/mobile-en/track-select-mix.mp4"
+  poster="/guide/mobile-en/track-select-mix.webp"
+  caption="Toque no nome da faixa para selecioná-la; “Mix” mostra os controles dela ao lado da barra."
+/>
+
+Com várias faixas selecionadas, as mudanças valem para todas, e o volume e o
+pan se movem na mesma proporção.
+
+### Select by area
+
+Com **Select by area** ligado, um dedo desenha um **retângulo**: sobre os
+cabeçalhos ele seleciona **faixas**, e sobre as linhas, **clipes**. Cada
+retângulo ou toque soma ou tira da seleção, e com **dois dedos** você continua
+rolando e dando zoom. Na régua, tocar ou arrastar adiciona **marcadores**.
+Aperte o botão de novo para sair do modo.
+
+**Mais ações** abre o menu completo da faixa, o mesmo do botão direito no
+computador ([veja as opções](/pt/docs/interface/timeline/#numa-faixa)):
+
+![O menu completo da faixa](/guide/mobile-en/track-more.png)
+
+## Selecionar um clipe
+
+Toque num clipe para selecioná-lo:
+
+![A barra de ações de um clipe](/guide/mobile-en/clip-selected.png)
+
+As ações do clipe, as mesmas do
+[menu no computador](/pt/docs/interface/timeline/#num-clipe), aparecem na barra:
+**Split At Cursor** (ativo quando o cursor está sobre o clipe),
+**Duplicate**, **Select colour…**, e as que não cabem ficam em **…**.
+
+Com o clipe selecionado, arraste-o para movê-lo. Assim um toque acidental
+nunca move o áudio.
+
+## Tocar e segurar
+
+Toque e segure uma música, um marcador ou qualquer ponto da timeline para
+abrir o menu dele, o mesmo do botão direito no computador.
+
+![O menu de uma música depois de tocar e segurar](/guide/mobile-en/song-sheet.png)
+
+![O menu de um marcador depois de tocar e segurar](/guide/mobile-en/marker-sheet.png)
+
+O que cada opção faz está em
+[Menus do botão direito](/pt/docs/interface/timeline/#menus-do-botão-direito).
+
+## Library
+
+![A Library no celular](/guide/mobile-en/library.png)
+
+<Legend>
+
+1. **Add folder**: escolha uma pasta do celular ou do cartão SD com o seletor
+   do Android. Ela fica salva.
+2. **Busca** no que você expandiu.
+3. **Uma pasta que você adicionou**. Toque para expandi-la.
+4. **Adicionar como música**: o botão de cada pasta a leva inteira para o
+   cursor como uma música, com uma faixa por arquivo de áudio.
+5. **Um arquivo de áudio selecionado**: toque nos arquivos para selecioná-los.
+6. **Add to timeline**: coloca os arquivos selecionados em faixas novas na
+   posição do cursor. O **X** limpa a seleção.
+7. **In this session**: o áudio que já está na sessão.
+
+</Legend>
+
+**In this session** funciona como um acordeão: ao expandir, a biblioteca da
+sessão (**Folder**, **Import audio** e o áudio organizado em pastas) ocupa o
+painel inteiro; recolha e as suas pastas voltam.
+
+![“In this session” expandido no celular](/guide/mobile-en/library-session.png)
+
+Toque num arquivo para selecioná-lo e as ações dele aparecem. Para fechar a
+Library, toque de novo no botão dela na barra lateral. Mais em
+[As suas pastas na Library](/pt/docs/mobile/#as-suas-pastas-na-library). Como no
+computador, o áudio é usado **sem copiá-lo** para a sessão (isso pode ser
+mudado): veja
+[Importar áudio sem copiar](/pt/docs/mobile/#importar-áudio-sem-copiar).
+
+## Settings
+
+![Settings no celular](/guide/mobile-en/settings.png)
+
+As mesmas abas do computador ([veja Configurações](/pt/docs/interface/settings/)),
+menos **Shortcuts**, que não faz sentido sem teclado, e **Redundancy**. No
+celular há também opções próprias: onde guardar as sessões (armazenamento
+interno, cartão SD ou pendrive), importar sem copiar e a saída de baixa
+latência. Elas são explicadas em [LibreTracks no celular](/pt/docs/mobile/).
+
+## Compact View e Live View
+
+As três visões estão nos três primeiros botões da barra de ferramentas, como
+no computador.
+
+![A Compact View no celular](/guide/mobile-en/compact.png)
+
+A **Compact View** mostra uma coluna por música com as suas faixas, o botão
+para tocá-la e o fader de volume dela. **+ New song** e **Import .ltpkg**
+ficam no fim, e **Mixer** abre o mixer embaixo. Veja
+[Compact View](/pt/docs/compact-view/).
+
+No mixer da Compact View e no console da Setlist View, toque e segure o nome
+de uma faixa para ver o menu dela. Use **Select multiple** para tocar nas
+faixas e colocá-las ou tirá-las de uma seleção; os faders e botões de qualquer
+faixa selecionada passam a ajustar a seleção inteira. Use **Move tracks** e
+depois arraste o nome de uma faixa para reordená-la; toque no botão de novo
+quando terminar.
+
+![A Live View no celular](/guide/mobile-en/live.png)
+
+A **Live View** é a de tocar: os marcadores da música em botões grandes, com
+quanto falta para o próximo, o repertório embaixo e os ajustes de salto
+sempre à mão. Veja [Live View](/pt/docs/live-view/).
+
+## Sessões
+
+![A lista de sessões](/guide/mobile-en/sessions.png)
+
+O botão **Sessions** da barra lateral abre esta janela sem fechar a sessão
+atual. Daqui você cria, importa ou abre outra. Para apagar uma sessão do
+aparelho, use a lixeira ao lado do nome dela; a que está aberta não pode ser
+apagada.

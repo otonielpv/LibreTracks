@@ -7102,7 +7102,7 @@ body.lt-daw-song-reordering .lt-region-hotspot .lt-region-hotspot-name {
 .lt-control-group-vamp .lt-control-popover-panel {
   left: 0;
   transform: none;
-  min-width: 22rem;
+  min-width: 26rem;
 }
 
 .lt-control-group-region .lt-control-popover-panel {
@@ -7547,6 +7547,57 @@ body.lt-daw-song-reordering .lt-region-hotspot .lt-region-hotspot-name {
   padding-block: 0.45rem;
   white-space: normal;
   overflow-wrap: anywhere;
+}
+
+/* Popover del modo vamp: los cuatro modos en su propia fila a todo el ancho
+   y, debajo, el stepper de compases y "Entre canciones". En una sola fila el
+   stepper (que solo aparece en Compases) estrujaba los botones hasta partir
+   las palabras letra a letra. */
+.lt-control-group-vamp .lt-control-group-body {
+  flex-wrap: wrap;
+  row-gap: 0.6rem;
+}
+
+.lt-control-group-vamp .lt-control-group-actions {
+  flex: 1 1 100%;
+}
+
+.lt-control-group-vamp .lt-segmented-control {
+  width: 100%;
+}
+
+.lt-control-group-vamp .lt-segmented-control button {
+  flex: 1 1 auto;
+  overflow-wrap: normal;
+}
+
+.lt-control-group-vamp .lt-control-group-details {
+  flex: 1 1 100%;
+  justify-content: space-between;
+  align-items: flex-end;
+}
+
+.lt-control-group-vamp .lt-stepper-control {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  min-width: 0;
+}
+
+.lt-control-group-vamp .lt-stepper-control > span {
+  color: rgb(var(--lt-c-bacac5, 186 202 197));
+  font: 700 10px/1 "Space Grotesk", sans-serif;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.lt-control-group-vamp .lt-stepper-control-row button {
+  min-width: 32px;
+  background: rgb(var(--lt-c-ffffff, 255 255 255) / 0.06);
+}
+
+.lt-control-group-vamp .lt-stepper-control-row input {
+  background: rgb(var(--lt-c-ffffff, 255 255 255) / 0.06);
 }
 
 .lt-segmented-control button:hover,
@@ -8797,6 +8848,13 @@ body.lt-song-reordering .lt-compact-column-resize-slot {
   align-items: center;
   gap: 0.4rem;
   min-width: 0;
+  /* Same height as a cover (.lt-song-cover), so songs without a picture
+     line up with the ones that have one. */
+  min-height: 2.5rem;
+}
+
+.lt-mobile .lt-compact-song-name-row {
+  min-height: 1.75rem;
 }
 
 .lt-compact-song-name {

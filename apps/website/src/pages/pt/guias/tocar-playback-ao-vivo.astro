@@ -1,0 +1,56 @@
+---
+import GuidePage from "../../../components/GuidePage.astro";
+
+const sections = [
+  {
+    heading: "1. Exporte stems prontos para o palco",
+    paragraphs: [
+      "Termine a edição, a afinação e o processamento na sua DAW de produção. Exporte todos os stems a partir do mesmo ponto inicial e com a mesma duração, para que os arquivos continuem alinhados quando forem colocados na timeline do player.",
+      "Use nomes que continuem óbvios sob pressão: Bateria, Baixo, Teclado, Guitarras, Vozes, Click e Guia. Mantenha o click e os avisos falados separados dos stems musicais, porque normalmente eles devem chegar aos músicos, não ao público.",
+    ],
+    checklist: ["Use a mesma taxa de amostragem em todos os arquivos.", "Deixe headroom suficiente para não clipar na saída da interface.", "Ouça cada arquivo exportado uma vez antes de importar o repertório."],
+    media: { src: "/guide/desktop-en/library-folder-to-song.mp4", poster: "/guide/desktop-en/library-folder-to-song.webp", alt: "Importando áudio preparado na biblioteca do LibreTracks", width: 1800, height: 1058, type: "video" as const },
+  },
+  {
+    heading: "2. Decida o que o público e os músicos devem ouvir",
+    paragraphs: [
+      "A configuração mais simples manda os stems musicais para a mesa de P.A. e o click com a guia falada para o caminho dos fones in-ear. Uma interface maior permite ao técnico receber stems individuais; uma interface menor pode mandar uma mixagem estéreo da música e uma saída separada para os avisos.",
+      "Anote o mapa de saídas antes de abrir o programa. Uma lista numerada como 1-2 Música, 3 Click e 4 Guia evita adivinhações de última hora na passagem de som.",
+    ],
+    media: { src: "/guide/articles/en/track-route.webp", alt: "Escolhendo uma saída de hardware para uma faixa de click no LibreTracks", width: 383, height: 408 },
+  },
+  {
+    heading: "3. Monte músicas, marcadores e transições",
+    paragraphs: [
+      "Importe os stems, crie uma região por música e adicione marcadores nas seções em que a banda pode precisar reagir. Deixe a ordem do repertório à vista e use nomes de música claros em vez de abreviações de arquivo.",
+      "Adicione apenas saltos ao vivo, loops Vamp ou transições automáticas que a banda tenha ensaiado. A flexibilidade é útil quando todos os músicos entendem o que significa o próximo aviso.",
+    ],
+    media: { src: "/guide/articles/en/live-view.webp", alt: "Visão Live do LibreTracks com os marcadores da música e os controles de salto", width: 1600, height: 940 },
+  },
+  {
+    heading: "4. Ensaie os casos de falha",
+    paragraphs: [
+      "Passe o show completo com o mesmo computador, interface, cabos e configuração de buffer previstos para o local. Teste parar, recomeçar, pular uma música e se recuperar de um remote desconectado.",
+      "Leve uma mixagem estéreo de emergência num aparelho separado e combine um plano musical caso o playback pare. O objetivo não é um rig que nunca falha; é uma banda que sabe exatamente o que fazer se falhar.",
+    ],
+    checklist: ["Desative suspensão, notificações e atualizações automáticas para o show.", "Etiquete as saídas da interface e os cabos.", "Passe o som do click e da guia sem mandá-los para o público."],
+  },
+];
+---
+
+<GuidePage
+  title="Como Tocar com Playback ao Vivo: Guia de Configuração | LibreTracks"
+  description="Como tocar com playback ao vivo: preparar stems, rotear click e guia falada, montar o repertório, ensaiar transições e ter um plano B prático."
+  lang="pt"
+  eyebrow="Fluxo de playback ao vivo"
+  heading="Como tocar com playback ao vivo"
+  intro="Um rig de playback confiável começa antes de o notebook chegar ao palco. Este fluxo deixa a preparação do áudio, o roteamento, o controle musical e o plano para falhas compreensíveis para a banda inteira."
+  hero={{ src: "/guide/articles/en/compact-view.webp", alt: "Um repertório organizado por músicas na Visão Compacta do LibreTracks", width: 1600, height: 940 }}
+  sections={sections}
+  related={[
+    { href: "/pt/download/", label: "Baixar o LibreTracks" },
+    { href: "/pt/docs/start/first-song/", label: "Sua primeira música, passo a passo" },
+    { href: "/pt/docs/live-control-flow/", label: "Guia de controle ao vivo" },
+  ]}
+  nextGuide={{ href: "/pt/guias/roteamento-audio-multitrack/", label: "Roteamento de áudio multitrack ao vivo" }}
+/>

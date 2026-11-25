@@ -27,12 +27,24 @@ import {
   type ChartPlayback,
 } from "@libretracks/shared/charts/chartSync";
 
+import {
+  FOLLOW_FOCUSES,
+  PAGE_TURN_AT,
+  READING_AT,
+  focusLineState,
+  lyricsFocus,
+  parseFollowFocus,
+  resolveFollow,
+} from "@libretracks/shared/charts/lyricsFollow";
+import type { FollowFocus } from "@libretracks/shared/models";
+
 import { getRemoteStrings } from "./i18n";
 
 const STRINGS = getRemoteStrings();
 const POLL_MS = 100;
 const FONT_SCALE_KEY = "libretracks.remote.lyrics.fontScale";
 const SHOW_CHORDS_KEY = "libretracks.remote.lyrics.showChords";
+const FOLLOW_KEY = "libretracks.remote.lyrics.follow";
 const FONT_SCALES = [0.8, 0.9, 1, 1.15, 1.3, 1.5, 1.75, 2, 2.5];
 const MANUAL_SCROLL_HOLD_MS = 4000;
 
@@ -165,6 +177,7 @@ export const LyricsWidget = memo(function LyricsWidget({
   const [showChords, setShowChords] = useState(() =>
     readStored(SHOW_CHORDS_KEY, true, (raw) => raw === "true"),
   );
+  const [widgetFollow, setWidgetFollow] = useState<FollowFocus>(() => readStored<FollowFocus>(FOLLOW_KEY, 1, parseFollowFocus));
 
   const sources = useRef({ songView, getPositionSeconds });
   sources.current = { songView, getPositionSeconds };
@@ -252,19 +265,57 @@ export const LyricsWidget = memo(function LyricsWidget({
     [doc, region?.chart, markers, history, pendingMarkerId, state.playback.pass],
   );
 
+  // The song's own follow, else this widget's (shared/charts/lyricsFollow).
+  const followFocus = resolveFollow(region?.chart?.follow, widgetFollow);
+  const currentSection = blocks[currentBlock]?.section ?? null;
+  const focus = lyricsFocus({
+    focus: followFocus,
+    currentBlock,
+    currentLine: state.playback.line,
+    blockLineCount: currentSection === null ? 0 : (doc?.sections[currentSection]?.lines.length ?? 0),
+  });
+  const anchorKey = focus.anchor?.key ?? null;
+  const anchorTop = focus.anchor?.align === "top";
+  const pageKey = anchorTop && state.playback.line !== null ? `${currentBlock}-${state.playback.line}` : null;
+  const lastAnchorRef = useRef<string | null>(null);
   useEffect(() => {
     const scroller = scrollerRef.current;
-    if (!scroller || currentBlock < 0) return;
+    if (!scroller || anchorKey === null) return;
     if (performance.now() - manualScrollAtRef.current < MANUAL_SCROLL_HOLD_MS) return;
-    const key = state.playback.line === null ? `${currentBlock}-head` : `${currentBlock}-${state.playback.line}`;
-    const target = scroller.querySelector<HTMLElement>(`[data-line-key="${key}"]`);
-    if (!target) return;
+    const find = (key: string) => scroller.querySelector<HTMLElement>(`[data-line-key="${key}"]`);
     // From on-screen positions, not offsetTop (see the desktop panel).
-    const offset = target.getBoundingClientRect().top - scroller.getBoundingClientRect().top;
-    const top = Math.max(0, scroller.scrollTop + offset - scroller.clientHeight * 0.18);
+    const offsetOf = (element: HTMLElement) => element.getBoundingClientRect().top - scroller.getBoundingClientRect().top;
+    let target = find(anchorKey);
+    let at = anchorTop ? 0 : READING_AT;
+    const runKey = `${anchorKey}|${fontScale}|${showChords}`;
+    if (anchorTop && pageKey) {
+      const line = find(pageKey);
+      if (line && offsetOf(line) > scroller.clientHeight * PAGE_TURN_AT) {
+        target = line;
+        at = 0;
+      } else if (lastAnchorRef.current === runKey) {
+        return;
+      }
+    }
+    if (!target) return;
+    lastAnchorRef.current = runKey;
+    const top = Math.max(0, scroller.scrollTop + offsetOf(target) - scroller.clientHeight * at);
     if (typeof scroller.scrollTo === "function") scroller.scrollTo({ top, behavior: "smooth" });
     else scroller.scrollTop = top;
-  }, [currentBlock, state.playback.line, fontScale, showChords]);
+  }, [anchorKey, anchorTop, pageKey, fontScale, showChords]);
+
+  const cycleFollow = () => {
+    const next = FOLLOW_FOCUSES[(FOLLOW_FOCUSES.indexOf(widgetFollow) + 1) % FOLLOW_FOCUSES.length];
+    setWidgetFollow(next);
+    store(FOLLOW_KEY, String(next));
+  };
+  const followName: Record<string, string> = {
+    1: STRINGS.lyricsFollow1,
+    2: STRINGS.lyricsFollow2,
+    3: STRINGS.lyricsFollow3,
+    section: STRINGS.lyricsFollowSection,
+    off: STRINGS.lyricsFollowOff,
+  };
 
   const changeFont = (step: 1 | -1) => {
     const index = FONT_SCALES.indexOf(fontScale);
@@ -297,6 +348,15 @@ export const LyricsWidget = memo(function LyricsWidget({
         >
           ♪
         </button>
+        <button
+          type="button"
+          className={region?.chart?.follow ? "is-active" : ""}
+          onClick={cycleFollow}
+          aria-label={`${STRINGS.lyricsFollow}: ${followName[String(followFocus)]}`}
+          title={`${STRINGS.lyricsFollow}: ${followName[String(followFocus)]}${region?.chart?.follow ? ` (${STRINGS.lyricsFollowSong})` : ""}`}
+        >
+          ⇅ {followName[String(followFocus)]}
+        </button>
       </div>
       {!region || !doc ? (
         <div className="lyrics-empty">{region ? STRINGS.lyricsNone : STRINGS.songNoActive}</div>
@@ -309,6 +369,7 @@ export const LyricsWidget = memo(function LyricsWidget({
           onPointerDown={markManual}
           data-testid="lyrics-scroller"
         >
+          {markers.length === 0 ? <p className="lyrics-hint">{STRINGS.lyricsNoMarkers}</p> : null}
           {blocks.map((block, blockIndex) => {
             const isCurrent = blockIndex === currentBlock;
             const blockDoc =
@@ -331,15 +392,7 @@ export const LyricsWidget = memo(function LyricsWidget({
                     line={line}
                     showChords={showChords}
                     lineKey={`${blockIndex}-${lineIndex}`}
-                    state={
-                      !isCurrent || state.playback.line === null
-                        ? blockIndex < currentBlock ? "past" : "upcoming"
-                        : lineIndex === state.playback.line
-                          ? "current"
-                          : lineIndex < state.playback.line
-                            ? "past"
-                            : "upcoming"
-                    }
+                    state={focusLineState(focus, blockIndex, currentBlock, lineIndex)}
                   />
                 ))}
               </div>

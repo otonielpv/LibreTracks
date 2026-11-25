@@ -1,0 +1,390 @@
+/* Simple lyrics editor: parts on the left, the box on the right; on a narrow
+   (phone, portrait) screen the parts become a row of chips above the box. */
+
+.lt-chart-editor-modes {
+  display: inline-flex;
+  gap: 0;
+  margin-top: 0.6rem;
+  border: 1px solid rgb(var(--lt-accent-rgb) / 0.24);
+}
+
+.lt-chart-editor-modes button {
+  border: 0;
+  background: transparent;
+  color: rgb(var(--lt-c-e5e2e1, 229 226 225) / 0.7);
+  padding: 0.4rem 0.8rem;
+  font: 700 0.75rem/1 "Space Grotesk", sans-serif;
+}
+
+.lt-chart-editor-modes button[aria-selected="true"] {
+  background: rgb(var(--lt-accent-rgb) / 0.14);
+  color: var(--lt-accent);
+}
+
+.lt-simple-lyrics {
+  grid-column: 1 / -1;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(10rem, 14rem) minmax(0, 1fr);
+  gap: 1rem;
+}
+
+.lt-simple-lyrics-parts {
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.lt-simple-lyrics-parts ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.lt-simple-lyrics-part {
+  width: 100%;
+  min-height: 2.5rem;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  border: 1px solid rgb(var(--lt-c-859490, 133 148 144) / 0.16);
+  border-left: 2px solid transparent;
+  border-radius: 2px;
+  background: rgb(var(--lt-c-1c1f20, 28 31 32) / 0.9);
+  color: rgb(var(--lt-c-f3f0ef, 243 240 239));
+  padding: 0.5rem 0.65rem;
+  text-align: left;
+  font: 600 0.82rem/1.2 "Space Grotesk", sans-serif;
+}
+
+.lt-simple-lyrics-part:hover {
+  background: rgb(var(--lt-c-282c2d, 40 44 45) / 0.95);
+}
+
+.lt-simple-lyrics-part.is-selected {
+  border-color: rgb(var(--lt-accent-rgb) / 0.35);
+  border-left-color: var(--lt-accent);
+  background: rgb(var(--lt-accent-rgb) / 0.12);
+}
+
+.lt-simple-lyrics-part.is-instrumental .lt-simple-lyrics-part-name {
+  opacity: 0.55;
+}
+
+.lt-simple-lyrics-part-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lt-simple-lyrics-part-position {
+  flex: 0 0 auto;
+  min-width: 1.4rem;
+  color: rgb(var(--lt-c-e5e2e1, 229 226 225) / 0.45);
+  font: 700 0.7rem/1 "JetBrains Mono", ui-monospace, monospace;
+}
+
+.lt-simple-lyrics-part.is-selected .lt-simple-lyrics-part-position {
+  color: var(--lt-accent);
+}
+
+.lt-simple-lyrics-also {
+  margin: 0.25rem 0 0;
+  color: rgb(var(--lt-c-e5e2e1, 229 226 225) / 0.65);
+  font: 500 0.72rem/1.35 "Space Grotesk", sans-serif;
+}
+
+.lt-simple-lyrics-part-done {
+  color: var(--lt-accent);
+  font-size: 16px;
+}
+
+.lt-simple-lyrics-quick {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-top: 0.6rem;
+}
+
+.lt-simple-lyrics-quick p {
+  width: 100%;
+  margin: 0 0 0.2rem;
+  color: rgb(var(--lt-c-e5e2e1, 229 226 225) / 0.6);
+  font: 500 0.72rem/1.4 "Space Grotesk", sans-serif;
+}
+
+.lt-simple-lyrics-main {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.lt-simple-lyrics-split {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem 0.6rem;
+}
+
+.lt-simple-lyrics-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lt-simple-lyrics-textarea {
+  min-height: 18rem;
+  resize: vertical;
+  padding: 0.75rem 0.85rem;
+  border: 1px solid rgb(var(--lt-accent-rgb) / 0.18);
+  border-radius: 2px;
+  color: rgb(var(--lt-c-f3f0ef, 243 240 239));
+  background: rgb(var(--lt-c-1c1f20, 28 31 32) / 0.98);
+  /* Monospaced always: chords line up with the words by columns. */
+  font: 0.9rem/1.5 "JetBrains Mono", ui-monospace, monospace;
+  white-space: pre;
+}
+
+.lt-simple-lyrics-textarea:focus {
+  outline: none;
+  border-color: rgb(var(--lt-accent-rgb) / 0.5);
+}
+
+.lt-simple-lyrics-main small {
+  color: rgb(var(--lt-c-e5e2e1, 229 226 225) / 0.55);
+  font: 500 0.72rem/1.4 "Space Grotesk", sans-serif;
+}
+
+.lt-simple-lyrics-notice {
+  margin: 0;
+  color: rgb(var(--lt-c-f5c46b, 245 196 107));
+  font: 600 0.75rem/1.4 "Space Grotesk", sans-serif;
+}
+
+.lt-simple-lyrics-paste .lt-simple-lyrics-textarea {
+  width: 100%;
+  min-height: 20rem;
+}
+
+.lt-simple-lyrics-blocks {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.lt-simple-lyrics-block-head {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.lt-simple-lyrics-blocks pre {
+  margin: 0.35rem 0 0;
+  padding: 0.5rem 0.65rem;
+  background: rgb(var(--lt-c-1c1f20, 28 31 32) / 0.9);
+  color: rgb(var(--lt-c-f3f0ef, 243 240 239));
+  font: 0.8rem/1.45 "JetBrains Mono", ui-monospace, monospace;
+  white-space: pre-wrap;
+}
+
+.lt-simple-lyrics-confidence {
+  font: 600 0.7rem/1 "Space Grotesk", sans-serif;
+  color: rgb(var(--lt-c-e5e2e1, 229 226 225) / 0.6);
+}
+
+.lt-simple-lyrics-confidence.is-low {
+  color: rgb(var(--lt-c-f5c46b, 245 196 107));
+}
+
+.lt-simple-lyrics-views {
+  align-self: flex-start;
+  margin-top: 0;
+}
+
+.lt-simple-chords {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  min-height: 12rem;
+  padding: 0.75rem 0.85rem;
+  border: 1px solid rgb(var(--lt-accent-rgb) / 0.18);
+  border-radius: 2px;
+  background: rgb(var(--lt-c-1c1f20, 28 31 32) / 0.98);
+}
+
+.lt-simple-chords-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.25rem;
+}
+
+.lt-simple-chords-word {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.lt-simple-chords-marks {
+  display: flex;
+  gap: 0.15rem;
+  min-height: 1.6rem;
+}
+
+.lt-simple-chords-chord {
+  min-height: 1.6rem;
+  padding: 0 0.35rem;
+  border: 0;
+  border-radius: 2px;
+  background: rgb(var(--lt-accent-rgb) / 0.12);
+  color: var(--lt-accent);
+  font: 700 0.8rem/1.6rem "JetBrains Mono", ui-monospace, monospace;
+}
+
+/* At least 40 px tall: chords are put with a finger on a tablet. */
+.lt-simple-chords-line.is-chords-only {
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.lt-simple-chords-line.is-chords-only .lt-simple-chords-chord {
+  min-height: 2.5rem;
+  min-width: 2.5rem;
+  padding: 0 0.6rem;
+  line-height: 2.5rem;
+}
+
+.lt-simple-chords-add {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 2.5rem;
+  min-height: 2.5rem;
+  border: 1px dashed rgb(var(--lt-accent-rgb) / 0.35);
+  border-radius: 2px;
+  background: transparent;
+  color: var(--lt-accent);
+}
+
+.lt-simple-chords-add .material-symbols-outlined {
+  font-size: 18px;
+}
+
+.lt-simple-chords-new-line {
+  align-self: flex-start;
+  min-height: 2.5rem;
+}
+
+.lt-simple-chords-syllable {
+  min-height: 2.5rem;
+  min-width: 2.5rem;
+  padding: 0 0.5rem;
+  border: 1px solid transparent;
+  border-radius: 2px;
+  background: transparent;
+  color: rgb(var(--lt-c-f3f0ef, 243 240 239));
+  font: 500 1rem/2.5rem "Space Grotesk", sans-serif;
+}
+
+.lt-simple-chords-syllable:hover {
+  border-color: rgb(var(--lt-accent-rgb) / 0.35);
+}
+
+.lt-simple-chord-picker .lt-settings-modal-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.lt-simple-chord-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.lt-simple-chord-grid .lt-chart-editor-button {
+  min-height: 2.5rem;
+  min-width: 2.75rem;
+  justify-content: center;
+}
+
+.lt-simple-chord-grid .lt-chart-editor-button.is-active {
+  background: var(--lt-accent);
+  color: rgb(var(--lt-c-0b1514, 11 21 20));
+}
+
+/* Tablet and computer: the editor keeps one height whatever part is picked
+   (a longer name, the split buttons of a repeated part); the box takes what
+   is left. */
+@media (min-width: 641px) {
+  /* Same height in Simple and Advanced: switching modes or views does not
+     resize the window. */
+  .lt-chart-editor.has-modes {
+    height: min(46rem, calc(var(--lt-chart-editor-visible-height, 100vh) - 2rem));
+  }
+
+  .lt-chart-editor.has-modes .lt-chart-editor-body {
+    flex: 1 1 auto;
+  }
+
+  .lt-chart-editor.is-simple .lt-chart-editor-body {
+    flex: 1 1 auto;
+    display: flex;
+    overflow: hidden;
+  }
+
+  .lt-chart-editor.is-simple .lt-simple-lyrics {
+    flex: 1 1 auto;
+    min-height: 0;
+  }
+
+  .lt-chart-editor.is-simple .lt-simple-lyrics-main {
+    min-height: 0;
+    overflow-y: auto;
+  }
+
+  .lt-chart-editor.is-simple .lt-simple-lyrics-textarea,
+  .lt-chart-editor.is-simple .lt-simple-chords {
+    flex: 1 1 auto;
+    min-height: 8rem;
+    resize: none;
+    overflow-y: auto;
+  }
+}
+
+@media (max-width: 640px) {
+  .lt-simple-lyrics {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .lt-simple-lyrics-parts ul {
+    flex-direction: row;
+    overflow-x: auto;
+    gap: 0.35rem;
+    scrollbar-width: none;
+  }
+
+  .lt-simple-lyrics-parts ul::-webkit-scrollbar {
+    display: none;
+  }
+
+  .lt-simple-lyrics-part {
+    width: auto;
+    min-height: 2.5rem;
+    border-left: 0;
+    border-bottom: 2px solid transparent;
+    white-space: nowrap;
+  }
+
+  .lt-simple-lyrics-part.is-selected {
+    border-bottom-color: var(--lt-accent);
+  }
+}

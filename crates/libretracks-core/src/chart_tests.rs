@@ -14,6 +14,7 @@ fn chart(links: Vec<ChartLink>) -> SongChart {
         text: "{section: Coro}\n[C]Gracia".into(),
         links,
         source: None,
+        follow: None,
     }
 }
 
@@ -80,4 +81,34 @@ fn a_link_keeps_how_many_times_its_section_plays_and_drops_nonsense() {
     assert!(json["links"][1].get("repeat").is_none());
     let back: SongChart = serde_json::from_value(json).unwrap();
     assert_eq!(back, chart);
+}
+
+#[test]
+fn chart_follow_round_trips_and_unknown_values_read_as_absent() {
+    use crate::{ChartFollow, FollowFocus};
+    for focus in [FollowFocus::Lines(1), FollowFocus::Lines(2), FollowFocus::Lines(3), FollowFocus::Section, FollowFocus::Off] {
+        let mut with = chart(vec![]);
+        with.follow = Some(ChartFollow { focus });
+        let json = serde_json::to_string(&with).unwrap();
+        let back: SongChart = serde_json::from_str(&json).unwrap();
+        assert_eq!(back, with, "{json}");
+    }
+    let without = serde_json::to_string(&chart(vec![])).unwrap();
+    assert!(!without.contains("follow"), "{without}");
+    let back: SongChart = serde_json::from_str(&without).unwrap();
+    assert_eq!(back.follow, None);
+
+    for unknown in [r#"{"focus":7}"#, r#"{"focus":"page"}"#, r#""section""#, "42"] {
+        let json = format!(r#"{{"text":"[C]Gracia","links":[{{"markerId":"m1","section":0}}],"follow":{unknown}}}"#);
+        let back: SongChart = serde_json::from_str(&json).unwrap_or_else(|error| panic!("{json}: {error}"));
+        assert_eq!(back.follow, None, "{unknown}");
+        assert_eq!(back.text, "[C]Gracia");
+        assert_eq!(back.links.len(), 1);
+    }
+    let section: SongChart = serde_json::from_str(r#"{"text":"x","follow":{"focus":"section"}}"#).unwrap();
+    assert_eq!(section.follow, Some(ChartFollow { focus: FollowFocus::Section }));
+    assert_eq!(
+        serde_json::to_value(&section).unwrap()["follow"],
+        serde_json::json!({ "focus": "section" })
+    );
 }

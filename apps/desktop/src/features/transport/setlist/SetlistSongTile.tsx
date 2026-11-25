@@ -8,7 +8,7 @@ import {
 } from "react";
 import { useTranslation } from "react-i18next";
 
-import { regionEffectiveKey, type SongRegionSummary } from "../desktopApi";
+import { formatBpm, regionEffectiveKey, type SongRegionSummary } from "../desktopApi";
 import { KeySequenceLabel } from "../keyChanges/SoundingKeyLabel";
 import { MidiMappable } from "../midi/MidiMappable";
 import { formatLiveClock } from "../live/liveMarkerModel";
@@ -73,7 +73,7 @@ function SetlistSongTileComponent({
   const { canControl, canEdit, canUseFiles } = useNetworkPermissions();
   const songKey = regionEffectiveKey(region);
   const duration = formatLiveClock(region.endSeconds - region.startSeconds);
-  const bpmLabel = bpm !== undefined ? `${Math.round(bpm)} BPM` : null;
+  const bpmLabel = bpm !== undefined ? `${formatBpm(bpm)} BPM` : null;
   const handleProps = useMemo(
     () => actions.reorderHandleProps?.(regionId),
     [actions, regionId],

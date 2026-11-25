@@ -1,0 +1,102 @@
+---
+import SiteLayout from "../../layouts/SiteLayout.astro";
+
+const alternatives = [
+  {
+    name: "Ableton Live",
+    href: "/pt/alternativa-ableton-live/",
+    fit: "Quando você usa o Ableton principalmente para tocar playback já renderizado no palco.",
+    libre: "O LibreTracks importa arrangements .als e oferece músicas, click, guia falada, saltos musicais, MIDI e remote no celular.",
+    keep: "Continue com o Ableton Live se precisar de gravação, instrumentos, plugins, criação de timbres ou dispositivos de produção em tempo real.",
+  },
+  {
+    name: "AbleSet",
+    href: "/pt/alternativa-ableset/",
+    fit: "Quando você quer um player de repertório para o palco sem pagar AbleSet e Ableton Live.",
+    libre: "O LibreTracks é um player independente que importa os seus Sets .als e oferece músicas, click, guia falada, saltos musicais, MIDI e remote no celular.",
+    keep: "Continue com o AbleSet se o seu show depende de instrumentos, efeitos ou dispositivos Max for Live do Ableton em tempo real.",
+  },
+  {
+    name: "Playback da MultiTracks",
+    href: "/pt/alternativa-playback-multitracks/",
+    fit: "Quando o seu ministério de louvor já tem, compra à parte ou produz os próprios stems.",
+    libre: "O LibreTracks é um player grátis com guia falada, click, mudança de tom por música, MIDI, roteamento de hardware e funcionamento offline.",
+    keep: "Continue com o Playback se o catálogo integrado de músicas licenciadas é essencial para o seu fluxo.",
+  },
+  {
+    name: "Prime Worship",
+    href: "/pt/alternativa-prime-worship/",
+    fit: "Para equipes que precisam do player, mas não de um catálogo por assinatura.",
+    libre: "O LibreTracks toca o seu próprio áudio localmente, guarda o repertório completo e funciona sem conta nem internet.",
+    keep: "Continue com o Prime se o mais importante é obter faixas de louvor licenciadas e prontas dentro do mesmo serviço.",
+  },
+  {
+    name: "Reaper",
+    href: "/pt/alternativa-reaper-ao-vivo/",
+    fit: "Quando o projeto do Reaper está pronto e você prefere controles de palco dedicados a manter um template ao vivo próprio.",
+    libre: "O LibreTracks importa projetos .rpp e transforma regiões e marcadores num repertório organizado por músicas.",
+    keep: "Continue com o Reaper se ainda precisa gravar, editar, mixar, rodar plugins ou personalizar a fundo a sessão de produção.",
+  },
+];
+---
+
+<SiteLayout
+  title="Alternativas Grátis para Playback ao Vivo | LibreTracks"
+  description="Compare o LibreTracks com Ableton Live, AbleSet, Playback, Prime Worship e Reaper para tocar com playback ao vivo: grátis, código aberto, offline e feito para os seus stems."
+  lang="pt"
+>
+  <main>
+    <section class="site-shell hero">
+      <div class="hero-grid">
+        <div>
+          <p class="eyebrow">Alternativas grátis para playback ao vivo</p>
+          <h1>Alternativas grátis para tocar com playback ao vivo</h1>
+          <p>O LibreTracks é um player multitrack grátis e de código aberto para bandas, ministérios de louvor e técnicos de som. Ele pode substituir a parte de playback de um rig com Ableton Live, Playback ou Prime quando você já tem os seus próprios stems. Não substitui ferramentas de produção musical nem um catálogo de músicas licenciadas.</p>
+          <div class="hero-actions">
+            <a class="button-link primary" href="/pt/download/">Baixar grátis</a>
+            <a class="button-link" href="/pt/docs/core-concepts/">Ver como funciona</a>
+          </div>
+        </div>
+        <div class="product-shot">
+          <img src="/screenshots/Compact-View.webp" alt="Repertório de playback no LibreTracks com músicas, stems e controles de mixagem" width="1100" height="590" fetchpriority="high" decoding="async" />
+        </div>
+      </div>
+    </section>
+
+    <section class="band">
+      <div class="site-shell">
+        <div class="section-heading">
+          <p class="eyebrow">Escolha pelo seu fluxo</p>
+          <h2>Qual alternativa combina com o seu show?</h2>
+          <p>A resposta depende de onde vem o seu áudio e se você precisa de recursos de produção ou só de um player confiável para o palco.</p>
+        </div>
+        <div class="feature-grid alternative-grid">
+          {alternatives.map((alternative) => (
+            <article class="feature-card">
+              <h3>Alternativa ao {alternative.name}</h3>
+              <p><strong>Encaixa bem:</strong> {alternative.fit}</p>
+              <p>{alternative.libre}</p>
+              <p><strong>Fique com o {alternative.name}:</strong> {alternative.keep}</p>
+              <a class="button-link" href={alternative.href}>Comparar com o {alternative.name}</a>
+            </article>
+          ))}
+        </div>
+      </div>
+    </section>
+
+    <section class="band">
+      <div class="site-shell docs-preview">
+        <div class="section-heading">
+          <p class="eyebrow">O que continua grátis</p>
+          <h2>Sem assinatura, conta nem formato de projeto fechado.</h2>
+          <p>O LibreTracks usa a licença AGPL-3.0. O app roda localmente no Windows, macOS, Linux, Android e iOS, e toca offline o áudio que você traz.</p>
+        </div>
+        <div class="docs-list">
+          <article><h3>Para o palco</h3><p>Stems por música, click, guia falada, marcadores, saltos, Vamp, transições, MIDI e saídas de áudio configuráveis.</p></article>
+          <article><h3>Para o seu material</h3><p>Importe áudio diretamente ou use um projeto .rpp do Reaper ou .als do Ableton como ponto de partida para o show.</p></article>
+          <article><h3>Para a equipe toda</h3><p>Controle transporte, marcadores e mixer pelo celular ou tablet na rede local.</p></article>
+        </div>
+      </div>
+    </section>
+  </main>
+</SiteLayout>

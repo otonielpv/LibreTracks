@@ -88,15 +88,26 @@ export function RhythmDock({ view, layoutClass, surfaces, alwaysOpen, songLoop, 
   const open = useRhythmStore((s) => s.openByView[view]);
   const setOpen = useRhythmStore((s) => s.setOpen);
   const [settings, setSettings] = useRhythmSettings();
-  const close = useCallback(() => setOpen(view, false), [setOpen, view]);
+  const expandedInStore = useRhythmStore((s) => s.expanded);
+  const setExpanded = useRhythmStore((s) => s.setExpanded);
+  const collapse = useCallback(() => setExpanded(false), [setExpanded]);
+  const close = useCallback(() => {
+    setExpanded(false);
+    setOpen(view, false);
+  }, [setExpanded, setOpen, view]);
   const windowLayout = useWindowLayout();
   const layout = layoutClass ?? windowLayout;
   const variant = rhythmVariantFor(view, layout);
+  // Solo el panel acoplado se amplía: la pestaña del Setlist ya ocupa su sitio.
+  const canExpand = variant === "docked";
+  const expanded = canExpand && expandedInStore;
 
   if (!(alwaysOpen || open) || !settings) return null;
   return (
     <>
       {layout === "short" && !alwaysOpen ? <DismissOnBack close={close} /> : null}
+      {/* Después del de cerrar: atrás sale primero de la pantalla completa. */}
+      {expanded ? <DismissOnBack close={collapse} /> : null}
       <RhythmPanel
         variant={variant}
         settings={settings}
@@ -106,6 +117,8 @@ export function RhythmDock({ view, layoutClass, surfaces, alwaysOpen, songLoop, 
         songLoop={songLoop}
         onEdit={setEditing}
         onClose={alwaysOpen ? undefined : close}
+        expanded={expanded}
+        onToggleExpanded={canExpand ? () => setExpanded(!expanded) : undefined}
       />
       <RhythmEditors
         target={editing}

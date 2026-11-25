@@ -490,6 +490,10 @@ pub struct DesktopSession {
     /// «Fade in y reproducir» left the tracks ramping up from silence: every
     /// way out of playback puts the gain back at 1 (see `fade_stop`).
     pub(super) fade_in: bool,
+    /// The fade out of a programmed jump (song/marker jump with "fade_out")
+    /// already pulled the master down. If the jump never lands (cancelled,
+    /// replaced, seek, stop) the gain has to go back to 1.
+    pub(super) pending_jump_fade_started: bool,
     /// Lo que organizó la plantilla en el último drop de stems, para el
     /// toast. El comando lo recoge (`take`) y lo emite como evento.
     pub(crate) last_template_drop: Option<song_templates::TemplateDropSummary>,
@@ -645,6 +649,7 @@ impl Default for DesktopSession {
             mix_revision: 0,
             fade_stop: None,
             fade_in: false,
+            pending_jump_fade_started: false,
             last_template_drop: None,
             undo_stack: Vec::new(),
             redo_stack: Vec::new(),
@@ -2183,6 +2188,9 @@ impl DesktopSession {
             .unwrap_or(position_seconds);
         let was_playing = self.engine.playback_state() == PlaybackState::Playing;
         self.engine.seek(position_seconds)?;
+        // A programmed jump survives the seek; its fade out starts again when
+        // the playhead reaches its window, so the master must not stay down.
+        self.restore_gain_after_abandoned_jump_fade(audio)?;
         // Seeking before a cue makes it eligible to fire its full quota again.
         self.reset_automation_run_counts(Some(self.engine.position_seconds()));
         // A seek cancels any in-progress ramps (their timeline anchor is
@@ -2244,6 +2252,7 @@ impl DesktopSession {
         audio: &AudioController,
     ) -> Result<TransportSnapshot, DesktopError> {
         self.sync_position(audio)?;
+        self.restore_gain_after_abandoned_jump_fade(audio)?;
         let was_playing = self.engine.playback_state() == PlaybackState::Playing;
         self.pending_automation_jump = None;
         self.active_automation_job = None;
@@ -2326,6 +2335,7 @@ impl DesktopSession {
             // the programmed jump still fire while it waits.
             self.schedule_next_automation_jump(audio)?;
         }
+        self.start_immediate_jump_fade(was_playing, &trigger, &transition, audio)?;
 
         Ok(self.snapshot())
     }
@@ -2340,6 +2350,7 @@ impl DesktopSession {
         audio: &AudioController,
     ) -> Result<TransportSnapshot, DesktopError> {
         self.sync_position(audio)?;
+        self.restore_gain_after_abandoned_jump_fade(audio)?;
         let was_playing = self.engine.playback_state() == PlaybackState::Playing;
         self.pending_automation_jump = None;
         self.active_automation_job = None;
@@ -2434,13 +2445,7 @@ impl DesktopSession {
             self.schedule_next_automation_jump(audio)?;
         }
 
-        if was_playing && trigger == JumpTrigger::Immediate {
-            if let TransitionType::FadeOut { duration_seconds } = &transition {
-                // The jump has now been armed for the end of this fade, so the
-                // audible transition can safely begin.
-                audio.start_master_fade(0.0, *duration_seconds)?;
-            }
-        }
+        self.start_immediate_jump_fade(was_playing, &trigger, &transition, audio)?;
 
         Ok(self.snapshot())
     }
@@ -2453,6 +2458,7 @@ impl DesktopSession {
     ) -> Result<TransportSnapshot, DesktopError> {
         self.sync_position(audio)?;
         self.engine.cancel_section_jump();
+        self.restore_gain_after_abandoned_jump_fade(audio)?;
         self.pending_automation_jump = None;
         self.active_automation_job = None;
         self.cancel_native_scheduled_jumps(audio)?;
@@ -2470,6 +2476,7 @@ impl DesktopSession {
     ) -> Result<TransportSnapshot, DesktopError> {
         self.sync_position(audio)?;
         self.engine.cancel_section_jump();
+        self.restore_gain_after_abandoned_jump_fade(audio)?;
         self.pending_automation_jump = None;
         self.active_automation_job = None;
         self.cancel_native_scheduled_jumps(audio)?;
@@ -3082,6 +3089,10 @@ impl DesktopSession {
                 // armed without their own jump and still fire on time.
                 self.advance_automation_job_actions(audio)?;
                 self.advance_mix_ramps(audio)?;
+                // The native mixer lands the jump but knows nothing of its
+                // fade out: without this a "next marker + fade out" song jump
+                // cut dry (only the legacy fallback below faded).
+                self.start_pending_jump_fade_if_due(audio)?;
                 return Ok(());
             }
             // Fire any job pre-jump mix actions whose effective time the
@@ -3129,6 +3140,7 @@ impl DesktopSession {
                     .complete_pending_fade_jump_with_song(&source_song)?
                 {
                     self.reposition_audio(audio, PlaybackStartReason::TransportResync)?;
+                    self.pending_jump_fade_started = false;
                     audio.start_master_fade(1.0, duration_seconds)?;
                     self.transport_clock
                         .note_jump_while_playing(target_position);
@@ -3392,6 +3404,7 @@ impl DesktopSession {
                 pending_jump.execute_at_seconds
             );
         }
+        self.pending_jump_fade_started = false;
         if let Some(duration_seconds) = fade_in_duration_seconds {
             audio.start_master_fade(1.0, duration_seconds)?;
         }

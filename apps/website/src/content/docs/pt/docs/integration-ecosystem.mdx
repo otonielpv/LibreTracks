@@ -1,0 +1,239 @@
+---
+title: Exportar, importar e compartilhar
+description: "Leve músicas e sessões para outro computador ou para o celular (.ltpkg e .ltset), a nuvem (Google Drive, OneDrive ou Dropbox), renderizar em WAV, templates de sessão e importar projetos do Reaper e do Ableton."
+---
+
+import Legend from "../../../../components/guide/Legend.astro";
+
+Tudo o que você prepara no LibreTracks pode viajar: uma única música para a
+sessão de outro músico, a sessão inteira para o computador do show ou para o
+celular, ou uma mixagem em WAV para quem precisar. Esta página explica cada
+caminho.
+
+| Você quer… | Use | Arquivo |
+| --- | --- | --- |
+| Levar **uma música** para outra sessão | Export song | `.ltpkg` |
+| Levar **a sessão inteira** para outro computador | Export session | `.ltset` |
+| Começar sessões novas com **as suas faixas e saídas** | Save as template | `.lttemplate` |
+| Mandar **um arquivo de áudio** (mixagem ou stems) | Render audio | `.wav` / `.zip` |
+| Guardar tudo **na nuvem** | Import / Export → Cloud | — |
+
+:::note[O seu áudio não é copiado quando você o importa]
+Quando você adiciona áudio a uma sessão, o LibreTracks o toca **de onde ele
+estiver** no seu disco; ele não faz uma cópia. Então, se você vai levar a
+sessão para outro computador, exporte no modo **Full**: é aí que o áudio vai
+dentro do arquivo. No celular funciona igual (menos os arquivos que estão na
+nuvem, que são copiados).
+:::
+
+## Exportar uma música (.ltpkg)
+
+Botão direito na **barra da música** na régua e escolha **Export Song**.
+
+![A janela Export song](/guide/desktop-en/export-song-modal.png)
+
+<Legend>
+
+1. **Full (for sharing)**: coloca os seus arquivos de áudio originais dentro,
+   intactos. O pacote abre em qualquer computador.
+2. **Light**: não leva áudio, só aponta para os seus arquivos pelo caminho.
+   Fica minúsculo, mas só funciona neste mesmo computador.
+
+</Legend>
+
+O pacote leva a música com as faixas, os clipes, os marcadores, o andamento, o
+tom, a transposição e as saídas. Se a música tem vídeos, aparece também uma
+caixa para incluí-los.
+
+O nome do arquivo é sugerido a partir dos dados da música, por exemplo
+`Dios es Real [140bpm D 4-4].ltpkg`, para você reconhecê-lo de relance numa
+pasta ou na nuvem.
+
+### Importar uma música
+
+Uma música `.ltpkg` é **adicionada** à sessão que você tem aberta, no fim do
+repertório. Você pode:
+
+- Usar **File → Import song**.
+- Apertar **Import .ltpkg** na [Compact View](/pt/docs/compact-view/).
+- **Arrastar** o `.ltpkg` do gerenciador de arquivos para a timeline ou para a
+  Compact View.
+
+Se uma faixa do pacote tem o mesmo nome de uma que você já tem, os clipes dela
+vão para essa faixa em vez de criar outra.
+
+## Exportar a sessão inteira (.ltset)
+
+Um `.ltset` leva **a sessão inteira** num único arquivo: todas as músicas, a
+biblioteca, a automação e as formas de onda. É assim que você prepara em casa e
+abre do jeito que está no computador do show, ou a leva para o celular.
+
+Abra **File → Export session…**
+
+![A janela Export session](/guide/desktop-en/export-session-modal.png)
+
+<Legend>
+
+1. **Full (to take with you)**: inclui os seus arquivos de áudio originais (um
+   MP3 continua MP3). Abre em qualquer computador; ao abrir, o LibreTracks
+   prepara o áudio, o que leva um tempo em celulares e computadores lentos.
+2. **Optimized (for phones and slow machines)**: em vez dos originais, leva o
+   áudio **já preparado** para tocar, então a sessão abre na hora. Fica maior e
+   não serve para recuperar os originais: guarde-os em outro lugar.
+3. **Light**: sem áudio, aponta para os seus arquivos pelo caminho. Só para
+   este mesmo computador.
+
+</Legend>
+
+Só o áudio que **os seus clipes usam** é empacotado, não a biblioteca inteira.
+Enquanto exporta, um indicador mostra o progresso e você pode continuar
+trabalhando.
+
+### Importar uma sessão
+
+Use **File → Import session…**, ou o botão **Import session** da tela inicial
+(não precisa ter nada aberto). Escolha o `.ltset`, escolha **onde salvar** a
+sessão, e o LibreTracks cria a pasta dela ali e a abre. Diferente de uma
+música, uma sessão **não é misturada** à que você tinha: ela abre como uma
+sessão nova.
+
+## A nuvem: Google Drive, OneDrive e Dropbox
+
+O LibreTracks pode guardar músicas e sessões nas **suas próprias** contas do
+Google Drive, OneDrive ou Dropbox, para levá-las do computador para o celular
+ou para outro computador sem cabos nem pendrives. Você pode manter **várias
+conectadas ao mesmo tempo**. O LibreTracks não tem servidores: os arquivos
+ficam na sua conta, numa pasta LibreTracks, e o app **só vê os arquivos que ele
+salvou**, nada mais da sua conta.
+
+Com uma conta conectada, **Import** e **Export** (de músicas e sessões)
+perguntam primeiro onde:
+
+![Escolhendo entre este aparelho e a nuvem](/guide/desktop-en/storage-choice.png)
+
+- **Export → Cloud** envia o arquivo. Com mais de uma conta conectada, você
+  escolhe qual em seguida. Para uma música ele pergunta depois de você escolher
+  o modo; para uma sessão, antes.
+- **Import → Cloud** mostra numa lista única o que você enviou para todas as
+  suas contas, com uma etiqueta do provedor em cada arquivo, busca e filtros, e
+  o baixa.
+
+O botão **Cloud** (em **File → Cloud…** e na tela inicial) não envia nem baixa
+nada: serve para **gerenciar as contas**.
+
+![O painel da nuvem](/guide/desktop-en/cloud-panel.png)
+
+- **Accounts**: cada provedor e o estado dele. **Connect…** abre o navegador
+  para você entrar e dar acesso; **Disconnect** tira a conta deste aparelho
+  (nada do que você guardou é apagado); **Show files** lista os arquivos
+  daquela conta embaixo.
+- O **espaço** usado e livre é o da **conta inteira**: o Google o compartilha
+  com o Gmail e o Fotos, a Microsoft com o Outlook.
+- As listas **Sessions**, **Songs** e **Templates** mostram o que você enviou
+  para aquela conta, com o tamanho, e um botão **Delete** para apagar. Os
+  templates são enviados e importados em **Settings › General › Editing › My
+  templates** (veja
+  [Templates de música](/pt/docs/song-templates/#levar-os-seus-templates-para-outro-aparelho)).
+
+As conexões ficam guardadas em cada aparelho: no celular você conecta as contas
+lá também.
+
+## Renderizar áudio
+
+Para mandar a música para alguém que não usa o LibreTracks (o músico que
+precisa aprendê-la, um técnico de som, uma gravação), renderize em WAV: botão
+direito na barra da música e escolha **Render audio…**.
+
+![A janela Render audio](/guide/desktop-en/render-modal.png)
+
+<Legend>
+
+1. **All** / **None**, e quantas faixas estão marcadas.
+2. As **faixas** da música. Marque as que você quer; a caixa de uma pasta marca
+   ou desmarca todas as faixas dela.
+3. **Mix (one file)**: as faixas marcadas somadas num único WAV.
+4. **Separate tracks (.zip)**: um WAV por faixa, todos alinhados ao início da
+   música, dentro de um `.zip`.
+5. **Formato** (WAV de 16 bits, 24 bits ou 32 bits float), **taxa de
+   amostragem** (a do projeto por padrão) e **canais** (estéreo ou mono).
+6. **Apply the mix**: o volume e o pan de cada faixa e pasta, e o master da
+   música, como soam. Desmarcado, tudo sai a 0 dB e no centro.
+7. **Apply the automations**: a renderização soa como a música tocada com as
+   automações dela (veja abaixo).
+8. **Normalize**: ajusta cada arquivo para o pico ficar em −0,3 dB.
+9. **Include the metronome**.
+10. **Include the voice guide**. Com faixas separadas, o metrônomo e a guia
+    saem cada um no seu arquivo.
+11. **Nome do arquivo**. É sugerido a partir do que você escolhe, por exemplo
+    "Dios es Real (no Vocals)" se você deixar uma faixa de fora.
+
+</Legend>
+
+Com **Apply the automations**, a renderização segue os saltos, aplica as
+mudanças de volume, pan, mute, solo e cenas, e liga, desliga ou muda o click, a
+guia falada e o pad quando os cues mandam. Só contam os cues daquela música: um
+salto para outra música é ignorado e um salto para trás sem limite de
+repetições toca uma vez. O pad entra na mixagem, ou no seu próprio arquivo
+quando você renderiza faixas separadas. Não está disponível ao renderizar a
+sessão inteira.
+
+A renderização acontece à parte, sem interromper o que está tocando, e **Stop**
+a cancela. Se um arquivo de áudio não pôde ser lido, ele sai mudo e você é
+avisado no fim.
+
+## Templates de sessão
+
+Se você sempre monta as mesmas faixas (click, guia, bateria, baixo… com as
+pastas, cores e saídas), salve-as como template e comece cada sessão nova com
+tudo no lugar.
+
+- **File → Save as template…** cria um arquivo `.lttemplate` com a
+  **estrutura**: faixas, pastas, nomes, cores e saídas. De propósito ele **não**
+  guarda clipes, músicas, marcadores, andamento nem a mixagem (volumes,
+  mute…), para cada sessão começar limpa.
+- **File → New from template…**, ou a lista **Templates** da
+  [tela inicial](/pt/docs/interface/main-screen/), cria uma sessão nova a partir
+  dele. **Use template file…** abre um que você guarda em outra pasta.
+
+Como é um arquivo, você pode passá-lo para outro técnico ou levá-lo para outro
+computador.
+
+## Importar projetos do Reaper e do Ableton
+
+Se a música está montada no Reaper ou no Ableton Live, não é preciso exportar
+os stems e posicioná-los de novo: **File → Import Reaper/Ableton** (ou o botão
+da tela inicial) lê o projeto `.rpp` ou `.als` e cria as faixas e os clipes.
+
+- Com uma sessão aberta, o projeto é adicionado **no fim do repertório**.
+- Pela tela inicial, você escolhe primeiro o projeto e depois onde salvar a
+  sessão nova.
+- Você também pode **arrastar** um `.rpp` ou `.als` para a timeline (cai onde
+  você soltar, ou no fim se fosse se sobrepor a outra música) ou para a Compact
+  View (é adicionado como música nova no fim).
+
+O que importa para tocar ao vivo é mantido, não cada detalhe da DAW:
+
+- **Reaper**: os itens de áudio viram clipes; as faixas e pastas são recriadas
+  com a mixagem básica; as mudanças de andamento e de compasso são importadas;
+  cada **região** vira uma música e cada **marcador**, um marcador de seção
+  nela.
+- **Ableton Live**: os clipes de áudio do Arrangement viram clipes nas suas
+  faixas; os **locators** viram marcadores de seção; o andamento e a fórmula de
+  compasso são importados. O Arrangement inteiro é **uma música**, porque no
+  Ableton os locators marcam seções, não músicas.
+
+Os plugins e efeitos da DAW não são importados: o LibreTracks toca o áudio dos
+clipes.
+
+## Arquivos do LibreTracks
+
+| Arquivo | O que é |
+| --- | --- |
+| `.ltsession` | A sessão em que você trabalha (dentro da pasta dela). |
+| `.ltpkg` | Uma música exportada. |
+| `.ltset` | Uma sessão inteira exportada. |
+| `.lttemplate` | Um template de sessão. |
+
+No Windows cada tipo tem o seu ícone no Explorador de Arquivos, e um clique
+duplo o abre no LibreTracks. No macOS e no Linux eles também ficam associados ao
+app, com o ícone geral dele.

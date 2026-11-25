@@ -502,10 +502,10 @@ describe("LiveChartPanel", () => {
     expect(screen.getByRole("dialog", { name: "liveChart.editorTitle" })).toBeTruthy();
   });
 
-  it("offers import and typing when the song has no lyrics", () => {
+  it("offers import and writing when the song has no lyrics", () => {
     renderPanel(region(null), { current: 0 });
     expect(screen.getByRole("button", { name: "liveChart.importFile" })).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "liveChart.pasteText" }));
+    fireEvent.click(screen.getByRole("button", { name: "simpleLyrics.write" }));
     expect(screen.getByRole("dialog")).toBeTruthy();
   });
 
@@ -545,7 +545,8 @@ describe("LiveChartPanel", () => {
       />
     );
     const view = render(panel("short"));
-    fireEvent.click(screen.getByRole("button", { name: "liveChart.pasteText" }));
+    fireEvent.click(screen.getByRole("button", { name: "simpleLyrics.write" }));
+    fireEvent.click(screen.getByRole("tab", { name: "simpleLyrics.advanced" }));
     const textarea = screen.getByRole("textbox", { name: "liveChart.textLabel" });
     fireEvent.change(textarea, { target: { value: "[G]Hola" } });
     view.rerender(panel("medium"));
@@ -566,5 +567,30 @@ describe("LiveChartPanel", () => {
     const { container } = renderPanel(target, { current: 0 });
     const chords = [...container.querySelectorAll(".lt-chart-chord")].map((node) => node.textContent);
     expect(chords).toEqual(["G#", "Bb"]);
+  });
+
+  it("without section markers shows the whole sheet in order, nothing current, and says how to follow it", () => {
+    const target = region(linked);
+    const view = { ...songView(target), sectionMarkers: [] } as SongView;
+    const { container } = render(
+      <LiveChartPanel
+        song={view}
+        region={target}
+        positionSecondsRef={{ current: 12 }}
+        pendingMarkerId={null}
+        expanded={false}
+        onToggleExpanded={vi.fn()}
+        onClose={vi.fn()}
+        onChartChange={vi.fn(async () => {})}
+      />,
+    );
+    expect([...container.querySelectorAll(".lt-chart-section-label")].map((node) => node.textContent)).toEqual(["Verso 1", "Coro 1"]);
+    expect(container.querySelector(".lt-chart-section.is-current")).toBeNull();
+    expect(screen.getByText("liveChart.noMarkers")).toBeTruthy();
+  });
+
+  it("with section markers there is no notice", () => {
+    renderPanel(region(linked), { current: 0 });
+    expect(screen.queryByText("liveChart.noMarkers")).toBeNull();
   });
 });

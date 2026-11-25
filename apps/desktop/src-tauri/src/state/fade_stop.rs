@@ -130,7 +130,9 @@ impl DesktopSession {
     /// Every way out of playback calls this (stop, pause, play).
     pub(super) fn cancel_fade_stop(&mut self, audio: &AudioController) -> Result<(), DesktopError> {
         let was_fading_in = std::mem::take(&mut self.fade_in);
-        if self.fade_stop.take().is_some() || was_fading_in {
+        // A programmed jump's fade out also leaves the master down.
+        let was_jump_fading = std::mem::take(&mut self.pending_jump_fade_started);
+        if self.fade_stop.take().is_some() || was_fading_in || was_jump_fading {
             audio.start_master_fade(1.0, 0.0)?;
         }
         Ok(())

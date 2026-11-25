@@ -3,29 +3,30 @@
  *
  * ## El problema
  *
- * El comportamiento de atrás no es código de este repo: lo pone Tauri en
- * `WryActivity.kt`, que es autogenerado y dice `DO NOT MODIFY`. Hace dos cosas:
- * si el WebView puede navegar atrás, navega; si no, termina la actividad. Con
- * un modal o un panel delante, eso significa **salir de la aplicación**, que en
+ * El atrás por defecto de Tauri (`WryActivity.kt`, autogenerado): si el
+ * WebView puede navegar atrás, navega; si no, termina la actividad. Con un
+ * modal o un panel delante, eso significa **salir de la aplicación**, que en
  * mitad de un ensayo es caro.
  *
- * ## Cómo se arregla sin tocar el fichero autogenerado
+ * ## Cómo se arregla
  *
- * Dándole al WebView historial que navegar. Mientras haya algo abierto,
- * metemos una entrada de historial de mentira (`pushState`); el botón atrás la
- * consume (`goBack`), nos llega un `popstate` y cerramos lo de arriba de la
- * pila. Si queda algo abierto, volvemos a poner la entrada.
+ * `MainActivity` apaga ese atrás (`handleBackNavigation = false`) y pregunta a
+ * la página con `window.__ltHandleBack()`: si devuelve `true`, la página lo ha
+ * gastado (cerró algo o enseñó el aviso); si no, sale como siempre.
  *
- * Esto sobrevive a un `tauri android init` porque **no hay una sola línea de
- * Kotlin**: es el camino que el propio `WryActivity` recorre primero.
+ * Antes se hacía sin Kotlin, con entradas de historial de mentira
+ * (`pushState`) que el atrás consumía. No aguantaba: Chromium marca como
+ * «saltables» las entradas añadidas sin un gesto del usuario, y el WebView se
+ * las salta al ir atrás. La que se reponía tras cerrar un overlay (la tecla
+ * atrás no es un gesto) o la de un panel abierto al arrancar se saltaban, y
+ * el atrás cerraba la app con el panel delante.
  *
  * ## Confirmación al salir
  *
- * Con reproducción en curso también mantenemos la entrada puesta, así que el
- * primer toque no sale: enseña un aviso y deja de rearmarse. El segundo toque,
- * ése sí, sale. Es el patrón «pulsa atrás otra vez para salir» de toda la vida
- * en Android, y **no mata el proceso**: la actividad termina como siempre y
- * Android decide cuándo reclamar el proceso.
+ * Con reproducción en curso, el primer toque sin nada abierto no sale: enseña
+ * un aviso. El segundo, mientras se ve el aviso, sí sale. Es el patrón «pulsa
+ * atrás otra vez para salir» de toda la vida en Android, y **no mata el
+ * proceso**: la actividad termina como siempre.
  *
  * ## Quién se registra
  *
@@ -98,10 +99,6 @@ export function useDismissOnBack(close: () => void, enabled = true) {
 }
 
 export type BackGuardHost = {
-  /** Añade la entrada de historial que el botón atrás consumirá. */
-  pushEntry: () => void;
-  /** Quita una entrada que ya no hace falta (un `history.back()`). */
-  popEntry: () => void;
   /** ¿Está sonando el transporte ahora mismo? */
   isPlaying: () => boolean;
   /** Enseña/quita el aviso «pulsa atrás otra vez para salir». */
@@ -112,102 +109,58 @@ export type BackGuardHost = {
 export const EXIT_HINT_MS = 2500;
 
 /**
- * La máquina de estados, separada de `window.history` a propósito para poder
- * probarla sin depender de cómo jsdom implementa el historial.
+ * La decisión de cada pulsación, separada de Android para poder probarla.
+ * `handleBack` devuelve `true` si la página gastó la pulsación y `false` si
+ * la app debe salir.
  */
 export function createBackGuard(host: BackGuardHost) {
-  let armed = false;
-  /** Entradas que hemos mandado quitar y cuyo `popstate` aún no ha llegado. */
-  let pendingPops = 0;
   let hintTimer: ReturnType<typeof setTimeout> | null = null;
   let disposed = false;
 
-  const clearHint = () => {
+  const hideHint = () => {
     if (hintTimer !== null) {
       clearTimeout(hintTimer);
       hintTimer = null;
     }
-  };
-
-  const needsGuard = () =>
-    useBackDismissStore.getState().stack.length > 0 || host.isPlaying();
-
-  /**
-   * Pon o quita la entrada de historial según haga falta.
-   *
-   * `pendingPops` es lo que evita la carrera de «cierro un modal y abro otro»:
-   * el `history.back()` del primero puede llegar después del `pushState` del
-   * segundo, así que el `popstate` que lo trae no cierra nada y vuelve a
-   * sincronizar.
-   */
-  const sync = () => {
-    if (disposed) {
-      return;
-    }
-    if (needsGuard()) {
-      if (!armed) {
-        armed = true;
-        host.pushEntry();
-      }
-      return;
-    }
-    if (armed) {
-      armed = false;
-      pendingPops += 1;
-      host.popEntry();
-    }
-  };
-
-  /** El usuario ha pulsado atrás (nos llega como `popstate`). */
-  const handleBack = () => {
-    if (disposed) {
-      return;
-    }
-    if (pendingPops > 0) {
-      // No es el usuario: es el eco de una entrada que quitamos nosotros.
-      pendingPops -= 1;
-      armed = false;
-      sync();
-      return;
-    }
-
-    armed = false;
-    clearHint();
     host.setExitHintVisible(false);
+  };
 
+  const handleBack = (): boolean => {
+    if (disposed) {
+      return false;
+    }
     const { stack, unregister } = useBackDismissStore.getState();
     const top = stack[stack.length - 1];
     if (top) {
+      hideHint();
       unregister(top.id);
       top.close();
-      sync();
-      return;
+      return true;
     }
 
-    if (host.isPlaying()) {
-      // Nada abierto pero sonando: el primer toque avisa, no sale. Mientras el
-      // aviso esté en pantalla NO nos rearmamos, así que el segundo toque cae
-      // en el comportamiento de siempre y termina la actividad.
+    if (hintTimer === null && host.isPlaying()) {
+      // Nada abierto pero sonando: el primer toque avisa, no sale.
       host.setExitHintVisible(true);
       hintTimer = setTimeout(() => {
         hintTimer = null;
         host.setExitHintVisible(false);
-        sync();
       }, EXIT_HINT_MS);
-      return;
+      return true;
     }
 
-    // Nada abierto y nada sonando: que salga, como hasta ahora.
+    // Nada abierto y nada sonando, o segundo toque con el aviso: que salga.
+    hideHint();
+    return false;
   };
 
   return {
-    sync,
     handleBack,
     dispose: () => {
       disposed = true;
-      clearHint();
+      if (hintTimer !== null) {
+        clearTimeout(hintTimer);
+        hintTimer = null;
+      }
     },
-    /** Sólo para los tests. */
-    isArmed: () => armed,
   };
 }

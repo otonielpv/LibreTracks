@@ -1,12 +1,42 @@
-# Additional permissions
+# Additional permissions and terms
 
 Copyright © 2026 Otoniel Pérez Velarde.
 
 LibreTracks is licensed under the GNU Affero General Public License v3.0 or
-later; see [LICENSE](./LICENSE) for the full text. The permission below is an
-**additional permission** in the sense of section 7 of that license: it grants
-rights, it never takes any away. If you distribute LibreTracks outside an
-application store, nothing here applies to you and the AGPL governs on its own.
+later; see [LICENSE](./LICENSE) for the full text. This file adds two things
+under section 7 of that license:
+
+- an **additional permission** for application stores, which grants rights and
+  never takes any away. If you distribute LibreTracks outside an application
+  store, it does not apply to you;
+- an **attribution requirement** under section 7(b), which applies to anyone
+  who conveys LibreTracks or a work based on it, including a renamed fork.
+
+## Author attribution (section 7(b))
+
+As an additional term under section 7(b) of the GNU Affero General Public
+License version 3, anyone who conveys LibreTracks, or a work based on it
+(modified or not, under this name or another), must preserve the following
+author attribution:
+
+> Based on LibreTracks by Otoniel Pérez Velarde
+> https://github.com/otonielpv/LibreTracks
+
+The attribution must be preserved:
+
+1. in the project's README or equivalent top-level documentation, and
+2. in the Appropriate Legal Notices of any interactive user interface (for
+   example an "About" screen, a credits page or a legal notices dialog), if the
+   work displays them, as section 5(d) of the license requires.
+
+It may be translated and restyled to fit the work, as long as it stays legible
+and names both LibreTracks and its author. It does not require that a modified
+work carry the LibreTracks name or logo, and it does not grant permission to use
+them: the name "LibreTracks" may not be used in a way that suggests a modified
+version is the original or is endorsed by its author.
+
+This term applies to versions of LibreTracks published from the date it was
+added to this file onward.
 
 ## App store distribution exception
 

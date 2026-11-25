@@ -285,6 +285,17 @@ export async function setScreenOrientation(mode: "portrait" | "landscape" | "fre
   return invokeCommand<void>("set_screen_orientation", { mode });
 }
 
+export type StoreReviewOutcome = "requested" | "audioActive" | "unsupported";
+
+/**
+ * Ask the App Store / Google Play for its "rate this app" sheet. The backend
+ * refuses ("audioActive") whenever any audio may be playing; the OS alone
+ * decides whether the sheet actually appears.
+ */
+export async function requestStoreReview(): Promise<StoreReviewOutcome> {
+  return invokeCommand<StoreReviewOutcome>("request_store_review");
+}
+
 /** Abort a close the backend was holding for the UI. */
 export async function cancelAppClose(): Promise<void> {
   return invokeCommand<void>("cancel_app_close");
@@ -3674,6 +3685,13 @@ export type PcoArrangementWrite = {
   chordChartKey: string;
   /** Absent: the arrangement's sequence is left as it is. */
   sequence?: string[];
+  /** The song's duration in whole seconds (Planning Center's `length`).
+   * Absent: the arrangement's length is left as it is. */
+  length?: number;
+  /** The tempo the song starts at. Absent: left as it is. */
+  bpm?: number;
+  /** The time signature the song starts in ("4/4"). Absent: left as it is. */
+  meter?: string;
 };
 
 /** A new arrangement in the song (the default of "Save to Planning Center"). */

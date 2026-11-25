@@ -1,0 +1,138 @@
+---
+title: Live View
+description: "A Live View do LibreTracks: os marcadores da música em botões grandes, o repertório sempre à vista, os ajustes de salto e de vamp a um toque, no PC, tablet e celular."
+---
+
+import Legend from "../../../../components/guide/Legend.astro";
+
+A **Live View** é a terceira visão do mesmo projeto, feita para a hora de tocar. Ela não edita nada (menos a ordem do repertório): mostra, em letra grande, as únicas coisas que importam no palco: para onde você pode saltar, o que está tocando agora e o que vem depois.
+
+![A Live View no computador com as suas áreas numeradas](/guide/desktop-en/live-view.png)
+
+<Legend>
+
+1. **Cabeçalho**: a música que está tocando, o BPM, o tom e o progresso.
+2. **Ajustes de performance**: salto para marcador, salto entre músicas e
+   Vamp.
+3. **Marcadores ao vivo**: um botão grande por marcador.
+4. **Repertório**: as músicas da sessão numa faixa, com a atual destacada.
+
+</Legend>
+
+Troque de visão com os três botões da barra (`view_timeline` para a DAW view, `view_module` para a Compact View e `stadium` para a Live View), ou percorra-as com `Tab`; `Shift+Tab` percorre no sentido contrário.
+
+## Áreas da Live View
+
+### Cabeçalho
+
+Mostra a música que está tocando com o BPM efetivo, o tom e uma barra com o tempo decorrido e o que falta, num tamanho que dá para ler de longe.
+
+### Ajustes de performance
+
+Os três ajustes que você muda na hora estão sempre visíveis, sem menus:
+
+- `Marker jump`: `Immediate`, `After bars` (com a contagem) ou `Next marker`.
+- `Song jump`: `Immediate`, `Song end`, `After bars` ou `Next marker`, com a transição em `Clean` ou `Fade`.
+- `Vamp type`: repetir a `Section` atual ou um número de `Bars`, com o botão `VAMP` ao lado para entrar e sair do loop.
+  Ao lado de `VAMP`, o botão `Between songs` liga o [vamp entre músicas](/pt/docs/tasks/songs/#passar-de-uma-música-para-a-próxima-ao-vivo): quando cada música termina, o click continua no andamento dela e o pad continua soando até você apertar Play.
+
+São os mesmos ajustes do [Controle ao vivo](/pt/docs/live-control-flow/): mudá-los aqui muda em todo o app.
+
+### Marcadores ao vivo
+
+Cada marcador da música selecionada é um botão grande numerado, **tingido com a cor do marcador** (a que você vê na timeline), para você distinguir um refrão de um verso de relance, com o tempo desde o início da música. Os cues têm uma cor mais apagada e borda tracejada. Tocar nele agenda o salto com o modo configurado. Além disso:
+
+- O marcador que está tocando aparece destacado como `Now`, com borda turquesa, e leva a sua própria barra de progresso.
+- O próximo mostra uma contagem `Next in m:ss`.
+- Um salto já agendado aparece como `Queued`, com borda âmbar, e `Cancel jump` o cancela enquanto ele não tiver disparado.
+- Os marcadores de cue aparecem como `Cue` ao lado da seção em que caem, para você ler a indicação sem procurar.
+- Com o vamp ativo, o marcador que se repete leva o seu próprio selo `VAMP`.
+- A lista rola sozinha para manter à vista o marcador que está tocando.
+
+### Repertório
+
+O repertório é a faixa de músicas do cabeçalho: cada música com o número, o nome e o botão de play, e a que está tocando destacada. Selecionar uma música mostra os marcadores dela sem saltar para ela, para você preparar o próximo número enquanto o atual toca. Se uma música tem um [arranjo](/pt/docs/arrangements/) aplicado, ela leva o nome dele (`Arrangement: Domingo`).
+
+Para mudar a ordem do repertório, arraste uma música pela **alça** (os seis
+pontinhos à esquerda dela): as outras abrem espaço para mostrar onde ela vai
+cair. A música se move inteira, com o áudio, os marcadores e o andamento. É a
+única coisa que você pode editar na Live View. No celular, **segure o dedo** na
+alça por um momento antes de arrastar: assim não conflita com o gesto do
+sistema para trocar de app (no iPhone o repertório também fica acima da barra
+de início).
+
+Para terminar a música que está tocando com fade, use **Fade out and stop** na
+barra de transporte no topo. Veja
+[Fade out and stop](/pt/docs/interface/main-screen/#fade-out-and-stop).
+
+## Letra e acordes
+
+A Live View pode mostrar a **letra com os acordes** ao lado dos marcadores,
+para quem canta e a banda acompanharem sem papel nem outro app. A letra **segue
+a música**: destaca a linha que está tocando e passa de seção em seção com os
+marcadores (também com um salto ou um Vamp).
+
+![Letra e acordes na Live View](/guide/desktop-en/live-lyrics.png)
+
+<Legend>
+
+1. **Lyrics**: mostra ou esconde a letra. O app lembra a sua escolha.
+2. **Ferramentas**: texto menor ou maior, mostrar ou esconder os acordes,
+   gravar os tempos das linhas, editar a letra, mostrar só a letra na largura
+   toda, e fechar.
+3. **A letra**: cada seção com o nome, a linha que está tocando destacada e os
+   acordes acima da sílaba em que caem.
+
+</Legend>
+
+### Adicionar a letra de uma música
+
+Se a música não tem letra, o painel oferece dois caminhos:
+
+![Uma música sem letra](/guide/desktop-en/live-lyrics-empty.png)
+
+- **Import file…**: um **PDF** de cifra, um arquivo **ChordPro** (`.cho`,
+  `.pro`) ou um texto com os acordes acima da letra. O LibreTracks o transforma
+  em texto: o PDF não é salvo na sessão, só a letra. Um PDF escaneado (uma
+  imagem, sem texto) não pode ser convertido; nesse caso, cole a letra à mão.
+- **Type or paste**: abre o editor vazio.
+
+Para escrever a letra parte por parte sem saber ChordPro, veja
+[Escrever a letra da música](/pt/docs/tasks/write-lyrics/).
+
+### Editar a letra e a sincronia
+
+O botão de editar abre a letra no formato ChordPro e o vínculo dela com os
+marcadores:
+
+![O editor de letra e acordes](/guide/desktop-en/lyrics-editor.png)
+
+- **Texto (ChordPro)**: cada seção começa com `{section: Nome}` e os acordes
+  vão entre colchetes logo antes da sílaba: `[Am]letra`. O tempo à esquerda de
+  cada linha, `[m:ss.d]`, diz quando ela começa; mude, ou apague para as linhas
+  se distribuírem sozinhas pela seção.
+- **Recalculate times**: refaz os tempos que não cabem na seção deles, por
+  exemplo os de um refrão que você copiou e colou com os tempos, e mantém os que
+  cabem. Salvar faz isso sozinho.
+- **Qual seção toca em cada marcador**: vincula cada marcador da música a uma
+  seção da letra. **Link automatically** faz isso pelos nomes; um marcador sem
+  letra (um solo de guitarra) fica em **— No lyrics —**. Para repetir um refrão
+  não é preciso copiar a letra dele: escolha a mesma seção para os dois
+  marcadores de refrão e cada um distribui as linhas pela sua parte.
+- **Remove lyrics** a apaga da música.
+
+Para definir os tempos de ouvido, aperte o botão de **gravar os tempos das
+linhas**, toque a música e aperte **Next line** quando cada uma começar. Ao
+terminar eles são salvos como tempos personalizados.
+
+Os acordes **transpõem junto com a música** e são escritos no tom que está
+tocando em cada parte: se o último refrão [muda de tom](/pt/docs/tasks/songs/#mudanças-de-tom),
+os acordes dele saem no tom novo. A letra também pode ser mostrada no
+[Remote](/pt/docs/remote-control/#montar-as-suas-abas), com o widget **Lyrics &
+chords**.
+
+## No celular e tablet
+
+A Live View se adapta à tela: no computador e no tablet os marcadores se espalham em três colunas com o repertório ao lado, e no celular ficam em duas colunas com o repertório embaixo, sempre à mão.
+
+![A Live View num celular](/screenshots/Live-View-Phone.png)

@@ -1,0 +1,240 @@
+---
+title: MIDI
+description: "Como controlar o LibreTracks com um pedal ou controlador MIDI (MIDI Learn) e como mandar MIDI da timeline para teclados, mesas de luz ou software de letra com faixas MIDI."
+sidebar:
+  order: 7
+---
+
+O LibreTracks fala MIDI nos dois sentidos:
+
+- **Entrada**: um pedal, um pad ou um controlador comanda o app (play, saltar,
+  Vamp…).
+- **Saída**: uma **faixa MIDI** manda notas, controles e program changes em
+  momentos exatos da música, para um teclado, a mesa de luz ou o software de
+  letra.
+
+## Conectar um controlador
+
+Em **Settings › MIDI**, escolha o **MIDI input device**. Se você o conectar
+com o app aberto, aperte o botão de atualizar ao lado.
+
+![A aba MIDI em Settings](/guide/desktop-en/settings-midi-1.png)
+
+Se o cabo se soltar no meio do show, o aviso **MIDI controller disconnected**
+aparece na barra superior, e o app o abre de novo sozinho assim que você
+reconectar. Não é preciso ir a Settings.
+
+No celular, controladores **Bluetooth** também funcionam: na aba MIDI,
+**Search Bluetooth devices**.
+
+## Atribuir pedais e botões (MIDI Learn)
+
+Como atribuí-los está em
+[Settings › MIDI Learn](/pt/docs/interface/settings/#midi-learn). O que você pode
+controlar:
+
+- **Transporte**: play, pausa, stop, música anterior e próxima.
+- **Saltos**: para cada marcador de seção e cada música (as abas *Markers* e
+  *Songs*), cancelar o salto, e o modo, os compassos e a transição dos saltos.
+- **Vamp**: ligar e desligar, modo (seção ou compassos) e número de compassos.
+- **Tom**: subir, descer ou zerar a transposição da música selecionada;
+  selecionar a música anterior ou a próxima.
+- **Interruptores**: metrônomo e guia falada.
+- **Valores com um controle giratório** (CC): BPM, volume do metrônomo,
+  compassos dos saltos e do Vamp.
+- **Vídeo**: preto, fade to black, tela de espera e ligar a saída.
+- **Sessão**: nova, abrir, salvar, salvar como, desfazer, refazer e criar um
+  marcador no cursor.
+
+## Controladores de faders (nanoKONTROL2, Mackie…)
+
+Além de pedais e botões, o LibreTracks funciona com um controlador de faders,
+como o Ableton.
+
+### Modo MIDI Map
+
+Aperte `Ctrl+M` (ou **MIDI Learn** em **Settings › MIDI Learn**). Tudo o que
+você pode atribuir fica colorido: o fader, o pan, o mute e o solo de cada faixa
+na DAW, na Compact View e na Setlist View, o master da música, o click, a guia,
+os pads, os botões de cena e os saltos na Live e na Setlist. Os controles que
+já têm atribuição aparecem em verde, com a mensagem deles em cima.
+
+Com o **equalizador** de uma faixa aberto, a frequência, o ganho, o Q e o
+interruptor de cada banda também ficam coloridos, e o **Bypass**: um encoder
+ou fader move a frequência e o Q em escala logarítmica (a metade é ~630 Hz) e
+o ganho em dB (a metade é 0 dB). Os controles de EQ sempre comandam aquela
+faixa, não as tiras do banco.
+
+![Modo MIDI Map](/guide/desktop-en/midi-map-mode.png)
+
+1. A faixa do modo. **Exit** (ou `Esc`) o fecha; a seta o move para cima ou
+   para baixo se ele cobrir algo.
+2. Um controle mapeável. Toque nele e mova o controle físico: fica atribuído.
+
+### Tiras 1-8, perfis e faders motorizados
+
+Em **Settings › MIDI Learn**:
+
+![MIDI Learn: perfis e mixer](/guide/desktop-en/midi-learn-mixer.png)
+
+1. **MIDI Learn** liga o modo MIDI Map.
+2. **Controller profile**: se o LibreTracks reconhece o seu controlador pelo
+   nome da porta, sugere o perfil. **Apply** preenche as tiras, o transporte e
+   os bancos de uma vez. Há perfis para o **Korg nanoKONTROL2**, o **Mackie
+   Control** e o **M-Vave SMC-Mixer** (no modo Mackie dele). **Import…** e
+   **Export** carregam ou salvam as suas próprias atribuições.
+3. As visões da lista:
+   - **Mixer**: **tiras 1 a 8** (volume, pan, mute e solo), que seguem a ordem
+     das faixas visíveis da música que está tocando, mais **Next bank** e
+     **Previous bank** para andar de 8 em 8. As 8 faixas que você controla
+     ganham uma borda vermelha no cabeçalho.
+   - **Scenes**: veja [Cenas de mixagem](/pt/docs/live-scenes/).
+   - **Bindings**: tudo o que está atribuído, com o **Mode** (absoluto,
+     relativo, botão de alternar ou momentâneo), **Min**, **Max**, **Invert** e
+     **Takeover**.
+
+Para os LEDs dos botões e os faders motorizados seguirem a mixagem, escolha a
+**Controller output (LEDs)** em **Settings › MIDI**: a porta em que o seu
+controlador escuta o estado, que costuma ter o mesmo nome da entrada.
+
+O **Takeover mode** (**Settings › MIDI**) decide o que acontece quando o fader
+físico não está onde a faixa está, por exemplo depois de mudar de banco ou de
+música:
+
+- **None**: a faixa salta para onde o fader estiver.
+- **Pick-up**: o fader não faz nada até chegar ao valor da faixa.
+- **Value scaling**: o fader move a faixa na hora e os dois se encontram no fim
+  do curso. Nunca salta nem fica morto.
+
+## Mandar MIDI pela música
+
+### 1. Escolha a saída
+
+Em **Settings › MIDI**, **MIDI output** é a porta padrão por onde as faixas
+MIDI mandam. **Send test note** confere se chega do outro lado.
+
+### 2. Crie uma faixa MIDI
+
+Botão direito no espaço abaixo das faixas, ou numa faixa, › **Add MIDI
+track**. No celular, toque numa faixa e, no painel de baixo, nos três pontos
+(**More actions**) › **Add MIDI track**. Você pode ter várias: uma para cada
+aparelho que quer controlar. O aparelho não precisa estar conectado: as
+mensagens ficam preparadas na música e saem pela porta que você escolher
+depois.
+
+O menu dela (botão direito no cabeçalho):
+
+![O menu de uma faixa MIDI](/guide/desktop-en/menu-midi-track.png)
+
+- **MIDI routing**: a **porta** (o cabo) e o **canal** (1 a 16) por onde as
+  mensagens dela saem. *Default output* usa a porta de Settings.
+
+![O roteamento MIDI de uma faixa](/guide/desktop-en/midi-route.png)
+
+- **Disable MIDI track**: para de mandar sem apagar nada (também com o botão de
+  energia do cabeçalho). Útil num ensaio sem luzes.
+
+### 3. Adicione mensagens
+
+Botão direito na faixa MIDI, no ponto exato › **Add MIDI here**. No celular,
+toque na faixa MIDI e aperte **Add MIDI here** no painel de baixo: vai para
+onde o cursor estiver. O editor abre:
+
+![O editor de clipe MIDI](/guide/desktop-en/midi-clip-editor.png)
+
+- **Name**: para reconhecê-lo na timeline (*Luzes do refrão*).
+- **Add message**, de quatro tipos:
+  - **Note**: nota, velocity e duração (0 = um toque só).
+  - **Control**: um CC com o seu valor.
+  - **Program**: um program change (trocar de som ou de cena).
+  - **Control curve**: um CC que vai de um valor a outro ao longo de um
+    tempo, para fades suaves.
+- **Offset (s)**: quanto tempo depois do ponto do clipe aquela mensagem sai.
+- **Channel (optional)**: para uma mensagem sair num canal diferente do da
+  faixa.
+- As mensagens que coincidem no tempo saem na ordem da lista; use **Move up** e
+  **Move down** para mudar.
+- **Test MIDI** manda as mensagens agora, sem salvar, para conferir se o
+  aparelho responde.
+- **Lead time**: para o clipe sair antes de a seção dele começar. Veja o
+  próximo passo.
+- **Collapse all** e **Expand all** recolhem ou abrem todas as mensagens de uma
+  vez. O editor lembra quais você deixou recolhidas.
+
+O clipe aparece na faixa como um marcador com o nome dele. Botão direito nele:
+
+![O menu de um clipe MIDI](/guide/desktop-en/menu-midi-clip.png)
+
+**Edit MIDI**, **Duplicate** ou **Delete MIDI**. Os clipes MIDI podem ser
+arrastados para movê-los, viajam com a música quando você a move e vão dentro
+das músicas exportadas.
+
+### 4. Mandar antes da seção (adiantamento)
+
+O caso típico é um software de letra (o ProPresenter, por exemplo): o comando
+que troca a letra precisa chegar **um pouco antes** de a seção começar, para o
+público já ter as palavras na tela quando o canto começa.
+
+:::tip[ProPresenter, FreeShow ou Holyrics sem MIDI]
+Para esses três programas você não precisa de clipes MIDI: o LibreTracks pode
+trocar a letra pela rede em cada marcador de seção, com adiantamento e nada para
+programar música por música. Veja [Projeção](/pt/docs/tasks/lyrics/).
+:::
+
+Coloque o clipe **exatamente no marcador de seção** e, no editor, escolha o
+**Lead time**:
+
+- Os atalhos: **Half a beat**, **1 beat**, **2 beats**, **1 bar** ou
+  **2 bars**.
+- **Custom...**: qualquer valor, com decimais, em **tempos**, **compassos** ou
+  **segundos**.
+
+Um tempo é um click do metrônomo: segue o andamento, as mudanças e rampas
+dele, a fórmula de compasso (em 6/8 um tempo é uma colcheia) e o warp. Se você
+mudar o andamento da música, "1 beat" continua sendo um tempo. Use **segundos**
+se quiser um valor fixo.
+
+A faixa mostra uma linha tracejada do ponto em que ele realmente sai até o
+marcador.
+
+O que importa é que o adiantamento é medido em relação ao **que realmente vai
+tocar**, não ao que vem depois na timeline:
+
+- **Reprodução normal e arranjos**: sai o adiantamento antes do marcador dele.
+- **Um salto ao vivo**: se você está no verso e arma um salto no fim da seção
+  para o verso 2 (em vez de seguir para o refrão), sai o clipe do **verso 2**,
+  o adiantamento antes do salto. O clipe do refrão não sai, porque o refrão não
+  vai tocar.
+- **Se você armar o salto tarde**, depois de passado o ponto do adiantamento, o
+  clipe do destino sai na hora.
+- **Se você cancelar o salto** depois de o clipe do refrão já dever ter saído,
+  o clipe do refrão sai naquele momento.
+- **Vamp**: o clipe do início do loop sai de novo antes de cada volta.
+- **Se você saltar ou apertar Play dentro do adiantamento** (meio tempo antes
+  do verso 2, por exemplo), ele sai na hora: é o que deveria estar na tela.
+
+Para ver o que é mandado e quando, use um monitor MIDI (Pocket MIDI, ou MIDI-OX
+no Windows) escutando a mesma porta.
+
+### Selecionar, duplicar e copiar
+
+- **Ctrl+clique** (**Cmd+clique** no Mac) seleciona um clipe sem abrir o
+  editor. **Shift+clique** adiciona todos os clipes daquela faixa entre o
+  último escolhido e este.
+- <kbd>Ctrl</kbd>+<kbd>D</kbd> duplica a seleção logo depois dela: a duração do
+  grupo, arredondada para cima em compassos inteiros. A cópia mantém as
+  mensagens, a cor e o adiantamento, e fica selecionada, para você encadear
+  cópias.
+- <kbd>Del</kbd> apaga a seleção.
+- Com vários selecionados, o botão direito num deles oferece **Duplicate** e
+  **Delete** para todos.
+- Segure <kbd>Alt</kbd> (<kbd>Option</kbd> no Mac) **ao soltar** um arraste e
+  uma cópia cai onde você soltar; o original fica onde está. Também para outra
+  faixa MIDI.
+
+## LibreTracks como dispositivo MIDI (celular)
+
+No Android e no iOS, o LibreTracks pode se publicar como um **dispositivo MIDI
+virtual**: outros apps do mesmo celular ou tablet o veem como porta de entrada
+e de saída. Ligue em Settings › MIDI › **Publish LibreTracks virtual MIDI
+port**.
