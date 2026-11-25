@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 
 import {
@@ -189,6 +190,28 @@ function SliderField({
   onChange: (value: number) => void;
   onReset: () => void;
 }) {
+  // La rueda del ratón sobre el deslizador cambia el valor (como en Live) en vez
+  // de desplazar el panel: antes la rueda movía toda la configuración bajo el
+  // ratón. Escucha nativa porque React registra la rueda como pasiva y no deja
+  // cancelar el desplazamiento.
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const latest = useRef({ value, min, max, step, onChange });
+  latest.current = { value, min, max, step, onChange };
+  useEffect(() => {
+    const input = inputRef.current;
+    if (!input) return;
+    const handleWheel = (event: WheelEvent) => {
+      if (event.deltaY === 0) return;
+      event.preventDefault();
+      const current = latest.current;
+      const direction = event.deltaY < 0 ? 1 : -1;
+      const next = Math.min(current.max, Math.max(current.min, current.value + direction * current.step));
+      if (next !== current.value) current.onChange(Number(next.toFixed(4)));
+    };
+    input.addEventListener("wheel", handleWheel, { passive: false });
+    return () => input.removeEventListener("wheel", handleWheel);
+  }, []);
+
   return (
     <div className="lt-settings-field">
       <span className="lt-settings-field-label" id={`${id}-label`}>
@@ -196,6 +219,7 @@ function SliderField({
       </span>
       <div className="lt-settings-slider-row">
         <input
+          ref={inputRef}
           className="lt-fader"
           type="range"
           aria-labelledby={`${id}-label`}

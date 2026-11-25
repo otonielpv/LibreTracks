@@ -379,8 +379,33 @@ export function setTheme(patch: Partial<ThemeSettings>): void {
   } catch {
     // Almacenamiento desactivado: se queda en memoria.
   }
-  applyThemeToDom(next);
+  scheduleApply();
   listeners.forEach((listener) => listener());
+}
+
+// Reescribir las ~320 variables obliga a recalcular el estilo de toda la
+// página, y con una sesión grande eso tarda. Al arrastrar un deslizador llegan
+// decenas de cambios por segundo: se aplica solo el último de cada fotograma.
+let pendingApply: number | null = null;
+function scheduleApply(): void {
+  if (typeof window === "undefined" || typeof window.requestAnimationFrame !== "function") {
+    applyThemeToDom(current);
+    return;
+  }
+  if (pendingApply !== null) return;
+  pendingApply = window.requestAnimationFrame(() => {
+    pendingApply = null;
+    applyThemeToDom(current);
+  });
+}
+
+/** Aplica ya un cambio de tema pendiente (tests). */
+export function flushThemeForTests(): void {
+  if (pendingApply !== null) {
+    window.cancelAnimationFrame(pendingApply);
+    pendingApply = null;
+  }
+  applyThemeToDom(current);
 }
 
 function subscribe(listener: () => void): () => void {
