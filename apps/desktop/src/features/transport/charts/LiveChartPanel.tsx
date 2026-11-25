@@ -54,6 +54,8 @@ import { focusLineState, lyricsFocus, resolveFollow, withFollow } from "@libretr
 import { useLyricsFollow } from "./useLyricsFollow";
 import { LyricsFollowMenu, useGeneralFollowStore } from "./LyricsFollowMenu";
 import { FEATURE_FLAGS } from "@libretracks/shared/featureFlags";
+import { ChartStyleMenu, useChartStyleStore } from "./ChartStyleMenu";
+import { chartStyleVars } from "./chartStyle";
 import "./LiveChartPanel.css";
 
 const FONT_SCALE_KEY = "lt.liveChart.fontScale";
@@ -219,6 +221,11 @@ export const LiveChartPanel = memo(function LiveChartPanel({
   );
   const [showChords, setShowChords] = useState(() =>
     readStored(SHOW_CHORDS_KEY, true, (value) => value === "true"),
+  );
+  const chartStyle = useChartStyleStore((state) => state.style);
+  const panelStyle = useMemo(
+    () => ({ "--lt-chart-font-scale": fontScale, ...chartStyleVars(chartStyle) }) as CSSProperties,
+    [fontScale, chartStyle],
   );
   // El editor vive en chartEditorStore/ChartEditorHost, no aquí: al girar a
   // vertical en el teléfono este panel se vuelve a montar y lo cerraba.
@@ -423,7 +430,7 @@ export const LiveChartPanel = memo(function LiveChartPanel({
     scrollerRef,
     focus.anchor,
     currentLine === null || currentBlock < 0 ? null : `${currentBlock}-${currentLine}`,
-    [fontScale, showChords],
+    [fontScale, showChords, chartStyle],
   );
 
   const changeFont = (step: 1 | -1) => {
@@ -547,7 +554,7 @@ export const LiveChartPanel = memo(function LiveChartPanel({
     <section
       className={`lt-live-chart${expanded ? " is-expanded" : ""}`}
       aria-label={t("liveChart.title")}
-      style={{ "--lt-chart-font-scale": fontScale } as CSSProperties}
+      style={panelStyle}
     >
       <div className="lt-live-chart-toolbar">
         <div className="lt-live-chart-heading">
@@ -585,6 +592,7 @@ export const LiveChartPanel = memo(function LiveChartPanel({
               >
                 <span className="material-symbols-outlined" aria-hidden="true">music_note</span>
               </button>
+              <ChartStyleMenu />
               <LyricsFollowMenu
                 general={generalFollow}
                 song={chart?.follow?.focus ?? null}

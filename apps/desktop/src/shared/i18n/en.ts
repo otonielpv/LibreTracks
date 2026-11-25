@@ -3476,6 +3476,31 @@ const en = {
     addChordLine: "Line of chords",
     write: "Write lyrics",
   },
+  chartStyle: {
+    title: "Lyrics and chords style",
+    lyricFont: "Lyrics font",
+    chordFont: "Chords font",
+    chordColor: "Chord color",
+    bold: "Bold",
+    reset: "Reset",
+    font: {
+      inter: "Inter",
+      grotesk: "Grotesk",
+      system: "System",
+      serif: "Serif",
+      mono: "Mono",
+    },
+    color: {
+      default: "Orange (default)",
+      accent: "Accent color",
+      custom: "Other color…",
+    },
+    preview: {
+      a: "Amazing ",
+      b: "grace, how ",
+      c: "sweet",
+    },
+  },
   lyricsFollow: {
     title: "Follow",
     allSongs: "In all songs",
