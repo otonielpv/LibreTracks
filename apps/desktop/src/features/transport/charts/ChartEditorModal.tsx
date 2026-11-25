@@ -30,6 +30,7 @@ import { SaveToPlanningCenterDialog } from "../../chartSources/SaveToPlanningCen
 import { useChartSourcesAvailable } from "../../chartSources/useChartSourcesAvailable";
 import { FEATURE_FLAGS } from "@libretracks/shared/featureFlags";
 import { SimpleLyricsEditor } from "./simple/SimpleLyricsEditor";
+import { markerBars } from "./markerBars";
 import { readEditorMode, storeEditorMode, type ChartEditorMode } from "./simple/editorMode";
 
 type ChartEditorModalProps = {
@@ -39,6 +40,8 @@ type ChartEditorModalProps = {
   chart: SongChart | null;
   /** Seconds per beat at a song position: line times are stored in beats. */
   secondsPerBeatAt: (seconds: number) => number;
+  /** Seconds per bar: each marker's length in bars, when known. */
+  barSecondsAt?: (seconds: number) => number;
   onSave: (chart: SongChart | null) => Promise<void>;
   onClose: () => void;
   /** A sheet just brought in as it comes (Planning Center from the song
@@ -62,6 +65,7 @@ export function ChartEditorModal({
   markers,
   chart,
   secondsPerBeatAt,
+  barSecondsAt,
   onSave,
   onClose,
   initialImport,
@@ -78,6 +82,10 @@ export function ChartEditorModal({
       secondsPerBeatAt,
     }),
     [markers, region.startSeconds, region.endSeconds, secondsPerBeatAt],
+  );
+  const bars = useMemo(
+    () => (barSecondsAt ? markerBars(markers, region, barSecondsAt) : {}),
+    [markers, region, barSecondsAt],
   );
   const withTimes = (source: string, sourceLinks: readonly ChartLink[]) =>
     addChartTimes(source, chartLineTimeFor(parseChordPro(source), sourceLinks, timing));
@@ -362,6 +370,7 @@ export function ChartEditorModal({
             <SimpleLyricsEditor
               chart={draftChart}
               markers={markers}
+              bars={bars}
               onChange={applySimple}
               onSave={saveDraft}
               onImportFile={() => fileInputRef.current?.click()}
@@ -553,6 +562,7 @@ export function ChartEditorModal({
             region={region}
             markers={markers}
             input={adjustInput()}
+            bars={bars}
             onApply={applyAdjust}
             onClose={() => setAdjustOpen(false)}
           />

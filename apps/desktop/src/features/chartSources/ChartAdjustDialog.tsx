@@ -21,6 +21,8 @@ type Props = {
   input: AdjustInput;
   /** The adjusted chart: cleaned text, links, source. Nothing is saved here:
    * the chart editor takes it and the user saves. */
+  /** Bars each marker lasts (`markerBars`), shown beside its name. */
+  bars?: Readonly<Record<string, number>>;
   onApply: (chart: SongChart) => void;
   onClose: () => void;
 };
@@ -31,7 +33,7 @@ type Props = {
  * many times), before anything changes. Same for a file, pasted text or
  * Planning Center: the import brings the sheet as it comes, this adjusts it.
  */
-export function ChartAdjustDialog({ region, markers, input, onApply, onClose }: Props) {
+export function ChartAdjustDialog({ region, markers, input, bars, onApply, onClose }: Props) {
   const { t } = useTranslation();
   const song = useSongStore((state) => state.song);
   const timing = useMemo(() => reviewTimingForSong(song, region), [song, region]);
@@ -91,6 +93,7 @@ export function ChartAdjustDialog({ region, markers, input, onApply, onClose }: 
             onTranspose={setTranspose}
             onSection={setSection}
             onPasses={setPasses}
+            bars={bars}
           />
         </div>
         <div className="lt-inline-actions">

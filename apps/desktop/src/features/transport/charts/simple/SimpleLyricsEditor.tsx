@@ -17,6 +17,8 @@ type SimpleLyricsEditorProps = {
   /** The editor's draft (the same one Advanced edits). */
   chart: SongChart | null;
   markers: readonly SectionMarkerSummary[];
+  /** Bars each marker lasts (`markerBars`), shown on its row. */
+  bars?: Readonly<Record<string, number>>;
   onChange: (chart: SongChart | null) => void;
   onSave: () => void;
   onImportFile: () => void;
@@ -35,6 +37,7 @@ type SimpleLyricsEditorProps = {
 export function SimpleLyricsEditor({
   chart,
   markers,
+  bars,
   onChange,
   onSave,
   onImportFile,
@@ -136,6 +139,7 @@ export function SimpleLyricsEditor({
         entries={entries}
         selectedKey={selectedKey}
         passes={passes}
+        bars={bars}
         onSelect={select}
         onAdd={hasMarkers ? null : add}
         quickName={(kind) => QUICK_PART_NAMES[language][kind] ?? kind}

@@ -58,6 +58,15 @@ describe("adjusting a sheet to the song's sequence", () => {
     expect(within(rows[3]).getByText("Eres mi refugio")).toBeTruthy();
   });
 
+  it("each marker says how many bars it lasts", () => {
+    render(
+      <ChartAdjustDialog region={region} markers={SONG} input={input()} bars={{ i: 4, v1: 8, v2: 8.5 }} onApply={vi.fn()} onClose={vi.fn()} />,
+    );
+    const rows = screen.getAllByTestId("chart-import-row");
+    expect(within(rows[0]).getByText("transport.structure.bars")).toBeTruthy();
+    expect(rows[3].querySelector(".lt-marker-bars")).toBeNull();
+  });
+
   it("the eye beside the first line shows the whole section", () => {
     open(SONG, input(RAW.replace("[G]Camino por la orilla", "[G]Camino por la orilla\nCon la mirada en ti")));
     const rows = screen.getAllByTestId("chart-import-row");

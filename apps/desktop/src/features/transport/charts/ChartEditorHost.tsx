@@ -30,6 +30,7 @@ export function ChartEditorHost() {
       markers={session.markers}
       chart={session.chart}
       secondsPerBeatAt={session.secondsPerBeatAt}
+      barSecondsAt={session.barSecondsAt}
       onSave={save}
       onClose={close}
       initialImport={session.initialImport}

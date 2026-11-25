@@ -5,6 +5,7 @@ import type { SongChart } from "@libretracks/shared/models";
 import { useChartEditorStore } from "../transport/charts/chartEditorStore";
 import { setSongRegionChart } from "../transport/desktopApi";
 import { getSong } from "../transport/songStore";
+import { barSecondsAtFor } from "../transport/setlist/songMapModel";
 import { ChartImportDialog } from "./ChartImportDialog";
 import { useChartImportStore, type AdjustInput } from "./chartImportStore";
 
@@ -31,12 +32,14 @@ export function ChartImportHost({ onSnapshot }: Props) {
       return;
     }
     const region = session.region;
-    const timing = reviewTimingForSong(getSong(), region);
+    const song = getSong();
+    const timing = reviewTimingForSong(song, region);
     useChartEditorStore.getState().open({
       region,
       markers: session.markers,
       chart: session.chart,
       secondsPerBeatAt: timing.secondsPerBeatAt!,
+      ...(song ? { barSecondsAt: barSecondsAtFor(song) } : {}),
       onSave: async (chart: SongChart | null) => {
         onSnapshot(await setSongRegionChart(region.id, chart));
       },

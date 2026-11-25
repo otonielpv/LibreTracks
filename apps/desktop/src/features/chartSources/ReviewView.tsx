@@ -5,6 +5,8 @@ import type { ImportReview } from "@libretracks/shared/charts/chartImportReview"
 import type { SheetChange } from "@libretracks/shared/charts/importedChart";
 
 import { SectionPeek } from "../transport/charts/SectionPeek";
+import { roundBars } from "../transport/charts/markerBars";
+import "../transport/charts/markerBars.css";
 
 /** The review of an adjust, marker by marker: section, confidence, passes
  * and first line. Shared by the adjust dialog and the plan import. */
@@ -14,12 +16,15 @@ export function ReviewView({
   onTranspose,
   onSection,
   onPasses,
+  bars,
 }: {
   review: ImportReview;
   transpose: boolean;
   onTranspose: (value: boolean) => void;
   onSection: (markerId: string, value: string) => void;
   onPasses?: (markerId: string, passes: number) => void;
+  /** Bars each marker lasts, beside its name: helps choose the ×N. */
+  bars?: Readonly<Record<string, number>>;
 }) {
   const { t } = useTranslation();
   const sectionName = (index: number) => review.doc.sections[index]?.label || `#${index + 1}`;
@@ -57,6 +62,9 @@ export function ReviewView({
               <li key={row.markerId} className={row.repeatOf ? "is-repeat" : undefined} data-testid="chart-import-row">
                 <span className="lt-chart-import-marker">
                   {row.name}
+                  {bars?.[row.markerId] !== undefined ? (
+                    <span className="lt-marker-bars">{t("transport.structure.bars", { count: roundBars(bars[row.markerId]) })}</span>
+                  ) : null}
                   {row.repeatOf ? <small>{t("chartSources.import.repeatOf")}</small> : null}
                 </span>
                 <select

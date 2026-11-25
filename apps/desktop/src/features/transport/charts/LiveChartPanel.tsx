@@ -57,6 +57,7 @@ import { FEATURE_FLAGS } from "@libretracks/shared/featureFlags";
 import { ChartStyleMenu, useChartStyleStore } from "./ChartStyleMenu";
 import { chartStyleVars } from "./chartStyle";
 import "./LiveChartPanel.css";
+import { barSecondsAtFor } from "../setlist/songMapModel";
 
 const FONT_SCALE_KEY = "lt.liveChart.fontScale";
 const SHOW_CHORDS_KEY = "lt.liveChart.showChords";
@@ -465,10 +466,12 @@ export const LiveChartPanel = memo(function LiveChartPanel({
     [song],
   );
 
+  const barSecondsAt = useMemo(() => barSecondsAtFor(song), [song]);
+
   const simpleEditor = FEATURE_FLAGS.simpleLyricsEditor;
   const openEditor = (initialMode?: ChartEditorMode) => {
     if (!region || !canEdit) return;
-    useChartEditorStore.getState().open({ region, markers, chart, secondsPerBeatAt, onSave: save, initialMode });
+    useChartEditorStore.getState().open({ region, markers, chart, secondsPerBeatAt, barSecondsAt, onSave: save, initialMode });
   };
   // Planning Center: the picked sheet opens the editor with "Ajustar a la
   // secuencia" (ChartImportHost), and saves through this panel.
@@ -480,7 +483,7 @@ export const LiveChartPanel = memo(function LiveChartPanel({
       markers: [...markers],
       chart,
       onPicked: (input) =>
-        useChartEditorStore.getState().open({ region, markers, chart, secondsPerBeatAt, onSave: save, initialImport: input }),
+        useChartEditorStore.getState().open({ region, markers, chart, secondsPerBeatAt, barSecondsAt, onSave: save, initialImport: input }),
     });
   };
   // Editar › Letra: abrir con el editor a la vista.
@@ -512,6 +515,7 @@ export const LiveChartPanel = memo(function LiveChartPanel({
         markers,
         chart,
         secondsPerBeatAt,
+        barSecondsAt,
         onSave: save,
         initialImport: { imported: { title: region.name, text } },
       });

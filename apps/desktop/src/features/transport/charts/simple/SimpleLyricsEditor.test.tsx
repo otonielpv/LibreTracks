@@ -41,7 +41,11 @@ const markers: SectionMarkerSummary[] = [
   { id: "c3", name: "Coro", startSeconds: 50, kind: "chorus" },
 ];
 
-function renderEditor(chart: SongChart | null, mode: "simple" | "advanced" = "simple") {
+function renderEditor(
+  chart: SongChart | null,
+  mode: "simple" | "advanced" = "simple",
+  barSecondsAt?: (seconds: number) => number,
+) {
   const onSave = vi.fn(async (_chart: SongChart | null) => {});
   render(
     <ChartEditorModal
@@ -49,6 +53,7 @@ function renderEditor(chart: SongChart | null, mode: "simple" | "advanced" = "si
       markers={markers}
       chart={chart}
       secondsPerBeatAt={() => 0.5}
+      barSecondsAt={barSecondsAt}
       onSave={onSave}
       onClose={vi.fn()}
       initialMode={mode}
@@ -305,5 +310,23 @@ describe("simple lyrics editor", () => {
     expect(links.find((link) => link.markerId === "c2")?.repeat).toBeUndefined();
     expect(links.find((link) => link.markerId === "c3")?.repeat).toBe(3);
     expect(links.find((link) => link.markerId === "c1")?.repeat).toBeUndefined();
+  });
+
+  it("each row says how many bars its marker lasts, until the next marker or the end", () => {
+    // 2 s per bar: markers every 10 s = 5 bars; the last one runs to 70 s = 10 bars.
+    renderEditor(PC_CHART, "simple", () => 2);
+    const coros = partButtons(/Coro/);
+    expect(within(coros[0]).getByText("transport.structure.bars:5")).toBeTruthy();
+    expect(within(coros[2]).getByText("transport.structure.bars:10")).toBeTruthy();
+  });
+
+  it("a marker off the bar line shows the decimal", () => {
+    renderEditor(PC_CHART, "simple", () => 4);
+    expect(within(partButtons(/Verso 1/)[0]).getByText("transport.structure.bars:2.5")).toBeTruthy();
+  });
+
+  it("without the meter nothing is shown", () => {
+    renderEditor(PC_CHART);
+    expect(within(partButtons(/Coro/)[0]).queryByText(/transport\.structure\.bars/)).toBeNull();
   });
 });

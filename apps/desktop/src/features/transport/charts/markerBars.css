@@ -1,0 +1,9 @@
+/* "8 c.": how many bars a marker lasts, beside its name (simple editor rows,
+   Match and clean up). */
+.lt-marker-bars {
+  flex: none;
+  margin-left: 0.4rem;
+  color: rgb(var(--lt-c-bacac5, 186 202 197) / 0.75);
+  font: 600 0.66rem/1 "JetBrains Mono", ui-monospace, monospace;
+  white-space: nowrap;
+}

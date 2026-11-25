@@ -21,6 +21,8 @@ export type ChartEditorSession = {
   markers: SectionMarkerSummary[];
   chart: SongChart | null;
   secondsPerBeatAt: (seconds: number) => number;
+  /** Seconds per bar (tempo and meter): how many bars each marker lasts. */
+  barSecondsAt?: (seconds: number) => number;
   /** Guarda (o borra con `null`); el host cierra el editor al terminar. */
   onSave: (next: SongChart | null) => Promise<void>;
   /** Una hoja recién traída tal cual (Planning Center desde el menú de la
