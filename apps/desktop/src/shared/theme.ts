@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from "react";
 
-import { THEMED_CSS_COLORS } from "./themeColors.generated";
+import { THEMED_CSS_COLORS, THEMED_CSS_TINTS } from "./themeColors.generated";
 
 // Tema de color de la interfaz, al estilo de Live (Opciones › Tema).
 //
@@ -218,6 +218,8 @@ function curveAt(curve: ThemeBase["curve"], x: number): number {
 export function remapThemeRgb(rgb: Rgb, settings: ThemeSettings): Rgb {
   const [r, g, b] = rgb;
   if (Math.max(r, g, b) - Math.min(r, g, b) > NEUTRAL_MAX_CHROMA) {
+    const accentVariant = remapAccentFamilyRgb(rgb, settings);
+    if (accentVariant) return accentVariant;
     return remapChromaticRgb(rgb, settings);
   }
   const lightness = (r + g + b) / 765;
@@ -251,6 +253,38 @@ const NEUTRAL_MAX_CHROMA = 42;
  * saturación, así el pastel pasa a ser un tono oscuro legible sobre blanco y un
  * fondo oscuro teñido pasa a un fondo claro teñido. En bases oscuras no cambian.
  */
+// El diseño original usa ~20 variantes del turquesa del acento (más claras,
+// más oscuras, fondos teñidos) escritas a mano. Se reconocen por el tono y
+// pasan al acento elegido conservando lo claras u oscuras que son respecto al
+// turquesa. Sin esto, con acento naranja seguían saliendo letras verdes.
+const DEFAULT_ACCENT_HSL = rgbToHsl([87, 241, 219]);
+const ACCENT_FAMILY_HUE: readonly [number, number] = [165 / 360, 182 / 360];
+const ACCENT_FAMILY_MIN_SATURATION = 0.55;
+
+function remapAccentFamilyRgb(
+  rgb: Rgb,
+  settings: ThemeSettings,
+  { tint = false }: { tint?: boolean } = {},
+): Rgb | null {
+  const [h, s, l] = rgbToHsl(rgb);
+  if (h < ACCENT_FAMILY_HUE[0] || h > ACCENT_FAMILY_HUE[1] || s < ACCENT_FAMILY_MIN_SATURATION) {
+    return null;
+  }
+  const palette = buildThemePalette(settings);
+  if (settings.accent === DEFAULT_THEME.accent && !palette.light) return null;
+  const [accentH, accentS, accentL] = rgbToHsl(palette.accent);
+  const [, , baseL] = DEFAULT_ACCENT_HSL;
+  // En claro se invierte: lo que era más claro que el acento (texto suave
+  // sobre negro) pasa a más oscuro, y los fondos muy oscuros a tintes claros.
+  // Un velo translúcido (tint) no se invierte: sigue siendo un velo claro.
+  const delta = (l - baseL) * (palette.light && !tint ? -0.6 : 1);
+  return hslToRgb(
+    (accentH + (h - DEFAULT_ACCENT_HSL[0]) + 1) % 1,
+    clamp(accentS * (s / DEFAULT_ACCENT_HSL[1]), 0, 1),
+    clamp(accentL + delta, 0.04, 0.97),
+  );
+}
+
 function remapChromaticRgb(rgb: Rgb, settings: ThemeSettings): Rgb {
   if (!isLightTheme(settings)) return rgb;
   const [h, s, l] = rgbToHsl(rgb);
@@ -377,6 +411,15 @@ export function applyThemeToDom(settings: ThemeSettings = current): void {
   style.setProperty("--lt-accent-strong-rgb", rgbVar(themePalette.accentStrong));
   style.setProperty("--lt-accent-soft-rgb", rgbVar(themePalette.accentSoft));
   style.setProperty("--lt-on-accent-rgb", rgbVar(themePalette.onAccent));
+
+  // Velos translúcidos: solo cambian los de la familia del acento (pasan al
+  // acento elegido); el resto conserva su color en todas las bases.
+  for (const hex of THEMED_CSS_TINTS) {
+    const name = `--lt-t-${hex}`;
+    const variant = remapAccentFamilyRgb(hexToRgb(hex), settings, { tint: true });
+    if (variant) style.setProperty(name, rgbVar(variant));
+    else style.removeProperty(name);
+  }
 
   const identity = themeKey(settings) === DEFAULT_THEME_ID;
   for (const hex of THEMED_CSS_COLORS) {
