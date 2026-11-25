@@ -1,5 +1,5 @@
 ---
-title: Projection (ProPresenter, FreeShow, Holyrics)
+title: Projection (ProPresenter, FreeShow, Holyrics, OpenLP)
 description: "Sync the lyrics with ProPresenter, FreeShow or Holyrics over the network, without MIDI: every section of the song changes the slide ahead of time, following jumps, vamps and arrangements."
 sidebar:
   order: 9
@@ -49,6 +49,22 @@ tutorial**.
    background); without them F8, Holyrics' wallpaper, is used.
 4. Paste the token into LibreTracks. It is stored in the system keychain,
    never in a file.
+
+### OpenLP
+
+1. In OpenLP 3: **Settings › Configure OpenLP ›** the **Remote** tab. The
+   server is on by default on port **4316**.
+2. Add the setlist's songs to the OpenLP **service**, with their verse order:
+   LibreTracks looks for them in the open service, by title.
+3. If you ticked **Require authentication**, type `user:password` in
+   **Password (optional)**. Otherwise leave it empty.
+4. Optional: for the lyrics to come back with a fade, turn on **Item
+   transitions** in **Configure OpenLP › Themes** and restart OpenLP.
+
+OpenLP only shows the slides of what is live, so LibreTracks puts each song
+live for an instant, with no text on screen, to read it. If OpenLP is showing
+lyrics, it waits until the screen is free or the song starts. A black screen
+stays black.
 
 If the program runs **on another computer**, type its IP in **Computer**. On
 the same one, leave `127.0.0.1`. Press **Test connection**: you see the

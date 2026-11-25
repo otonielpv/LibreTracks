@@ -1,5 +1,5 @@
 ---
-title: Proyección (ProPresenter, FreeShow, Holyrics)
+title: Proyección (ProPresenter, FreeShow, Holyrics, OpenLP)
 description: "Sincroniza la letra con ProPresenter, FreeShow u Holyrics por la red, sin MIDI: cada sección de la canción cambia la diapositiva con adelanto, siguiendo saltos, vamps y arreglos."
 sidebar:
   order: 9
@@ -49,6 +49,22 @@ tutorial**.
    sin ellos se usa F8, el fondo de pantalla de Holyrics.
 4. Pega el token en LibreTracks. Se guarda en el llavero del sistema, nunca en
    un fichero.
+
+### OpenLP
+
+1. En OpenLP 3: **Configuración › Configurar OpenLP ›** pestaña **Remoto**. El
+   servidor viene encendido en el puerto **4316**.
+2. Añade al **servicio** de OpenLP las canciones del repertorio, con su orden
+   de versos: LibreTracks las busca en el servicio abierto, por su título.
+3. Si marcaste **Requerir autenticación**, escribe `usuario:contraseña` en
+   **Contraseña (opcional)**. Si no, déjalo vacío.
+4. Opcional: para que la letra vuelva con fundido, activa **Item transitions**
+   en **Configurar OpenLP › Temas** y reinicia OpenLP.
+
+OpenLP solo enseña las diapositivas de lo que está en vivo, así que
+LibreTracks pone cada canción en vivo un instante, con la pantalla sin texto,
+para leerla. Si OpenLP está mostrando letra, espera a que la pantalla quede
+libre o a que empiece la canción. Una pantalla en negro sigue en negro.
 
 Si el programa está **en otro ordenador**, escribe su IP en **Equipo**. Si va
 en el mismo, deja `127.0.0.1`. Pulsa **Probar conexión**: verás la versión y
