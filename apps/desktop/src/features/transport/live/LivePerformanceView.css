@@ -320,6 +320,15 @@
   touch-action: manipulation;
 }
 
+/* Bases claras: el velo oscuro del diseño se convierte en uno claro; plano
+   (sin degradado) y algo más de color, para que no quede un pastel sucio. */
+html[data-lt-light="1"] .lt-live-cue-row {
+  border-color: rgb(var(--lt-c-ffffff, 255 255 255) / 0.12);
+  background:
+    linear-gradient(rgb(var(--lt-highlight-rgb, 255 255 255) / 0.74), rgb(var(--lt-highlight-rgb, 255 255 255) / 0.74)),
+    var(--lt-live-marker-color);
+}
+
 .lt-live-cue-row::before {
   content: "";
   position: absolute;
@@ -346,6 +355,20 @@
   box-shadow:
     inset 0 0 0 1px rgb(var(--lt-accent-rgb) / 0.5),
     0 0 12px rgb(var(--lt-accent-rgb) / 0.22);
+}
+
+html[data-lt-light="1"] .lt-live-cue-row:hover,
+html[data-lt-light="1"] .lt-live-cue-row:focus-visible {
+  background:
+    linear-gradient(rgb(var(--lt-highlight-rgb, 255 255 255) / 0.62), rgb(var(--lt-highlight-rgb, 255 255 255) / 0.62)),
+    var(--lt-live-marker-color);
+}
+
+html[data-lt-light="1"] .lt-live-cue-row.is-active {
+  border-color: var(--lt-accent);
+  background:
+    linear-gradient(rgb(var(--lt-highlight-rgb, 255 255 255) / 0.5), rgb(var(--lt-highlight-rgb, 255 255 255) / 0.5)),
+    var(--lt-live-marker-color);
 }
 
 .lt-live-cue-row.is-next {
@@ -497,7 +520,7 @@
      sobre la fila normal y sobre la activa sin tener que dar un color a cada
      una. */
   background: rgb(var(--lt-c-ffffff, 255 255 255) / 0.16);
-  box-shadow: inset 0 0 0 1px rgb(var(--lt-c-ffffff, 255 255 255) / 0.1);
+  box-shadow: inset 0 0 0 1px rgb(var(--lt-highlight-rgb, 255 255 255) / 0.1);
 }
 
 .lt-live-cue-progress.is-active {
@@ -577,7 +600,7 @@
      saber donde acaba el recorrido. Las dos barras de la vista comparten ahora
      carril claro, 5 px y filo interior, y se leen igual. */
   background: rgb(var(--lt-c-ffffff, 255 255 255) / 0.16);
-  box-shadow: inset 0 0 0 1px rgb(var(--lt-c-ffffff, 255 255 255) / 0.1);
+  box-shadow: inset 0 0 0 1px rgb(var(--lt-highlight-rgb, 255 255 255) / 0.1);
 }
 
 .lt-live-song-progress-track > span {

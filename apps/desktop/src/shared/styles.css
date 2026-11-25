@@ -687,7 +687,7 @@ html.lt-ios body {
   background: rgb(var(--lt-c-0e0e0e, 14 14 14));
   padding: 0.25rem 0.4rem;
   border-radius: 2px;
-  box-shadow: inset 0 0 8px rgb(var(--lt-shadow-rgb, 0 0 0) / calc(0.5 * var(--lt-shadow-alpha, 1)));
+  box-shadow: inset 0 0 8px rgb(var(--lt-shadow-rgb, 0 0 0) / calc(0.5 * var(--lt-inset-shadow-alpha, 1)));
   flex-shrink: 0;
   margin-right: 0.5rem;
 }
@@ -699,7 +699,7 @@ html.lt-ios body {
   background: rgb(var(--lt-c-0e0e0e, 14 14 14));
   padding: 0.25rem 0.55rem;
   border-radius: 2px;
-  box-shadow: inset 0 0 8px rgb(var(--lt-shadow-rgb, 0 0 0) / calc(0.5 * var(--lt-shadow-alpha, 1)));
+  box-shadow: inset 0 0 8px rgb(var(--lt-shadow-rgb, 0 0 0) / calc(0.5 * var(--lt-inset-shadow-alpha, 1)));
   flex-shrink: 0;
 }
 
@@ -955,7 +955,7 @@ html.lt-ios body {
   border: 1px solid rgb(var(--lt-accent-rgb) / 0.16);
   border-radius: 2px;
   background: linear-gradient(180deg, rgb(var(--lt-c-1c1b1b, 28 27 27) / 0.96), rgb(var(--lt-c-111111, 17 17 17) / 0.98));
-  box-shadow: inset 0 1px 0 rgb(var(--lt-c-ffffff, 255 255 255) / 0.04);
+  box-shadow: inset 0 1px 0 rgb(var(--lt-highlight-rgb, 255 255 255) / 0.04);
 }
 
 .lt-remote-card-copy {
@@ -1340,7 +1340,7 @@ html.lt-ios body {
   background: linear-gradient(180deg, rgb(var(--lt-c-181717, 24 23 23) / 0.98), rgb(var(--lt-c-0e0e0e, 14 14 14) / 0.98));
   box-shadow:
     0 18px 48px rgb(var(--lt-shadow-rgb, 0 0 0) / calc(0.48 * var(--lt-shadow-alpha, 1))),
-    inset 0 1px 0 rgb(var(--lt-c-ffffff, 255 255 255) / 0.04);
+    inset 0 1px 0 rgb(var(--lt-highlight-rgb, 255 255 255) / 0.04);
   color: rgb(var(--lt-c-e5e2e1, 229 226 225));
   padding: 1rem;
   pointer-events: auto;
@@ -4528,7 +4528,7 @@ html.lt-ios body {
   border: 1px solid rgb(var(--lt-accent-rgb) / 0.14);
   border-radius: 2px;
   background: linear-gradient(180deg, rgb(var(--lt-c-1c1b1b, 28 27 27) / 0.96), rgb(var(--lt-c-0e0e0e, 14 14 14) / 0.96));
-  box-shadow: 0 24px 60px rgb(var(--lt-shadow-rgb, 0 0 0) / calc(0.34 * var(--lt-shadow-alpha, 1))), inset 0 1px 0 rgb(var(--lt-c-ffffff, 255 255 255) / 0.04);
+  box-shadow: 0 24px 60px rgb(var(--lt-shadow-rgb, 0 0 0) / calc(0.34 * var(--lt-shadow-alpha, 1))), inset 0 1px 0 rgb(var(--lt-highlight-rgb, 255 255 255) / 0.04);
   text-align: center;
 }
 
@@ -4901,8 +4901,8 @@ html.lt-ios body {
     linear-gradient(180deg, rgb(var(--lt-c-ffffff, 255 255 255) / 0.035), transparent 45%),
     rgb(var(--lt-c-202020, 32 32 32));
   box-shadow:
-    inset 0 1px 0 rgb(var(--lt-c-ffffff, 255 255 255) / 0.04),
-    inset 0 -1px 0 rgb(var(--lt-shadow-rgb, 0 0 0) / calc(0.55 * var(--lt-shadow-alpha, 1)));
+    inset 0 1px 0 rgb(var(--lt-highlight-rgb, 255 255 255) / 0.04),
+    inset 0 -1px 0 rgb(var(--lt-shadow-rgb, 0 0 0) / calc(0.55 * var(--lt-inset-shadow-alpha, 1)));
 }
 
 .lt-timeline-meta {
@@ -5157,7 +5157,7 @@ html.lt-ios body {
   border: 1px solid rgb(var(--lt-accent-rgb) / 0.34);
   background:
     linear-gradient(135deg, rgb(var(--lt-accent-rgb) / 0.24), rgb(var(--lt-accent-strong-rgb) / 0.16));
-  box-shadow: inset 0 1px 0 rgb(var(--lt-c-ffffff, 255 255 255) / 0.08);
+  box-shadow: inset 0 1px 0 rgb(var(--lt-highlight-rgb, 255 255 255) / 0.08);
   pointer-events: none;
   display: flex;
   align-items: flex-end;
@@ -5420,12 +5420,14 @@ html.lt-ios body {
 /* Bases claras: el tinte al 22 % se lavaba sobre gris claro y, junto a los
    clips opacos, las cabeceras parecían descoloridas. Más color y más largo. */
 html[data-lt-light="1"] .lt-track-header[style*="--lt-track-color"]::after {
-  background: linear-gradient(90deg, var(--lt-track-color, transparent), transparent 85%);
-  opacity: 0.5;
+  /* Color plano, no degradado: igual que la cabecera de los clips, así la
+     pista y su clip se leen como la misma cosa. */
+  background: var(--lt-track-color, transparent);
+  opacity: 0.42;
 }
 
 html[data-lt-light="1"] .lt-track-header.is-selected::after {
-  opacity: 0.68;
+  opacity: 0.62;
 }
 
 html[data-lt-light="1"] .lt-track-header::before {
@@ -5440,7 +5442,7 @@ html[data-lt-light="1"] .lt-track-header::before {
      shadow: see the comment there. */
   border-right-color: var(--lt-track-color, var(--lt-accent));
   border-bottom-color: var(--lt-track-color, var(--lt-accent));
-  box-shadow: inset 0 1px 0 rgb(var(--lt-c-ffffff, 255 255 255) / 0.05);
+  box-shadow: inset 0 1px 0 rgb(var(--lt-highlight-rgb, 255 255 255) / 0.05);
 }
 
 /* Selected-track surface wash — overlay so the solid track colour reads at
@@ -5453,7 +5455,7 @@ html[data-lt-light="1"] .lt-track-header::before {
   background: linear-gradient(180deg, rgb(var(--lt-c-181818, 24 24 24)) 0%, rgb(var(--lt-c-111111, 17 17 17)) 100%);
   border-right-color: rgb(var(--lt-c-151f1d, 21 31 29) / 0.52);
   border-bottom-color: rgb(var(--lt-c-151f1d, 21 31 29) / 0.52);
-  box-shadow: inset 0 1px 0 rgb(var(--lt-c-ffffff, 255 255 255) / 0.02), 0 0 0 1px rgb(var(--lt-shadow-rgb, 0 0 0) / calc(0.35 * var(--lt-shadow-alpha, 1))), 14px 0 24px rgb(var(--lt-shadow-rgb, 0 0 0) / calc(0.2 * var(--lt-shadow-alpha, 1)));
+  box-shadow: inset 0 1px 0 rgb(var(--lt-highlight-rgb, 255 255 255) / 0.02), 0 0 0 1px rgb(var(--lt-shadow-rgb, 0 0 0) / calc(0.35 * var(--lt-shadow-alpha, 1))), 14px 0 24px rgb(var(--lt-shadow-rgb, 0 0 0) / calc(0.2 * var(--lt-shadow-alpha, 1)));
 }
 
 .lt-track-header.is-library-preview {
@@ -6015,7 +6017,7 @@ html[data-lt-light="1"] .lt-track-header::before {
   background: linear-gradient(180deg, rgb(var(--lt-c-2a2a2a, 42 42 42)) 0%, rgb(var(--lt-c-232323, 35 35 35)) 100%);
   border-right: 1px solid rgb(var(--lt-c-131313, 19 19 19) / 0.55);
   border-bottom: 1px solid rgb(var(--lt-c-131313, 19 19 19) / 0.55);
-  box-shadow: inset 0 1px 0 rgb(var(--lt-c-ffffff, 255 255 255) / 0.03);
+  box-shadow: inset 0 1px 0 rgb(var(--lt-highlight-rgb, 255 255 255) / 0.03);
   color: rgb(var(--lt-c-e5e2e1, 229 226 225));
   z-index: 2;
   padding-left: 8px;
@@ -6069,7 +6071,7 @@ html[data-lt-light="1"] .lt-track-header::before {
   overflow: hidden;
   border-radius: 2px;
   background: rgb(var(--lt-c-0e0e0e, 14 14 14));
-  box-shadow: inset 0 1px 0 rgb(var(--lt-c-ffffff, 255 255 255) / 0.04);
+  box-shadow: inset 0 1px 0 rgb(var(--lt-highlight-rgb, 255 255 255) / 0.04);
 }
 
 .lt-track-meter-bar {
@@ -6111,7 +6113,7 @@ html[data-lt-light="1"] .lt-track-header::before {
   top: 0;
   height: 2px;
   background: rgb(var(--lt-c-ffffff, 255 255 255));
-  box-shadow: 0 0 2px rgb(var(--lt-c-ffffff, 255 255 255) / 0.6);
+  box-shadow: 0 0 2px rgb(var(--lt-highlight-rgb, 255 255 255) / 0.6);
 }
 
 .lt-track-meter-clip {
@@ -6960,7 +6962,7 @@ body.lt-daw-song-reordering .lt-region-hotspot .lt-region-hotspot-name {
   background:
     linear-gradient(180deg, rgb(var(--lt-c-ffffff, 255 255 255) / 0.035), transparent 38%),
     linear-gradient(180deg, rgb(var(--lt-c-1f1f1f, 31 31 31) / 0.98), rgb(var(--lt-c-0e0e0e, 14 14 14) / 0.98));
-  box-shadow: inset 0 1px 0 rgb(var(--lt-c-ffffff, 255 255 255) / 0.04);
+  box-shadow: inset 0 1px 0 rgb(var(--lt-highlight-rgb, 255 255 255) / 0.04);
 }
 
 .lt-control-group-main {
@@ -7802,7 +7804,7 @@ body.lt-daw-song-reordering .lt-region-hotspot .lt-region-hotspot-name {
   background:
     linear-gradient(135deg, rgb(var(--lt-c-ff8a65, 255 138 101) / 0.95), rgb(var(--lt-c-dd5b32, 221 91 50) / 0.92)),
     rgb(var(--lt-c-6f2b19, 111 43 25));
-  box-shadow: 0 14px 34px rgb(var(--lt-shadow-rgb, 0 0 0) / calc(0.32 * var(--lt-shadow-alpha, 1))), 0 0 0 1px rgb(var(--lt-c-ffffff, 255 255 255) / 0.08) inset;
+  box-shadow: 0 14px 34px rgb(var(--lt-shadow-rgb, 0 0 0) / calc(0.32 * var(--lt-shadow-alpha, 1))), 0 0 0 1px rgb(var(--lt-highlight-rgb, 255 255 255) / 0.08) inset;
   color: rgb(var(--lt-c-1b0d08, 27 13 8));
   padding: 0.52rem 0.78rem;
   font: 800 0.72rem/1 "Space Grotesk", sans-serif;
@@ -7814,7 +7816,7 @@ body.lt-daw-song-reordering .lt-region-hotspot .lt-region-hotspot-name {
 .lt-missing-files-indicator:hover {
   border-color: rgb(var(--lt-c-ffdc9e, 255 220 158) / 0.82);
   transform: translateY(-1px);
-  box-shadow: 0 18px 42px rgb(var(--lt-shadow-rgb, 0 0 0) / calc(0.38 * var(--lt-shadow-alpha, 1))), 0 0 0 1px rgb(var(--lt-c-ffffff, 255 255 255) / 0.14) inset;
+  box-shadow: 0 18px 42px rgb(var(--lt-shadow-rgb, 0 0 0) / calc(0.38 * var(--lt-shadow-alpha, 1))), 0 0 0 1px rgb(var(--lt-highlight-rgb, 255 255 255) / 0.14) inset;
 }
 
 .lt-missing-files-indicator .material-symbols-outlined {
@@ -7921,7 +7923,7 @@ body.lt-daw-song-reordering .lt-region-hotspot .lt-region-hotspot-name {
   height: 12px;
   flex: 0 0 12px;
   border-radius: 2px;
-  box-shadow: inset 0 0 0 1px rgb(var(--lt-c-ffffff, 255 255 255) / 0.28);
+  box-shadow: inset 0 0 0 1px rgb(var(--lt-highlight-rgb, 255 255 255) / 0.28);
 }
 
 .lt-context-menu-label {
@@ -7967,7 +7969,7 @@ body.lt-daw-song-reordering .lt-region-hotspot .lt-region-hotspot-name {
   height: 2rem;
   border: 1px solid rgb(var(--lt-c-ffffff, 255 255 255) / 0.12);
   border-radius: 2px;
-  box-shadow: inset 0 0 0 1px rgb(var(--lt-shadow-rgb, 0 0 0) / calc(0.22 * var(--lt-shadow-alpha, 1)));
+  box-shadow: inset 0 0 0 1px rgb(var(--lt-shadow-rgb, 0 0 0) / calc(0.22 * var(--lt-inset-shadow-alpha, 1)));
 }
 
 .lt-color-popover-swatches {
@@ -9090,6 +9092,22 @@ body.lt-song-reordering .lt-compact-column-resize-slot {
   background: linear-gradient(to right, var(--lt-track-color, transparent), transparent 60%);
   opacity: 0.22;
   border-radius: inherit;
+}
+
+/* Bases claras: borde completo del color de pista + degradado se veía
+   recargado. Tarjeta clara con borde suave, franja de color y un tinte plano. */
+html[data-lt-light="1"] .lt-compact-clip-entry.is-coloured {
+  border-color: rgb(var(--lt-c-ffffff, 255 255 255) / 0.12);
+  background: rgb(var(--lt-highlight-rgb, 255 255 255) / 0.75);
+}
+
+html[data-lt-light="1"] .lt-compact-clip-entry.is-coloured::after {
+  background: var(--lt-track-color, transparent);
+  opacity: 0.16;
+}
+
+html[data-lt-light="1"] .lt-compact-clip-entry.is-coloured::before {
+  width: 4px;
 }
 
 .lt-compact-clip-entry.is-coloured > * {

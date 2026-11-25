@@ -47,13 +47,12 @@ export const THEME_BASES: readonly ThemeBase[] = [
   { id: "dark", defaultLabel: "Dark (default)", curve: [0, 0.16, 0.6, 1] },
   { id: "deep", defaultLabel: "Deep dark", curve: [0, 0.1, 0.58, 1] },
   { id: "midDark", defaultLabel: "Mid dark", curve: [0.15, 0.27, 0.68, 1] },
-  // Las claras no llegan al blanco: con clips saturados encima, un fondo casi
-  // blanco deslumbra y se ve barato (Live tampoco lo hace). El fondo más hondo
-  // del diseño (pistas) queda algo más claro que los paneles.
+  // En claro el fondo más hondo del diseño (pistas, fondos de tarjeta) pasa a
+  // blanco y los paneles a grises claros.
   // Entre 0 y 0.16 la pendiente es ~1 para conservar la separación entre
   // pistas, fondo, paneles y regla que tiene el diseño oscuro.
-  { id: "midLight", defaultLabel: "Mid light", curve: [0.76, 0.6, 0.17, 0.03] },
-  { id: "light", defaultLabel: "Light", curve: [0.93, 0.77, 0.3, 0.08] },
+  { id: "midLight", defaultLabel: "Mid light", curve: [0.82, 0.66, 0.17, 0.03] },
+  { id: "light", defaultLabel: "Light", curve: [1, 0.86, 0.3, 0.08] },
 ];
 
 const CURVE_X = [0, 0.16, 0.6, 1] as const;
@@ -142,6 +141,15 @@ const SHADOW_ALPHA: Record<ThemeBaseId, number> = {
   midDark: 0.8,
   midLight: 0.4,
   light: 0.22,
+};
+
+/** Igual para las sombras interiores (inset). */
+const INSET_SHADOW_ALPHA: Record<ThemeBaseId, number> = {
+  dark: 1,
+  deep: 1,
+  midDark: 0.8,
+  midLight: 0.15,
+  light: 0,
 };
 
 export const THEME_BRIGHTNESS_MIN = 0.8;
@@ -385,6 +393,11 @@ export function applyThemeToDom(settings: ThemeSettings = current): void {
   const shadowAlpha = SHADOW_ALPHA[settings.base];
   if (shadowAlpha === 1) style.removeProperty("--lt-shadow-alpha");
   else style.setProperty("--lt-shadow-alpha", String(shadowAlpha));
+  // Las sombras interiores (botones y pozos "hundidos") van aparte: en claro
+  // dejan un halo gris alrededor de cada control; ahí la interfaz es plana.
+  const insetAlpha = INSET_SHADOW_ALPHA[settings.base];
+  if (insetAlpha === 1) style.removeProperty("--lt-inset-shadow-alpha");
+  else style.setProperty("--lt-inset-shadow-alpha", String(insetAlpha));
   style.colorScheme = themePalette.light ? "light" : "dark";
   root.dataset.ltTheme = settings.base;
   root.dataset.ltLight = themePalette.light ? "1" : "0";
