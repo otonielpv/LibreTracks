@@ -200,7 +200,7 @@
 
 .lt-live-chart-hint {
   margin: 0 0 0.6rem;
-  color: #8a9893;
+  color: rgb(var(--lt-c-8a9893, 138 152 147));
   font-size: 0.75rem;
 }
 
@@ -552,8 +552,8 @@
 /* Column names: the song's markers, the sheet's sections, passes and times. */
 .lt-chart-editor-links-head {
   padding-bottom: 0.3rem;
-  border-bottom: 1px solid rgb(255 255 255 / 0.06);
-  color: #bacac5;
+  border-bottom: 1px solid rgb(var(--lt-c-ffffff, 255 255 255) / 0.06);
+  color: rgb(var(--lt-c-bacac5, 186 202 197));
   font: 600 10px/1.3 "Space Grotesk", sans-serif;
   letter-spacing: 0.12em;
   text-transform: uppercase;
@@ -918,7 +918,7 @@
   display: flex;
   align-items: center;
   gap: 0.4rem;
-  color: #57f1db;
+  color: var(--lt-accent);
   font: 700 0.72rem/1 "Space Grotesk", sans-serif;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -936,7 +936,7 @@
 
 .lt-lyrics-follow-section + .lt-lyrics-follow-section {
   padding-top: 0.75rem;
-  border-top: 1px solid rgb(255 255 255 / 0.08);
+  border-top: 1px solid rgb(var(--lt-c-ffffff, 255 255 255) / 0.08);
 }
 
 .lt-lyrics-follow-row {
@@ -948,7 +948,7 @@
 }
 
 .lt-lyrics-follow-label {
-  color: #d8fff7;
+  color: var(--lt-accent-soft);
   font-size: 0.82rem;
   font-weight: 600;
 }
@@ -962,13 +962,13 @@
   border: 0;
   border-radius: 4px;
   background: transparent;
-  color: rgb(216 255 247 / 0.65);
+  color: rgb(var(--lt-accent-soft-rgb) / 0.65);
   font-size: 0.74rem;
   cursor: pointer;
 }
 
 .lt-lyrics-follow-switch:hover {
-  color: #d8fff7;
+  color: var(--lt-accent-soft);
 }
 
 .lt-lyrics-follow-switch-track {
@@ -976,7 +976,7 @@
   width: 1.75rem;
   height: 1rem;
   border-radius: 999px;
-  background: rgb(255 255 255 / 0.16);
+  background: rgb(var(--lt-c-ffffff, 255 255 255) / 0.16);
   transition: background 120ms ease;
 }
 
@@ -987,17 +987,17 @@
   width: 0.75rem;
   height: 0.75rem;
   border-radius: 50%;
-  background: #d8fff7;
+  background: var(--lt-accent-soft);
   transition: transform 120ms ease;
 }
 
 .lt-lyrics-follow-switch.is-on .lt-lyrics-follow-switch-track {
-  background: #57f1db;
+  background: var(--lt-accent);
 }
 
 .lt-lyrics-follow-switch.is-on .lt-lyrics-follow-switch-thumb {
   transform: translateX(0.75rem);
-  background: #0a0a0a;
+  background: rgb(var(--lt-c-0a0a0a, 10 10 10));
 }
 
 /* Segmented control: one track, the lit segment filled. */
@@ -1007,7 +1007,7 @@
   gap: 2px;
   padding: 2px;
   border-radius: 6px;
-  background: rgb(255 255 255 / 0.06);
+  background: rgb(var(--lt-c-ffffff, 255 255 255) / 0.06);
 }
 
 .lt-lyrics-follow-segments button {
@@ -1016,7 +1016,7 @@
   border: 0;
   border-radius: 4px;
   background: transparent;
-  color: rgb(216 255 247 / 0.7);
+  color: rgb(var(--lt-accent-soft-rgb) / 0.7);
   font-size: 0.76rem;
   font-weight: 600;
   white-space: nowrap;
@@ -1027,20 +1027,20 @@
 }
 
 .lt-lyrics-follow-segments button:hover {
-  background: rgb(255 255 255 / 0.08);
-  color: #d8fff7;
+  background: rgb(var(--lt-c-ffffff, 255 255 255) / 0.08);
+  color: var(--lt-accent-soft);
 }
 
 .lt-lyrics-follow-segments button.is-active {
-  background: #57f1db;
-  color: #0a0a0a;
+  background: var(--lt-accent);
+  color: rgb(var(--lt-c-0a0a0a, 10 10 10));
 }
 
 /* The song follows all songs: show which one, without claiming it. */
 .lt-lyrics-follow-segments.is-inherited button.is-active {
-  background: rgb(87 241 219 / 0.16);
-  color: #57f1db;
-  box-shadow: inset 0 0 0 1px rgb(87 241 219 / 0.4);
+  background: rgb(var(--lt-accent-rgb) / 0.16);
+  color: var(--lt-accent);
+  box-shadow: inset 0 0 0 1px rgb(var(--lt-accent-rgb) / 0.4);
 }
 
 .lt-mobile .lt-lyrics-follow-segments button {

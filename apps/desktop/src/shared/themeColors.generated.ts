@@ -1,7 +1,8 @@
-// GENERADO al pasar los colores de la CSS a variables de tema. Cada entrada es
-// un color que la CSS escribe como rgb(var(--lt-c-<hex>, r g b));
-// shared/theme.ts recalcula la variable segun el tema. Si añades un color nuevo
-// a la CSS, escribelo igual y añadelo aqui (lo comprueba theme.test.ts).
+// GENERADO por la conversion de grises a variables de tema. Cada entrada es un
+// color neutro (gris, blanco o texto) que la CSS escribe como
+// rgb(var(--lt-c-<hex>, r g b)); shared/theme.ts recalcula la variable segun el
+// tema. Si añades un gris nuevo a la CSS, escribelo igual y añadelo aqui (lo
+// comprueba theme.test.ts).
 export const THEMED_CSS_COLORS: readonly string[] = [
   "002c27",
   "003731",
@@ -23,6 +24,7 @@ export const THEMED_CSS_COLORS: readonly string[] = [
   "0b0d0c",
   "0b0d0e",
   "0b1413",
+  "0b1514",
   "0c1011",
   "0d0d0d",
   "0d0f10",
@@ -94,6 +96,7 @@ export const THEMED_CSS_COLORS: readonly string[] = [
   "27332f",
   "281820",
   "281a21",
+  "282c2d",
   "2a1814",
   "2a2a2a",
   "2a2f2f",
@@ -178,6 +181,7 @@ export const THEMED_CSS_COLORS: readonly string[] = [
   "84938e",
   "859490",
   "8a8f94",
+  "8a9893",
   "8aa1ff",
   "8bd7cc",
   "8be2af",
@@ -265,6 +269,7 @@ export const THEMED_CSS_COLORS: readonly string[] = [
   "f3f7f5",
   "f4c95d",
   "f5c16c",
+  "f5c46b",
   "f5f7ff",
   "f5faf8",
   "f6a14c",

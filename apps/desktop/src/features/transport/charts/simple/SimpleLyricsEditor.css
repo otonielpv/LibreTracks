@@ -5,20 +5,20 @@
   display: inline-flex;
   gap: 0;
   margin-top: 0.6rem;
-  border: 1px solid rgb(87 241 219 / 0.24);
+  border: 1px solid rgb(var(--lt-accent-rgb) / 0.24);
 }
 
 .lt-chart-editor-modes button {
   border: 0;
   background: transparent;
-  color: rgb(229 226 225 / 0.7);
+  color: rgb(var(--lt-c-e5e2e1, 229 226 225) / 0.7);
   padding: 0.4rem 0.8rem;
   font: 700 0.75rem/1 "Space Grotesk", sans-serif;
 }
 
 .lt-chart-editor-modes button[aria-selected="true"] {
-  background: rgb(87 241 219 / 0.14);
-  color: #57f1db;
+  background: rgb(var(--lt-accent-rgb) / 0.14);
+  color: var(--lt-accent);
 }
 
 .lt-simple-lyrics {
@@ -49,24 +49,24 @@
   display: flex;
   align-items: center;
   gap: 0.4rem;
-  border: 1px solid rgb(133 148 144 / 0.16);
+  border: 1px solid rgb(var(--lt-c-859490, 133 148 144) / 0.16);
   border-left: 2px solid transparent;
   border-radius: 2px;
-  background: rgb(28 31 32 / 0.9);
-  color: #f3f0ef;
+  background: rgb(var(--lt-c-1c1f20, 28 31 32) / 0.9);
+  color: rgb(var(--lt-c-f3f0ef, 243 240 239));
   padding: 0.5rem 0.65rem;
   text-align: left;
   font: 600 0.82rem/1.2 "Space Grotesk", sans-serif;
 }
 
 .lt-simple-lyrics-part:hover {
-  background: rgb(40 44 45 / 0.95);
+  background: rgb(var(--lt-c-282c2d, 40 44 45) / 0.95);
 }
 
 .lt-simple-lyrics-part.is-selected {
-  border-color: rgb(87 241 219 / 0.35);
-  border-left-color: #57f1db;
-  background: rgb(87 241 219 / 0.12);
+  border-color: rgb(var(--lt-accent-rgb) / 0.35);
+  border-left-color: var(--lt-accent);
+  background: rgb(var(--lt-accent-rgb) / 0.12);
 }
 
 .lt-simple-lyrics-part.is-instrumental .lt-simple-lyrics-part-name {
@@ -84,22 +84,22 @@
 .lt-simple-lyrics-part-position {
   flex: 0 0 auto;
   min-width: 1.4rem;
-  color: rgb(229 226 225 / 0.45);
+  color: rgb(var(--lt-c-e5e2e1, 229 226 225) / 0.45);
   font: 700 0.7rem/1 "JetBrains Mono", ui-monospace, monospace;
 }
 
 .lt-simple-lyrics-part.is-selected .lt-simple-lyrics-part-position {
-  color: #57f1db;
+  color: var(--lt-accent);
 }
 
 .lt-simple-lyrics-also {
   margin: 0.25rem 0 0;
-  color: rgb(229 226 225 / 0.65);
+  color: rgb(var(--lt-c-e5e2e1, 229 226 225) / 0.65);
   font: 500 0.72rem/1.35 "Space Grotesk", sans-serif;
 }
 
 .lt-simple-lyrics-part-done {
-  color: #57f1db;
+  color: var(--lt-accent);
   font-size: 16px;
 }
 
@@ -113,7 +113,7 @@
 .lt-simple-lyrics-quick p {
   width: 100%;
   margin: 0 0 0.2rem;
-  color: rgb(229 226 225 / 0.6);
+  color: rgb(var(--lt-c-e5e2e1, 229 226 225) / 0.6);
   font: 500 0.72rem/1.4 "Space Grotesk", sans-serif;
 }
 
@@ -141,10 +141,10 @@
   min-height: 18rem;
   resize: vertical;
   padding: 0.75rem 0.85rem;
-  border: 1px solid rgb(87 241 219 / 0.18);
+  border: 1px solid rgb(var(--lt-accent-rgb) / 0.18);
   border-radius: 2px;
-  color: #f3f0ef;
-  background: rgb(28 31 32 / 0.98);
+  color: rgb(var(--lt-c-f3f0ef, 243 240 239));
+  background: rgb(var(--lt-c-1c1f20, 28 31 32) / 0.98);
   /* Monospaced always: chords line up with the words by columns. */
   font: 0.9rem/1.5 "JetBrains Mono", ui-monospace, monospace;
   white-space: pre;
@@ -152,17 +152,17 @@
 
 .lt-simple-lyrics-textarea:focus {
   outline: none;
-  border-color: rgb(87 241 219 / 0.5);
+  border-color: rgb(var(--lt-accent-rgb) / 0.5);
 }
 
 .lt-simple-lyrics-main small {
-  color: rgb(229 226 225 / 0.55);
+  color: rgb(var(--lt-c-e5e2e1, 229 226 225) / 0.55);
   font: 500 0.72rem/1.4 "Space Grotesk", sans-serif;
 }
 
 .lt-simple-lyrics-notice {
   margin: 0;
-  color: #f5c46b;
+  color: rgb(var(--lt-c-f5c46b, 245 196 107));
   font: 600 0.75rem/1.4 "Space Grotesk", sans-serif;
 }
 
@@ -189,19 +189,19 @@
 .lt-simple-lyrics-blocks pre {
   margin: 0.35rem 0 0;
   padding: 0.5rem 0.65rem;
-  background: rgb(28 31 32 / 0.9);
-  color: #f3f0ef;
+  background: rgb(var(--lt-c-1c1f20, 28 31 32) / 0.9);
+  color: rgb(var(--lt-c-f3f0ef, 243 240 239));
   font: 0.8rem/1.45 "JetBrains Mono", ui-monospace, monospace;
   white-space: pre-wrap;
 }
 
 .lt-simple-lyrics-confidence {
   font: 600 0.7rem/1 "Space Grotesk", sans-serif;
-  color: rgb(229 226 225 / 0.6);
+  color: rgb(var(--lt-c-e5e2e1, 229 226 225) / 0.6);
 }
 
 .lt-simple-lyrics-confidence.is-low {
-  color: #f5c46b;
+  color: rgb(var(--lt-c-f5c46b, 245 196 107));
 }
 
 .lt-simple-lyrics-views {
@@ -215,9 +215,9 @@
   gap: 0.6rem;
   min-height: 12rem;
   padding: 0.75rem 0.85rem;
-  border: 1px solid rgb(87 241 219 / 0.18);
+  border: 1px solid rgb(var(--lt-accent-rgb) / 0.18);
   border-radius: 2px;
-  background: rgb(28 31 32 / 0.98);
+  background: rgb(var(--lt-c-1c1f20, 28 31 32) / 0.98);
 }
 
 .lt-simple-chords-line {
@@ -244,8 +244,8 @@
   padding: 0 0.35rem;
   border: 0;
   border-radius: 2px;
-  background: rgb(87 241 219 / 0.12);
-  color: #57f1db;
+  background: rgb(var(--lt-accent-rgb) / 0.12);
+  color: var(--lt-accent);
   font: 700 0.8rem/1.6rem "JetBrains Mono", ui-monospace, monospace;
 }
 
@@ -268,10 +268,10 @@
   justify-content: center;
   min-width: 2.5rem;
   min-height: 2.5rem;
-  border: 1px dashed rgb(87 241 219 / 0.35);
+  border: 1px dashed rgb(var(--lt-accent-rgb) / 0.35);
   border-radius: 2px;
   background: transparent;
-  color: #57f1db;
+  color: var(--lt-accent);
 }
 
 .lt-simple-chords-add .material-symbols-outlined {
@@ -290,12 +290,12 @@
   border: 1px solid transparent;
   border-radius: 2px;
   background: transparent;
-  color: #f3f0ef;
+  color: rgb(var(--lt-c-f3f0ef, 243 240 239));
   font: 500 1rem/2.5rem "Space Grotesk", sans-serif;
 }
 
 .lt-simple-chords-syllable:hover {
-  border-color: rgb(87 241 219 / 0.35);
+  border-color: rgb(var(--lt-accent-rgb) / 0.35);
 }
 
 .lt-simple-chord-picker .lt-settings-modal-body {
@@ -317,8 +317,8 @@
 }
 
 .lt-simple-chord-grid .lt-chart-editor-button.is-active {
-  background: #57f1db;
-  color: #0b1514;
+  background: var(--lt-accent);
+  color: rgb(var(--lt-c-0b1514, 11 21 20));
 }
 
 /* Tablet and computer: the editor keeps one height whatever part is picked
@@ -385,6 +385,6 @@
   }
 
   .lt-simple-lyrics-part.is-selected {
-    border-bottom-color: #57f1db;
+    border-bottom-color: var(--lt-accent);
   }
 }
