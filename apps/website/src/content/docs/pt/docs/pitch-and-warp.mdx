@@ -1,0 +1,143 @@
+---
+title: Tom, warp e o botão T
+description: "Como mudar o tom e o andamento de uma música no LibreTracks: transposição por música, warp, BPM original e o botão T de cada faixa para o click e a guia não desafinarem."
+---
+
+import Clip from "../../../../components/guide/Clip.astro";
+
+Três controles decidem como cada música soa, e vale a pena não confundi-los:
+
+| Controle | Onde fica | O que faz |
+| --- | --- | --- |
+| **Transpose** | Barra de ferramentas, com a música selecionada | Sobe ou desce o tom, de −12 a +12 semitons |
+| **Warp** | Barra de ferramentas, com a música selecionada | Separa tom e velocidade: o áudio segue o andamento da timeline sem desafinar |
+| **T** | Cabeçalho de cada faixa | Decide se aquela faixa muda de tom quando você transpõe (só com warp) |
+
+O modelo é o mesmo do Warp no Ableton Live.
+
+## Transpor uma música
+
+1. Clique no nome da música na régua para selecioná-la.
+2. Na barra de ferramentas, abra **Transpose** com o botão de ajustes.
+3. Aperte <kbd>+</kbd> ou <kbd>−</kbd>: cada toque é um semitom.
+
+<Clip
+  src="/guide/desktop-en/transpose-varispeed.mp4"
+  poster="/guide/desktop-en/transpose-varispeed.webp"
+  caption="+2 semitons com o warp desligado: a música sobe de tom e também fica mais curta, e o tom dela passa de D para E."
+/>
+
+O que acontece depende do warp, que o LibreTracks liga sozinho quando você
+muda o tom (veja [Warp automático](#warp-automático)):
+
+- **Warp ligado** (o caso comum): o tom muda e a duração **não**. É o que você
+  quer quase sempre ao vivo.
+- **Warp desligado** (só com o warp automático desligado): funciona como
+  acelerar ou desacelerar uma fita. Subir o tom **encurta** a música e descer a
+  alonga. As músicas seguintes se movem sozinhas para não se sobreporem. Todas
+  as faixas mudam, sem exceção.
+
+O tom da música (a letra ao lado do nome) é transposto sozinho, e o rótulo
+*+2 st* lembra que ela está transposta.
+
+## Warp automático
+
+Quando você muda o tom ou o andamento de uma música, o LibreTracks **liga o
+warp sozinho** para o tom e a velocidade continuarem independentes. Uma música
+sem mudanças não o liga, e devolver o tom e o andamento aos valores originais
+o desliga de novo. O grupo da barra de ferramentas então se chama **Tempo**,
+sem interruptor de warp.
+
+Isso se define em **Settings › General › Editing**:
+
+![Automatic warp](/guide/desktop-en/settings-auto-warp.png)
+
+Desligue se você quer controlar o warp à mão e usar varispeed quando muda o
+tom. Mudar este ajuste não altera as músicas que você já tem.
+
+## Mudanças de tom preparadas
+
+Com warp, cada faixa transposta é calculada enquanto toca, e num tablet ou
+computador modesto muitas faixas ao mesmo tempo podem causar falhas. As
+**mudanças de tom preparadas** evitam isso: o áudio no novo tom ou andamento é
+preparado antes, em segundo plano, e a reprodução quase não usa CPU.
+
+Ligue em **Settings › General › Editing › Prepared pitch changes (slow
+devices)**. Com o ajuste ligado:
+
+1. Escolha o tom ou o andamento na barra de ferramentas, na visão Compact ou na
+   Setlist. Nada muda ainda.
+2. Aperte **Apply**. Uma barra mostra como vai a preparação, e você pode
+   **Cancel**.
+3. Enquanto é preparada, a música continua tocando como antes; quando fica
+   pronta, ela passa sozinha para o tom novo.
+
+Os atalhos de teclado e o MIDI aplicam a mudança na hora. O áudio preparado
+ocupa espaço em disco (cerca de 1 GB por música de 5 minutos com 20 faixas, até
+8 GB no total; o mais antigo é apagado sozinho) e é liberado com **Clear
+cache**.
+
+## Ligar o warp à mão
+
+Com o warp automático desligado, selecione a música, abra **Warp & tempo** na
+barra de ferramentas e acione o interruptor.
+
+<Clip
+  src="/guide/desktop-en/warp-on.mp4"
+  poster="/guide/desktop-en/warp-on.webp"
+  caption="Quando o warp é ligado, a música mantém o tom novo e recupera a duração original."
+/>
+
+Ao ligá-lo, o LibreTracks salva o andamento atual da música como o **BPM
+original**: o andamento em que o áudio foi gravado. A partir daí:
+
+- Se você mudar o **BPM** da música, o áudio se estica ou encolhe para
+  segui-lo, **sem mudar o tom**. O painel mostra isso como *140 → 132 (×0.943)*.
+- Se o BPM original não estiver certo (por exemplo, o áudio foi gravado a 72 e
+  a sessão dizia 70), corrija no menu da música › **Change Original BPM**.
+
+:::caution[O warp usa CPU]
+Cada faixa com warp custa mais CPU que uma sem. Num computador ou celular
+modesto, ligue só nas músicas que precisam e fique de olho no
+[medidor de recursos](/pt/docs/interface/main-screen/#indicadores-e-medidor-de-recursos).
+:::
+
+## O botão T: faixas que não devem mudar de tom
+
+Quando você transpõe, o **click**, a **guia falada** ou um **pad** gravado no
+seu próprio tom não devem mudar. Para isso serve o botão **T** de cada faixa:
+
+- **T ligado** (o padrão): a faixa segue a transposição.
+- **T desligado**: a faixa fica no tom original, mas segue o andamento do
+  warp, para não sair de sincronia.
+
+O botão **T** só tem efeito com o **warp ligado**. Com o warp desligado,
+transpor muda a velocidade, e uma faixa que não mudasse sairia de sincronia na
+hora; por isso, sem warp, todas as faixas mudam.
+
+| Warp | Transpose | T da faixa | Resultado |
+| --- | --- | --- | --- |
+| Desligado | 0 | qualquer | Áudio original |
+| Desligado | ≠ 0 | qualquer | Muda o tom **e** a duração (todas as faixas) |
+| Ligado | 0 | qualquer | Segue o andamento; tom original |
+| Ligado | ≠ 0 | ligado | Muda o tom; duração definida pelo warp |
+| Ligado | ≠ 0 | desligado | Tom original; duração definida pelo warp |
+
+## Uma receita para o ao vivo
+
+1. Monte a sessão com o BPM em que cada música foi gravada e o warp desligado.
+2. Se a banda pedir a música **mais rápida ou mais lenta**, ligue o warp e mude
+   o BPM.
+3. Se pedirem **outro tom**, ligue o warp e transponha. Desligue o **T** das
+   faixas de click e guia.
+4. Faça as mudanças de tom **antes de apertar Play**, ou entre as músicas.
+   Mudar o tom enquanto toca faz o motor reorganizar as vozes e, em
+   computadores modestos, pode causar pequenas falhas.
+
+## Por que os marcadores não saem do lugar musical
+
+Os marcadores, as bordas das músicas e as mudanças de andamento e de compasso
+são guardados na posição do **áudio original**. Quando o warp ou a
+transposição mudam a duração de uma música, tudo se move junto e continua
+caindo no mesmo ponto musical: o Chorus continua começando onde o Chorus
+começa.

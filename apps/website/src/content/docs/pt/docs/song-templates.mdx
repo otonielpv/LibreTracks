@@ -1,0 +1,246 @@
+---
+title: Templates de música
+description: "Templates de música no LibreTracks: as músicas novas vêm com as suas faixas e pastas, e os stems de um multitrack caem no lugar certo pelo nome (Click, EG, Keys, BGV…)."
+---
+
+import Clip from "../../../../components/guide/Clip.astro";
+
+Um template guarda faixas, pastas, cores e saídas. Além de criar sessões, ele
+cria **músicas** e **organiza o áudio que você solta**: solte
+`Way Maker - EG 1.wav`, `Way Maker - Keys.wav`… numa música e cada um cai na sua
+pasta (Guitars, Keys…) pelo nome.
+
+Sem template escolhido, tudo funciona exatamente como antes.
+
+## Escolher o template
+
+Em **Settings › General › Editing**, escolha **Template for new songs**:
+
+![Template for new songs](/guide/desktop-en/settings-song-template.png)
+
+**Band (built in)** tem Click, Guide, Drums, Bass, Guitars, Keys, Synths &
+pads, Vocals e FX, com os nomes que os multitracks comerciais usam em inglês e
+espanhol (EG, AG, Keys, BGV, FX…). Click e Guide vêm com o **T** desligado,
+para não desafinarem quando você transpõe. Os seus próprios templates de
+sessão também aparecem na lista.
+
+:::note
+O template integrado manda Click e Guide para o master. Se os seus fones usam
+outra saída, mude as saídas deles e salve o seu próprio template com **File ›
+Save as template…**.
+:::
+
+## Monte o seu próprio template
+
+O template integrado é um ponto de partida. Se a sua banda tem outra formação,
+ou você quer Click e Guide na saída dos fones, monte o seu uma vez e todas as
+músicas saem organizadas do mesmo jeito.
+
+### 1. Monte as pastas e as faixas
+
+Numa sessão vazia (**File › New project**), crie uma pasta por família de
+instrumentos e deixe como faixas soltas as partes que são sempre um único
+arquivo. Botão direito no cabeçalho de uma faixa: **Insert Folder Track**,
+**Insert Track**, **Indent Into Previous Folder** e **Select colour…**.
+
+![A estrutura de um template de banda](/guide/desktop-en/template-structure.png)
+
+1. Uma **pasta** (Guitars): recebe todos os arquivos de guitarra, um por
+   faixa, quantos o multitrack tiver.
+2. Uma **faixa** dentro de uma pasta (Click): recebe um único arquivo.
+
+### 2. Roteie as saídas
+
+O roteamento entra no template, então este é o momento de decidir o que vai
+para a mesa e o que vai para os fones. No cabeçalho de cada faixa ou pasta, o
+seletor de saída:
+
+![O seletor de saída de uma faixa](/guide/desktop-en/track-route-list.png)
+
+- Mande a **pasta** para a saída dela e deixe as faixas em **Inherited
+  (Folder)**. As faixas que o template cria dentro daquela pasta quando você
+  solta arquivos também saem por ali.
+- A configuração comum: a pasta Guides (Click e Guide) para a saída dos fones,
+  por exemplo **Out 3/4**, e todo o resto para **Master**.
+- Se um arquivo estéreo vai para uma saída mono, escolha **Channels… › Mono
+  (sum)** (botão direito na faixa): isso também é salvo.
+
+As saídas que você vê dependem da sua interface de áudio. Como ativá-las está
+em [Saídas de áudio e metrônomo](/pt/docs/audio-routing-metronome/).
+
+### 3. Dê a cada uma as suas regras
+
+As regras são as palavras no nome de um arquivo que o mandam para aquela faixa
+ou pasta. Botão direito no cabeçalho › **Matching rules…**:
+
+![Matching rules no menu da pasta](/guide/desktop-en/template-rules-menu.png)
+
+Digite as palavras separadas por vírgulas. Pense em como os multitracks que
+você usa chamam aquela parte, em inglês e em espanhol (e em português, se os
+seus arquivos tiverem nomes em português):
+
+![As regras da pasta Guitars](/guide/desktop-en/template-rules-dialog.png)
+
+1. Com `eg, ag, guitar, guitarra, gtr`, arquivos como `EG 1.wav`, `AG.wav` ou
+   `Rhythm Guitar.wav` caem em Guitars.
+
+Regras que funcionam com a maioria dos multitracks:
+
+| Faixa ou pasta | Regras |
+| --- | --- |
+| Click | `click, metronome, metronomo` |
+| Guide | `guide, guia, cues` |
+| Drums | `drums, bateria, perc, loop` |
+| Bass | `bass, bajo, baixo` |
+| Guitars | `eg, ag, guitar, guitarra, gtr` |
+| Keys | `keys, key, piano, synth, pad, organ, teclado` |
+| Vocals | `alto, tenor, soprano, bgv, bgvs, choir, coro` |
+| FX | `fx, efectos, efeitos` |
+
+### 4. Salve como template
+
+**File › Save as template…** e escolha onde: **This device** abre a janela para
+dar um nome e salvar um arquivo `.lttemplate`; **Cloud** o envia para uma das
+suas contas e também o guarda nos seus templates deste computador.
+
+![Save as template no menu File](/guide/desktop-en/template-save-menu.png)
+
+O template guarda a estrutura de cada faixa, não a mixagem de uma noite:
+
+- **Salvo:** nomes, pastas e a ordem delas, cores, saídas, **Channels**, pan,
+  **T** (seguir a transposição) e regras.
+- **Volta ao padrão:** volume (0 dB), e mute e solo (desligados).
+
+Clipes, músicas, marcadores e andamento também não são salvos.
+
+:::tip[Desligue o T do Click e da Guide]
+Assim eles não desafinam quando você transpõe uma música com warp, e toda
+música nova já os traz desligados. Veja [o botão T](/pt/docs/pitch-and-warp/).
+:::
+
+:::tip
+Um arquivo `.lttemplate` funciona em qualquer computador. Mande para outro
+músico da banda e ele terá a mesma estrutura. Veja
+[Levar os seus templates para outro aparelho](#levar-os-seus-templates-para-outro-aparelho).
+:::
+
+### 5. Escolha o template e solte um multitrack
+
+Em **Settings › General › Editing › Template for new songs**, escolha o seu
+(veja [Escolher o template](#escolher-o-template)). Depois arraste a pasta de um
+multitrack da [Library](/pt/docs/tasks/library/) para a timeline, ou solte os
+arquivos dele: cada um vai para o seu lugar.
+
+<Clip
+  src="/guide/desktop-en/template-drop.mp4"
+  poster="/guide/desktop-en/template-drop.webp"
+  caption="Os 14 arquivos de «Rey de Reyes» caem cada um na sua pasta: Drums e Loop em Drums, EG 1-3 em Guitars, Alto e Tenor em Vocals."
+/>
+
+O resultado: cada pasta com uma faixa por arquivo, na cor da pasta e com a
+saída dela.
+
+![Os arquivos organizados nas suas pastas](/guide/desktop-en/template-drop-result.png)
+
+Se um arquivo ficar de fora, adicione a palavra dele às regras da pasta a que
+ele pertence e salve o template de novo.
+
+## Levar os seus templates para outro aparelho
+
+**Settings › General › Editing › My templates** lista todos os templates deste
+computador.
+
+- **Import template…** pergunta de onde: **This device** abre o seletor de
+  arquivos para escolher um `.lttemplate` (o que outro músico mandou, por
+  exemplo); **Cloud** mostra os templates de todas as suas contas conectadas.
+  O template é copiado para os seus templates e pode ser escolhido como
+  template para músicas novas na hora.
+- **Upload to cloud**, ao lado de cada template, pergunta qual conta e o envia.
+
+Na nuvem eles ganham uma pasta própria, `LibreTracks/Templates`, ao lado de
+`Songs` e `Sessions`, e o painel **Cloud** os mostra em **Templates**, onde
+também podem ser apagados. Assim você tem os mesmos templates no computador,
+no tablet e no celular.
+
+Funciona igual em celulares e tablets: **My templates** está em **Settings ›
+General › Editing**, e a tela inicial tem **Import template…** ao lado da lista
+de templates, para você baixar os seus logo depois de instalar o app. No iPhone
+e iPad, **Save as template… › This device** o salva direto nos seus templates,
+com o nome da sessão.
+
+Importar o mesmo template duas vezes não cria cópias. Se você já tem um
+diferente com o mesmo nome, o novo entra como "Nome (2)" e o seu fica como está.
+
+## Criar uma música com o template
+
+Aperte **+ New song** na [Compact View](/pt/docs/compact-view/) ou na
+[Setlist View](/pt/docs/setlist-view/): ela vem com a estrutura do template. A seta
+ao lado (**New song from template**) deixa você escolher outro template, ou
+**No template**, só para aquela música.
+
+![New song from template](/guide/desktop-en/new-song-template-menu.png)
+
+1. A seta ao lado de **+ New song**.
+2. Os templates disponíveis.
+
+Depois solte os stems na música. Um aviso conta quantos foram organizados e
+quantos não tinham regra; **Undo** (ou `Ctrl+Z`) desfaz o soltar inteiro. O
+áudio que não combina com nada é colocado como sempre.
+
+## Músicas importadas
+
+Quando você importa um pacote `.ltpkg` (do disco, da nuvem ou da Setlist) ou um
+projeto do Reaper ou do Ableton, as faixas dele são organizadas pelo template
+como se você soltasse os arquivos: cada uma vai para a sua pasta pelo nome, com
+os clipes e a mixagem dela. As faixas que não combinam com nada ficam como
+vieram.
+
+## Quando o template se aplica
+
+| O que você faz | O template se aplica? |
+| --- | --- |
+| **+ New song** | Sim: a música vem com as faixas e pastas. |
+| Soltar arquivos numa música (timeline ou Compact) | Sim: cada arquivo vai para o seu lugar pelo nome. |
+| Arrastar uma pasta da Library | Sim, uma vez por música. |
+| Importar um `.ltpkg` (disco, nuvem ou Setlist) | Sim: as faixas dele são organizadas. |
+| Importar um projeto do Reaper ou Ableton com uma música | Sim, e segue **Each song's tracks**. |
+| Importar um projeto do Reaper ou Ableton com várias músicas | Não: as faixas dele cobrem todas as músicas e ficam compartilhadas. |
+| Dividir uma música em duas | Não é aplicado de novo. Nos modos por música, a segunda metade ganha uma cópia das faixas da primeira. |
+| Abrir uma sessão que você já tinha | Não: as músicas dela ficam como estavam. |
+| **New song from template › No template** | Não, só para aquela música. |
+
+Com faixas **compartilhadas entre músicas**, se a sessão já tem faixas com
+regras (porque você a criou a partir de um template), o template não adiciona
+outra cópia: só acrescenta as regras dele às faixas com o mesmo nome.
+
+## Regras de correspondência
+
+Botão direito numa faixa ou pasta › **Matching rules…**: as palavras, separadas
+por vírgulas, que mandam um arquivo de áudio para ali.
+
+- São comparadas palavras inteiras, ignorando acentos e maiúsculas: `ag` não
+  combina com `stage`. O nome que o lote compartilha e o nome da música não
+  contam.
+- Quando duas regras combinam, a mais longa ganha (`electric guitar` sobre
+  `guitar`) e, no empate, a faixa que vem primeiro.
+- Numa **faixa**, o primeiro stem vai para ela e o próximo cria uma faixa irmã.
+  Numa **pasta**, cada stem cria uma faixa dentro dela.
+
+Para guardar as suas mudanças, **File › Save as template…**.
+
+## As faixas de cada música
+
+**Settings › General › Editing › Each song's tracks** decide o que acontece com
+a segunda música e as seguintes:
+
+![Each song's tracks](/guide/desktop-en/settings-song-track-layout.png)
+
+- **Shared between songs**: todas usam as mesmas faixas; a música 2 preenche as
+  linhas da música 1.
+- **One folder per song**: cada música tem uma pasta com o nome dela e as
+  faixas dentro.
+- **Separate per song**: cada música tem a sua própria cópia das faixas na
+  raiz.
+
+Nos dois modos por música, quando você divide uma música em duas, a segunda
+metade ganha a sua própria cópia das faixas, com os clipes.

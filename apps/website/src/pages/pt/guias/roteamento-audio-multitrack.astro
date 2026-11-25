@@ -1,0 +1,55 @@
+---
+import GuidePage from "../../../components/GuidePage.astro";
+
+const sections = [
+  {
+    heading: "Comece por um plano de saídas, não por um monte de cabos",
+    paragraphs: [
+      "Liste cada sinal de que o técnico de P.A. e os músicos precisam. Os stems musicais podem ir individualmente, em grupos como Base e Instrumentos, ou como uma única mixagem estéreo. O click e a guia falada precisam de um caminho próprio, só para o retorno.",
+      "Escolha o menor layout que dê ao técnico um controle útil. Mais saídas não são automaticamente melhores se trazem cabos, adaptadores e estágios de ganho que ninguém testou.",
+    ],
+    checklist: ["1-2: mixagem estéreo da música", "3: click", "4: guia falada", "Pares extras opcionais: bateria, baixo, instrumentos e vozes"],
+    media: { src: "/guide/articles/en/hardware-outputs.webp", alt: "As saídas de hardware da interface nas configurações do LibreTracks", width: 1237, height: 1162 },
+  },
+  {
+    heading: "Faça as rotas da interface e do programa coincidirem",
+    paragraphs: [
+      "Selecione a interface, a taxa de amostragem e o tamanho do buffer antes de atribuir as faixas. Mande cada stem ou bus de pasta para a saída de hardware numerada do seu plano escrito e depois roteie o metrônomo separadamente.",
+      "Os buses de pasta são úteis quando várias faixas devem chegar ao mesmo par de saídas. Eles mantêm a timeline legível e permitem que um único ajuste de volume controle o grupo inteiro.",
+    ],
+    media: { src: "/guide/articles/en/track-route.webp", alt: "Opções de saída de hardware numa faixa de áudio do LibreTracks", width: 383, height: 408 },
+  },
+  {
+    heading: "Ajuste os níveis sem roubar headroom",
+    paragraphs: [
+      "Mantenha os canais de playback abaixo do clipping e deixe a mesa dar o nível final do sistema. Iguale o volume percebido entre as músicas, para o técnico não precisar salvar um refrão baixo ou uma introdução inesperadamente alta.",
+      "Escute cada saída física em solo durante a preparação. A saída do click não deve ter música, e as saídas para o P.A. não devem ter click nem avisos falados.",
+    ],
+  },
+  {
+    heading: "Use uma passagem de som repetível",
+    paragraphs: [
+      "Conecte e ligue o sistema sempre na mesma ordem. Confirme que o dispositivo de áudio esperado está selecionado, toque um sinal de teste identificado por cada saída e peça ao técnico para dizer qual canal está recebendo.",
+      "Salve a sessão conferida e evite mudar o roteamento logo antes do show. Se o local exigir outro layout, duplique o projeto antes, para que a versão testada continue disponível.",
+    ],
+    checklist: ["Confirme os canais esquerdo e direito separadamente.", "Verifique o click e a guia em cada mixagem de retorno necessária.", "Toque a parte mais alta do repertório e confira se não clipa.", "Desconecte e reconecte o remote antes de abrir as portas."],
+  },
+];
+---
+
+<GuidePage
+  title="Roteamento de Áudio Multitrack ao Vivo | LibreTracks"
+  description="Planeje o roteamento de áudio multitrack ao vivo: escolha as saídas da interface, separe a música do click e da guia falada, ajuste os níveis e faça uma passagem de som repetível."
+  lang="pt"
+  eyebrow="Roteamento de áudio"
+  heading="Roteamento de áudio multitrack ao vivo"
+  intro="Um mapa de saídas claro deixa o sistema de playback mais fácil de passar o som e mais fácil de recuperar. Use esta sequência prática para ir dos stems na timeline aos canais identificados na mesa."
+  hero={{ src: "/guide/cards/en/routing.webp", alt: "Roteando uma faixa de click para uma saída externa no LibreTracks", width: 800, height: 450 }}
+  sections={sections}
+  related={[
+    { href: "/pt/download/", label: "Baixar o LibreTracks" },
+    { href: "/pt/docs/audio-routing-metronome/", label: "Documentação de roteamento" },
+    { href: "/pt/docs/voice-guide/", label: "A saída da guia falada" },
+  ]}
+  nextGuide={{ href: "/pt/guias/tocar-playback-ao-vivo/", label: "Como tocar com playback ao vivo" }}
+/>

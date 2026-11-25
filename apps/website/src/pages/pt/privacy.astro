@@ -1,0 +1,29 @@
+---
+import SiteLayout from "../../layouts/SiteLayout.astro";
+---
+
+<SiteLayout
+  title="Privacidade | LibreTracks"
+  description="O que as estatísticas opcionais do LibreTracks coletam e o que nunca coletam: nada de projetos, áudio, nomes de arquivo, caminhos ou localização precisa."
+  lang="pt"
+>
+  <main class="site-shell band legal-page">
+    <div class="section-heading">
+      <p class="eyebrow">Privacidade</p>
+      <h1>Estatísticas de uso opcionais.</h1>
+      <p>O LibreTracks não envia dados de uso a menos que você permita expressamente no app.</p>
+    </div>
+    <section>
+      <h2>O que é coletado</h2>
+      <p>A abertura do app, a data e a hora em UTC e o dia da semana no calendário do próprio aparelho; versão do LibreTracks, família geral do sistema operacional, arquitetura da CPU, classe do aparelho e país; marcos de ativação como criar, abrir, importar, reproduzir, salvar ou exportar; uso de categorias fechadas de recursos, incluindo as visões DAW, Compacta e Live; sucesso ou falha de algumas ações; marcos de sessão ativa aos 5, 15, 30 e 60 minutos; e faixas amplas de idade da instalação e de dias ativos. A Cloudflare deduz o país a partir da conexão de rede e o LibreTracks guarda apenas o código de duas letras. Um segredo aleatório fica só no aparelho; o app envia um token pseudônimo derivado que muda a cada dia UTC.</p>
+      <h2>O que nunca é coletado</h2>
+      <p>Conteúdo de projetos ou sessões, áudio, nomes de músicas ou arquivos, caminhos, mensagens de erro, nomes de hardware MIDI ou de áudio, dados de conta, identificadores de publicidade, números de série, endereço IP, cidade, região, coordenadas e localização precisa. Os eventos não aceitam campos de texto livre.</p>
+      <h2>Finalidade, base legal e escolhas</h2>
+      <p>A finalidade é medir ativação, adoção de recursos, confiabilidade, profundidade e tendências de uso, distribuição geográfica por país, versões ativas e compatibilidade geral para orientar decisões de produto e de negócio. O tratamento se baseia no consentimento. Recusar não afeta o LibreTracks, e o consentimento pode ser retirado a qualquer momento em Settings → General. Ao desativar as estatísticas, o segredo local e os contadores aproximados locais também são apagados.</p>
+      <h2>Armazenamento, publicação e operador</h2>
+      <p>Os eventos são apagados em no máximo 90 dias. O painel público contém agregados gerais e oculta países, detalhamentos e intervalos de tempo que representem menos de cinco aparelhos. As métricas detalhadas de produto aparecem apenas num painel privado autenticado. A Cloudflare fornece hospedagem, rede, geolocalização por país e banco de dados e, para prestar esses serviços, trata necessariamente de forma transitória informações de rede como o endereço IP; o LibreTracks não grava esse endereço nem o User-Agent completo no seu banco de telemetria.</p>
+      <h2>Seus direitos e contato</h2>
+      <p>Como não existe conta e o token muda todo dia, o LibreTracks normalmente não consegue associar um registro guardado a uma pessoa. Você pode interromper qualquer envio futuro pelo app. Para dúvidas de privacidade ou exercício de direitos, escreva para <a href="mailto:libretracks.app@gmail.com">libretracks.app@gmail.com</a>. Você também pode apresentar uma reclamação à ANPD ou à autoridade de proteção de dados do seu país.</p>
+    </section>
+  </main>
+</SiteLayout>

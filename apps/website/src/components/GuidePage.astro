@@ -23,7 +23,7 @@ interface RelatedLink {
 interface Props {
   title: string;
   description: string;
-  lang: "en" | "es";
+  lang: "en" | "es" | "pt";
   eyebrow: string;
   heading: string;
   intro: string;
@@ -40,16 +40,19 @@ interface Props {
 
 const { title, description, lang, eyebrow, heading, intro, hero, sections, related, nextGuide } = Astro.props;
 const isSpanish = lang === "es";
-const prefix = isSpanish ? "/es" : "";
+const isPortuguese = lang === "pt";
+const prefix = isSpanish ? "/es" : isPortuguese ? "/pt" : "";
+const hubSlug = isSpanish || isPortuguese ? "guias" : "guides";
+const L = (en: string, es: string, pt: string) => (isSpanish ? es : isPortuguese ? pt : en);
 const canonical = new URL(Astro.url.pathname, Astro.site ?? "https://libretracks.com");
-const guidesUrl = new URL(`${prefix}/${isSpanish ? "guias" : "guides"}/`, canonical);
+const guidesUrl = new URL(`${prefix}/${hubSlug}/`, canonical);
 const structuredData = [
   {
     "@context": "https://schema.org",
     "@type": "Article",
     headline: heading,
     description,
-    inLanguage: lang,
+    inLanguage: isPortuguese ? "pt-BR" : lang,
     mainEntityOfPage: canonical.href,
     author: {
       "@type": "Person",
@@ -61,7 +64,7 @@ const structuredData = [
     "@context": "https://schema.org",
     "@type": "BreadcrumbList",
     itemListElement: [
-      { "@type": "ListItem", position: 1, name: isSpanish ? "Guías" : "Guides", item: guidesUrl.href },
+      { "@type": "ListItem", position: 1, name: L("Guides", "Guías", "Guias"), item: guidesUrl.href },
       { "@type": "ListItem", position: 2, name: heading, item: canonical.href },
     ],
   },
@@ -70,9 +73,9 @@ const structuredData = [
 
 <SiteLayout title={title} description={description} lang={lang} structuredData={structuredData}>
   <main class="site-shell band guide-page">
-    <nav class="guide-breadcrumb" aria-label={isSpanish ? "Migas de pan" : "Breadcrumb"}>
-      <a href={`${prefix}/${isSpanish ? "guias" : "guides"}/`}>
-        <span aria-hidden="true">←</span> {isSpanish ? "Todas las guías" : "All guides"}
+    <nav class="guide-breadcrumb" aria-label={L("Breadcrumb", "Migas de pan", "Navegação estrutural")}>
+      <a href={`${prefix}/${hubSlug}/`}>
+        <span aria-hidden="true">←</span> {L("All guides", "Todas las guías", "Todos os guias")}
       </a>
     </nav>
 
@@ -87,7 +90,7 @@ const structuredData = [
       </figure>
     </header>
 
-    <nav class="guide-toc" aria-label={isSpanish ? "Pasos de la guía" : "Guide steps"}>
+    <nav class="guide-toc" aria-label={L("Guide steps", "Pasos de la guía", "Passos do guia")}>
       {sections.map((section, index) => (
         <a href={`#step-${index + 1}`}><span>{index + 1}</span>{section.heading.replace(/^\d+\.\s*/, "")}</a>
       ))}
@@ -123,9 +126,9 @@ const structuredData = [
 
     <aside class="guide-actions-panel">
       <div>
-        <p class="eyebrow">{isSpanish ? "Ponlo en práctica" : "Put it into practice"}</p>
-        <h2>{isSpanish ? "Prepara tu primer repertorio" : "Prepare your first set"}</h2>
-        <p>{isSpanish ? "Descarga LibreTracks o abre la documentación exacta para configurar este flujo." : "Download LibreTracks or open the exact documentation needed to configure this workflow."}</p>
+        <p class="eyebrow">{L("Put it into practice", "Ponlo en práctica", "Coloque em prática")}</p>
+        <h2>{L("Prepare your first set", "Prepara tu primer repertorio", "Prepare seu primeiro repertório")}</h2>
+        <p>{L("Download LibreTracks or open the exact documentation needed to configure this workflow.", "Descarga LibreTracks o abre la documentación exacta para configurar este flujo.", "Baixe o LibreTracks ou abra a documentação exata para configurar este fluxo.")}</p>
       </div>
       <div class="guide-action-links">
         {related.map((link, index) => (
@@ -137,8 +140,8 @@ const structuredData = [
     </aside>
 
     {nextGuide && (
-      <nav class="guide-next" aria-label={isSpanish ? "Siguiente guía" : "Next guide"}>
-        <span>{isSpanish ? "Siguiente guía" : "Next guide"}</span>
+      <nav class="guide-next" aria-label={L("Next guide", "Siguiente guía", "Próximo guia")}>
+        <span>{L("Next guide", "Siguiente guía", "Próximo guia")}</span>
         <a href={nextGuide.href}>{nextGuide.label} <span aria-hidden="true">→</span></a>
       </nav>
     )}

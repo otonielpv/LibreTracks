@@ -1,0 +1,75 @@
+---
+title: Sessões em rede
+description: "Conecte vários apps LibreTracks no mesmo Wi-Fi: um hospeda a sessão e os outros a acompanham pelo próprio app (computador, tablet ou celular), cada um com a sua permissão: Viewer, Control ou Edit."
+---
+
+Uma **sessão em rede** conecta vários apps LibreTracks no mesmo Wi-Fi. Um
+**hospeda** (o que toca) e os outros **entram** pelo próprio app, num
+computador, tablet ou celular. Cada convidado vê a sessão do anfitrião ao vivo
+e pode escolher a sua própria visão (DAW, Setlist, Compact ou Live) sem mudar a
+do anfitrião. O convidado **não toca áudio**: tudo soa no anfitrião.
+
+Não é o mesmo que o [Remote](/pt/docs/remote-control/), que é uma página web para
+controlar o transporte por um navegador. Aqui cada aparelho usa o app completo.
+
+Abra com **Network** na barra lateral.
+
+## Hospedar
+
+![Sessão em rede: hospedar](/guide/desktop-en/network-host.png)
+
+1. Abas **Host** e **Join**.
+2. Os ajustes do anfitrião:
+   - **This device's name**: o que os outros veem.
+   - **Control PIN** e **Edit PIN**: o PIN que um convidado precisa digitar
+     para entrar com aquele papel. Um Control PIN vazio quer dizer que ninguém
+     pode pedir aquele papel; um Edit PIN vazio quer dizer que ele está
+     desativado.
+   - **Keep hosting after the app restarts**.
+3. **Host** inicia a sessão. À direita aparecem o endereço para entrar (com um
+   QR code), os convidados conectados e o papel deles, e os **Remembered
+   devices**, que entram sem o PIN de novo; **Forget** tira isso.
+
+:::caution[Windows e o firewall]
+Se o firewall do Windows bloqueia conexões na rede em que você está, a janela
+avisa no topo e oferece liberar. Sem isso, os outros não conseguem achar você
+nem entrar.
+:::
+
+## Entrar
+
+![Sessão em rede: entrar](/guide/desktop-en/network-join.png)
+
+- **Hosts on this network**: os que o LibreTracks encontra sozinho no Wi-Fi.
+  Toque num para entrar.
+- **PIN (optional)**: sem PIN você entra como **Viewer**. Com o PIN de Control
+  ou de Edit, com aquele papel.
+- **Remember this device** para não digitar o PIN de novo.
+- **Host address**: se ele não estiver na lista, digite o que o anfitrião
+  mostra, por exemplo `192.168.1.20:3040`.
+
+Os dois aparelhos precisam estar no **mesmo Wi-Fi**, e não numa rede de
+convidados que isola os aparelhos, como alguns locais têm.
+
+## O que cada papel pode fazer
+
+| Papel | O que pode fazer no anfitrião |
+| --- | --- |
+| **Viewer** | Ver músicas, seções, letra, a mixagem e o estado do vídeo. Escolher uma música para vê-la não salta para ela. |
+| **Control** | Tudo acima, mais transporte, saltos, Vamp, ordem das músicas, transições, pausa no fim, vamp entre músicas e a saída de vídeo (preto, fade, espera). |
+| **Edit** | Tudo acima, mais a mixagem, o metrônomo, a guia falada, os pads, letra e acordes, o tom, e editar músicas, seções, arranjos, clipes, MIDI e automação, com desfazer e refazer. |
+
+Os controles que o seu papel não permite ficam desativados, e se atualizam se o
+anfitrião mudar o seu papel ou a conexão cair.
+
+O que precisa dos arquivos ou do hardware do anfitrião se faz **no
+anfitrião**: importar, exportar, analisar, renderizar, salvar o projeto,
+instalar pads, e escolher as placas de som, as portas MIDI ou as telas dele.
+
+As preferências de idioma e de visão do convidado ficam guardadas só no aparelho
+do convidado.
+
+## Procurando redundância?
+
+Para manter um segundo LibreTracks tocando em sincronia como reserva, pronto
+para assumir se a máquina principal falhar, veja [Redundância](/pt/docs/redundancy/).

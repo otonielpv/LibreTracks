@@ -52,14 +52,13 @@ const {
 const isSpanish = lang === "es";
 const isPortuguese = lang === "pt";
 const prefix = isSpanish ? "/es" : isPortuguese ? "/pt" : "";
-// The docs exist in English and Spanish only.
-const docsPrefix = isSpanish ? "/es" : "";
+const docsPrefix = prefix;
 const t = isPortuguese
   ? {
       need: "Necessidade",
       libre: "LibreTracks",
       download: "Baixar grátis",
-      docs: "Ver a documentação (em inglês)",
+      docs: "Ver a documentação",
       strengthsEyebrow: "O que o LibreTracks oferece",
       strengthsHeading: "Pensado para o palco, não para o estúdio.",
       compareEyebrow: "Comparação",
@@ -69,7 +68,7 @@ const t = isPortuguese
       faqHeading: `Perguntas sobre o LibreTracks como alternativa ao ${rival}`,
       closingEyebrow: "Experimente",
       closingHeading: "Baixe e monte um repertório numa tarde",
-      coreConcepts: "Conceitos básicos (em inglês)",
+      coreConcepts: "Conceitos básicos",
     }
   : isSpanish
   ? {

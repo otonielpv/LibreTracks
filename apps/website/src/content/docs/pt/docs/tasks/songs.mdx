@@ -1,0 +1,277 @@
+---
+title: Músicas
+description: "Como criar, mover, estender, dividir, reordenar e exportar músicas no LibreTracks, e os ajustes de cada uma: tom, master, transposição, warp e pausa no fim."
+sidebar:
+  order: 2
+---
+
+import Legend from "../../../../../components/guide/Legend.astro";
+import Clip from "../../../../../components/guide/Clip.astro";
+
+Uma sessão do LibreTracks é um **repertório**: várias músicas uma depois da
+outra na timeline. Cada música é uma barra com nome na régua (em alguns
+lugares o app a chama de *região*) e guarda os seus clipes, os seus marcadores
+e as suas mudanças de andamento. Tudo o que está dentro de uma música viaja
+com ela.
+
+## Criar uma música
+
+Há várias formas, conforme de onde vem o áudio:
+
+- **De uma pasta da Library**: arraste a pasta para a timeline. Veja
+  [Biblioteca e áudio](/pt/docs/tasks/library/#uma-pasta-inteira-como-música).
+- **Soltando áudio num espaço vazio** da timeline: uma música é criada para
+  ele.
+- **De um trecho da régua**: arraste numa parte vazia da régua para marcar o
+  trecho, clique com o botão direito dentro dele e escolha **Create Song From
+  Selection**.
+
+<Clip
+  src="/guide/desktop-en/song-from-range.mp4"
+  poster="/guide/desktop-en/song-from-range.webp"
+  caption="Arrastar na régua vazia marca um trecho; botão direito › Create Song From Selection."
+/>
+
+- **Importando uma música exportada** (`.ltpkg`): menu File › **Import song**,
+  ou arraste o arquivo para a timeline. Ela chega com o áudio, os marcadores e
+  os ajustes, e é colocada no fim da sessão.
+- **Importando um projeto do Reaper ou do Ableton** (`.rpp`, `.als`). Veja
+  [Exportar, importar e compartilhar](/pt/docs/integration-ecosystem/).
+- Na **Compact View**, o botão **+ New song** cria uma música vazia no fim.
+
+## Mover, estender e encurtar
+
+**Mover**: arraste a barra da música pela régua. Os clipes, marcadores e
+mudanças de andamento se movem junto.
+
+<Clip
+  src="/guide/desktop-en/song-move.mp4"
+  poster="/guide/desktop-en/song-move.webp"
+  caption="Arrastar a barra de uma música a move com tudo o que tem dentro."
+/>
+
+- Para a **direita**, se ela bate na próxima música, ela a **empurra**, e todas
+  as que vêm depois também.
+- Para a **esquerda** ela não pode passar por cima da anterior.
+- Ela gruda na grade; segure <kbd>Shift</kbd> para movê-la livremente.
+
+**Estender ou encurtar**: arraste a borda esquerda ou direita da barra.
+
+<Clip
+  src="/guide/desktop-en/song-resize.mp4"
+  poster="/guide/desktop-en/song-resize.webp"
+  caption="Arrastar a borda direita da música a estende."
+/>
+
+- A **borda direita** gruda no tempo; a **esquerda**, no compasso.
+- Uma borda **não pode atravessar o áudio** que a música tem: ela para
+  exatamente no primeiro ou no último clipe. Assim um clipe nunca fica de fora.
+- Nem pode invadir a música ao lado.
+- Estender o fim deixa silêncio depois do último clipe, útil para dar um
+  respiro antes da próxima música.
+
+## Dividir uma música em duas
+
+Útil quando você importa um projeto inteiro como uma única música e quer
+dividi-lo nas músicas reais do repertório.
+
+1. Coloque o cursor onde você quer cortar.
+2. Aperte <kbd>Shift</kbd>+<kbd>S</kbd>, ou botão direito na música › **Split
+   song at cursor**.
+
+A parte da esquerda fica com o nome; a da direita ganha o mesmo nome com "(2)".
+As duas mantêm os ajustes da original (tom, warp, master). Os clipes que cruzam
+o corte também são divididos, sem perder áudio.
+
+## Os ajustes de cada música
+
+Cada música tem os seus ajustes. Selecione-a clicando na barra dela para vê-los
+na [barra de ferramentas](/pt/docs/interface/toolbar/#master-transposição-e-warp),
+ou use o menu dela (botão direito):
+
+- **Rename Song** (<kbd>F2</kbd>).
+- **Song key**: o tom dela. Aparece ao lado do nome, na Live View e no Remote,
+  e **transpõe sozinho** quando você muda o tom: uma música em *D* subida 2
+  semitons aparece como *E*.
+- **Key change at cursor ▸**: a música muda de tom no meio. Veja
+  [Mudanças de tom](#mudanças-de-tom).
+- **Master**: o volume da música inteira. Não afeta o metrônomo nem a guia
+  falada.
+- **Transposição** e **warp**: veja
+  [Tom, warp e o botão T](/pt/docs/pitch-and-warp/). Atenção: sem warp, transpor
+  muda a velocidade, então a música fica mais longa ou mais curta, e as
+  seguintes se deslocam para não se sobreporem.
+- **Change Original BPM**: o andamento em que o áudio foi gravado, usado pelo
+  warp.
+- **Song Fades ▸**: fade in e fade out. Veja [abaixo](#fade-in-e-fade-out).
+- **Arrangement**: repetir, tirar ou reordenar as seções da música sem mexer
+  no áudio. Veja [Arranjos de música](/pt/docs/arrangements/).
+- **Voice Guide Count-in ▸**: como a guia falada conta a entrada desta música.
+  Veja [Guia falada](/pt/docs/voice-guide/#ligar-e-configurar).
+- **Analyze song (tempo, key and sections)…**: o LibreTracks sugere o
+  andamento, o tom e os marcadores. Veja [Analisar música](/pt/docs/song-analysis/).
+- **Choose cover image…** e **Remove cover image**: a imagem da música,
+  mostrada nos cartões da [Setlist View](/pt/docs/setlist-view/). Funcionam JPG,
+  PNG e WebP de até 8 MB. Quando você cria uma música a partir de uma pasta da
+  biblioteca, o LibreTracks procura sozinho uma imagem naquela pasta,
+  preferindo nomes como `cover`, `album`, `portada`, `front` ou `folder`. A
+  capa viaja com as músicas e sessões exportadas.
+
+## Mudanças de tom
+
+Uma música pode **mudar de tom no meio**, como um último refrão que sobe um
+tom. O **Song key** é o tom em que ela começa, e cada mudança é uma marquinha
+lilás na faixa da música, com o tom novo:
+
+![Uma mudança de tom para E na faixa da música](/guide/desktop-en/key-change-notch.png)
+
+- **Criar**: coloque o cursor onde ela muda, botão direito na música ›
+  **Key change at cursor ▸** e escolha o tom.
+- **Editar ou tirar**: clique na marquinha para mudar o tom ou
+  **Remove key change**; arraste para movê-la. Segure **Alt** (**Option** no
+  Mac) ao soltar para deixar uma cópia com o mesmo tom; a original fica onde
+  está.
+- As mudanças vão com a música: movê-la, dividi-la, montar um arranjo ou
+  exportá-la não as tira do lugar.
+
+A **Live View** mostra o tom que está tocando e um aviso **→ E** antes de a
+mudança chegar; a Compact View e o Remote mostram a sequência **D → E**. Se o
+[pad de ambiente](/pt/docs/ambient-pads/) segue o tom da música, ele muda junto. E
+a [letra e os acordes](/pt/docs/live-view/#letra-e-acordes) escrevem os acordes no
+tom que está tocando em cada parte.
+
+O [Analyze song](/pt/docs/song-analysis/) também detecta modulações e as sugere
+como mudanças de tom.
+
+## Fade in e fade out
+
+Cada música pode **entrar e sair com fade** sem você colocar um em cada
+clipe. Só afeta as faixas: o click e a guia falada tocam no nível deles desde
+o primeiro compasso.
+
+![Os cantos de fade de uma música na régua](/guide/desktop-en/song-fade-handles.png)
+
+<Legend>
+
+1. **Fade in**: arraste o canto superior esquerdo da música para a direita. A
+   rampa é desenhada sobre a barra da música.
+2. **Fade out**: arraste o canto superior direito para a esquerda.
+
+</Legend>
+
+Os cantos aparecem quando você passa o mouse sobre a música, quando ela está
+selecionada ou quando já tem um fade. Se preferir digitar os segundos, botão
+direito na música › **Song Fades**:
+
+![O menu "Song Fades"](/guide/desktop-en/menu-song-fades.png)
+
+- O fade vai **pela posição**, como o de um clipe: se você saltar para o meio
+  da música, ela toca no nível total; se começar do início, ela entra com o
+  fade.
+- **0** tira o fade. Nenhum dos dois pode ser mais longo que a música.
+- Ele viaja com a música quando você a exporta (`.ltpkg`) e soa igual quando
+  você [renderiza](#exportar-renderizar-e-apagar).
+- Para terminar uma música **ao vivo** a qualquer momento, use
+  [Fade out and stop](/pt/docs/interface/main-screen/#fade-out-and-stop).
+
+## Equalizador do master da música
+
+No controle **Master** da barra de ferramentas, o botão **EQ** abre o mesmo
+equalizador das faixas, mas para a música inteira: ele age sobre a mixagem das
+faixas que vão para o master, depois do volume e dos fades da música. Não mexe
+no click, na guia, nos pads nem nas faixas mandadas para o retorno ou outras
+saídas. Cada música tem o seu e, ao passar de uma para a próxima, a curva muda
+sem estalos. Pode ser desfeito com <kbd>Ctrl</kbd>+<kbd>Z</kbd>, é salvo com a
+sessão, viaja nos pacotes de música e soa igual ao renderizar.
+
+## Nivelar o volume das músicas
+
+Cada multitrack vem mixado do seu jeito, e ao vivo dá para perceber: uma música
+chega à mesa mais alta que a anterior. **Level song volumes…** mede o quão alta
+cada música é nas partes fortes (o refrão, não a ponte calma) e sugere um
+**master** para cada uma, para todas chegarem no mesmo nível. Fica no menu
+**File** (no celular, no menu de arquivo da barra lateral), porque afeta o
+repertório inteiro.
+
+![Nivelar músicas: as faixas que contam e o botão Measure](/guide/desktop-en/level-songs-setup.png)
+
+<Legend>
+
+1. **Faixas que contam**: só o que vai para o P.A., agrupado por música. O
+   LibreTracks deixa de fora o click, os cues, o que vai para os fones e as
+   faixas mutadas, e diz por quê; você pode mudar a seleção.
+2. **Measure**: mede todas as músicas. Leva alguns segundos por música.
+
+</Legend>
+
+![Resultado da medição com o master sugerido para cada música](/guide/desktop-en/level-songs-result.png)
+
+<Legend>
+
+1. **Nível alvo**: *Without clipping (recommended)* leva todas as músicas ao
+   nível mais alto que todas conseguem atingir sem clipar. Você também pode
+   igualá-las à mediana do repertório ou a uma música específica.
+2. **A proposta**: a intensidade medida de cada música, o master atual, o
+   master sugerido e a mudança.
+3. **Apply**: aplica os masters das músicas de uma vez. Desfaça com
+   <kbd>Ctrl</kbd>+<kbd>Z</kbd> (no celular, com o botão Undo).
+
+</Legend>
+
+A proposta costuma abaixar as músicas em vez de subir: isso é esperado, e você
+compensa uma vez só com o ganho da mesa. O master não afeta o metrônomo nem a
+guia falada.
+
+## Reordenar o repertório
+
+- Na **DAW view**, mova as músicas pela régua (veja acima).
+- Na **Compact View** e na **Live View**, arraste a música pela **alça** (os
+  seis pontinhos à esquerda dela) até o novo lugar. Enquanto arrasta você vê
+  onde ela vai cair. Com a alça selecionada, as setas do teclado a movem um
+  lugar de cada vez. No celular, **segure o dedo** na alça por um momento antes
+  de arrastar (você sente uma vibração, se o celular tiver): assim um deslize
+  rápido não reordena sem querer. A música se move inteira, com o áudio, os
+  marcadores e o andamento, e os espaços entre as músicas se mantêm.
+
+## Passar de uma música para a próxima ao vivo
+
+Por padrão, quando uma música termina, a reprodução continua com a próxima. Se
+você preferir parar entre as músicas (para falar, por exemplo), ligue **Pause
+at the end of each song** em Settings › General › Playback: a reprodução para
+exatamente no último quadro de cada música, e *Play* começa a próxima.
+
+Se preferir que a banda não fique sem referência entre as músicas, ligue
+**Vamp between songs**: quando cada música termina, a reprodução espera como na
+pausa, mas o **click continua no andamento da música que terminou** e o **pad
+continua soando** pelo tempo que for preciso. *Play* começa a próxima; *Stop*
+para o click. Ligue com o botão **Between songs** da [Live View](/pt/docs/live-view/),
+no painel de Vamp da barra de ferramentas, ou em Settings › General › Playback ›
+**Vamp between songs (click and pad)**.
+
+![Botão Between songs ao lado de VAMP na Live View](/guide/desktop-en/live-vamp-between-songs.png)
+
+<Legend>
+
+1. **Between songs**: liga o vamp entre músicas. Enquanto ele segura, o botão
+   pulsa para você saber por que a próxima música não começou.
+2. **VAMP**: o vamp de sempre, dentro de uma música.
+
+</Legend>
+
+Para saltar para outra música: os botões **Previous** e **Next**,
+<kbd>Shift</kbd>+número (<kbd>Shift</kbd>+<kbd>0</kbd> é a primeira música), a
+Live View, o Remote ou um pedal MIDI. Quando e como o salto acontece é definido
+por [Song Transition](/pt/docs/interface/toolbar/#song-transition).
+
+## Exportar, renderizar e apagar
+
+No menu da música:
+
+- **Export Song**: cria um `.ltpkg` com a música, o áudio, os marcadores e os
+  ajustes, para levá-la a outra sessão ou outro computador.
+- **Render audio…**: exporta a mixagem em WAV, inteira ou uma faixa por
+  arquivo.
+- **Delete Song** (<kbd>Del</kbd> com a música selecionada): tira a música com
+  os clipes, marcadores e mudanças de andamento. Se ela ainda tem clipes, pede
+  confirmação. <kbd>Ctrl</kbd>+<kbd>Z</kbd> desfaz, e o áudio continua na
+  Library.

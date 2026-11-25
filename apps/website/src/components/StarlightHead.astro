@@ -10,7 +10,7 @@ const normalizedHead = head.map((entry) => {
 });
 
 const path = Astro.url.pathname;
-const englishPath = path.replace(/^\/es(?=\/|$)/, "") || "/";
+const englishPath = path.replace(/^\/(es|pt)(?=\/|$)/, "") || "/";
 const xDefault = new URL(englishPath, Astro.site ?? "https://libretracks.com");
 ---
 

@@ -1,0 +1,116 @@
+---
+title: Andamento e fórmula de compasso
+description: "Como definir o andamento e a fórmula de compasso de cada música no LibreTracks: o campo BPM, o Tap, mudanças de andamento e de compasso no meio da música, e o que depende deles (grade, metrônomo, guia falada, saltos)."
+sidebar:
+  order: 5
+---
+
+import Clip from "../../../../../components/guide/Clip.astro";
+
+O andamento e a fórmula de compasso não movem o áudio: eles dizem ao
+LibreTracks **onde caem os compassos e os tempos**. A grade e o snap, os
+números da régua, o **metrônomo**, a contagem da **guia falada**, os saltos
+*after X bars* e o Vamp por compassos dependem deles. Se o metrônomo não bate
+com a música, é o andamento que precisa ser corrigido.
+
+Cada música tem os seus. Quando você importa uma música, ela chega com o
+andamento e a fórmula de compasso já definidos no início.
+
+:::note[E se eu quiser que a música vá mais rápido?]
+Mudar o BPM não acelera o áudio. Para isso serve o **warp**: com o warp da
+música ligado, o áudio se estica para seguir o andamento da timeline sem mudar
+a afinação. O jeito rápido é o **Song tempo** do botão *Warp & tempo*: veja
+[Acelerar ou desacelerar uma música](#acelerar-ou-desacelerar-uma-música).
+:::
+
+## Mudar o andamento de um trecho
+
+Na barra superior:
+
+- **BPM**: digite o andamento e aperte <kbd>Enter</kbd>. Ele muda o trecho de
+  andamento em que o cursor está; o rótulo *Tempo @ 6:12.4* diz onde esse
+  trecho começa. Aceita decimais (por exemplo, 152.8).
+- **Tap**: bata junto com a música. A partir da segunda batida ele calcula o
+  andamento pela média das últimas oito, e o aplica ao mesmo trecho. Se
+  passarem mais de dois segundos e meio sem batida, a contagem recomeça.
+
+Nenhum dos dois cria uma mudança de andamento nova: eles corrigem a que já
+existe.
+
+## Mudar o andamento no meio da música
+
+1. **Clique com o botão direito na régua**, no ponto onde o andamento muda.
+2. Escolha **Change Timeline BPM**.
+3. Digite o andamento novo.
+
+<Clip
+  src="/guide/desktop-en/tempo-change.mp4"
+  poster="/guide/desktop-en/tempo-change.webp"
+  caption="Botão direito na régua › Change Timeline BPM: a partir daquele ponto, a música toca a 132."
+/>
+
+Aparece um marcador turquesa com o BPM. Dali até a próxima mudança, tudo toca
+naquele andamento. Se você fizer o mesmo no início da sessão, muda o andamento
+inicial em vez de criar um marcador.
+
+Botão direito no marcador: **Change BPM** ou **Delete Marker** (o trecho volta
+ao andamento anterior). No celular, a barra de ações › **…** › **Tempo** cria a
+mudança na posição do cursor.
+
+## Acelerar ou desacelerar o andamento aos poucos
+
+Algumas músicas não mudam de andamento de uma vez, elas **aceleram ou
+desaceleram** ao longo de alguns compassos (um final que vai parando, uma
+ponte que empurra). Para isso, um marcador de BPM pode ser uma **rampa**:
+
+1. Coloque um marcador de BPM onde a mudança começa e outro onde ela termina,
+   com o andamento a que ela chega.
+2. Botão direito no primeiro › **Ramp to the next marker**.
+
+![O menu de um marcador de andamento com a rampa](/guide/desktop-en/menu-tempo-marker.png)
+
+A partir daquele marcador o andamento muda aos poucos e chega ao do próximo
+exatamente nele. O marcador é desenhado inclinado na régua, e a grade, o
+metrônomo, a contagem da guia falada e os saltos por compasso seguem a rampa.
+Para tirá-la, escolha **Ramp to the next marker** de novo no mesmo menu.
+
+## Acelerar ou desacelerar uma música
+
+![Warp & tempo da música selecionada](/guide/desktop-en/toolbar-warp-panel.png)
+
+Selecione a música e abra **Warp & tempo** na barra de ferramentas. Em **Song
+tempo**, <kbd>−</kbd> e <kbd>+</kbd> (ou digitar o BPM) mudam a velocidade da
+música **sem mudar a afinação**: o warp liga sozinho se precisar. **Original**
+a devolve como foi gravada. Se a música tem vários marcadores de andamento ou
+rampas, todos mudam na mesma proporção, então nada se desencontra.
+
+## Mudar a fórmula de compasso
+
+Igual ao andamento: botão direito na régua › **Create time-signature marker**, e
+digite o compasso (por exemplo, `6/8` ou `3/4`).
+
+<Clip
+  src="/guide/desktop-en/time-signature-change.mp4"
+  poster="/guide/desktop-en/time-signature-change.webp"
+  caption="Botão direito na régua › Create time-signature marker › 6/8: a régua é renumerada a partir daquele ponto."
+/>
+
+- O numerador vai de 1 a 32 e o denominador pode ser 1, 2, 4, 8, 16 ou 32.
+- O campo **Time signature** da barra superior funciona diferente do BPM: com
+  o cursor no início da sessão ele muda a fórmula inicial, e em qualquer outro
+  lugar **cria uma mudança de compasso** na posição do cursor.
+- Botão direito no marcador de compasso: **Change time signature** ou **Delete
+  Marker**.
+
+A guia falada conta conforme a fórmula de compasso: em 3/4 ela diz "1, 2, 3",
+em 5/4 conta até cinco.
+
+## Conferir se o andamento está certo
+
+1. Ligue o **metrônomo** (o botão *Click*).
+2. Toque a música: o click tem que cair junto com a bateria.
+3. Se ele vai se adiantando ou atrasando aos poucos, o andamento está errado:
+   use o *Tap* ou digite o valor exato.
+4. Se ele mantém o tempo mas está deslocado, a música não começa num tempo
+   forte. Mova a música (ou o áudio) até a primeira batida cair no início de um
+   compasso.

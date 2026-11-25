@@ -1,0 +1,129 @@
+---
+title: Analisar música
+description: "Como o LibreTracks lê o andamento e a fórmula de compasso pelo click, o tom da música e as suas modulações, e coloca os marcadores de seção ouvindo a guia falada, com uma proposta que você revisa antes de aplicar."
+---
+
+import Legend from "../../../../components/guide/Legend.astro";
+
+Preparar uma música à mão leva um tempo: definir o andamento, conferir a
+fórmula de compasso, achar o tom e ouvir a guia para colocar cada marcador.
+**Analyze song** faz isso por você a partir do próprio áudio do multitrack:
+
+- o **andamento e a fórmula de compasso**, lidos da faixa de **click**;
+- o **tom** da música, e as suas **mudanças de tom** se ela modular, a partir
+  das faixas com harmonia;
+- os **marcadores de seção** (Intro, Verse, Chorus…), ouvindo o que a **guia
+  falada** diz.
+
+Ele não muda nada sem perguntar: mostra uma proposta, você a revisa e escolhe o
+que aplicar. E pode ser desfeito.
+
+## Abrir
+
+Botão direito na música (tocar e segurar no celular) ›
+**Analyze song (tempo, key and sections)…**. Funciona no computador, no
+Android e no iOS.
+
+![A janela Analyze song antes de começar](/guide/desktop-en/song-analysis-setup.png)
+
+<Legend>
+
+1. **Faixa de click**: de onde vem o andamento. O LibreTracks escolhe a faixa
+   pelo nome; mude se não for o click. Se a música não tem click, escolha
+   **No click: estimate it from the music**, ou **Don't analyze the tempo**.
+2. **Analisar o tom**: as faixas ouvidas para o tom. O click, a guia e a
+   percussão já ficam de fora, porque embaralham o tom.
+3. **Faixa da guia**: a voz que anuncia as seções. **Don't analyze the guide**
+   deixa os marcadores como estão.
+4. **Analyze**: começa. Leva alguns segundos por música (um pouco mais se
+   reconhecer a guia) e mostra o progresso.
+
+</Legend>
+
+Na primeira vez que você analisa uma guia, a janela oferece baixar o
+**reconhecimento de fala** (cerca de 57 MB, só uma vez). Com ele, anúncios em
+**qualquer voz** são entendidos, masculina ou feminina, em espanhol ou inglês.
+Sem ele, só são reconhecidas as guias gravadas com a mesma voz que o app usa.
+
+:::caution[Não rode no meio do show]
+A análise usa bastante CPU por alguns segundos. Faça isso ao preparar a
+sessão, não enquanto toca.
+:::
+
+## Revisar a proposta
+
+Quando termina, a janela mostra o que encontrou, parte por parte. Cada parte tem
+a sua caixa **Apply**: desmarque o que você não quer.
+
+![A proposta: andamento e compasso, tom e marcadores](/guide/desktop-en/song-analysis-review-1.png)
+
+**Andamento e compasso.** O andamento e a fórmula de compasso que a música tem
+e os que ele sugere, e uma tabela com cada marcador de andamento e de compasso,
+que você pode editar. Clique numa posição para saltar até lá e ouvir. Se o
+click toca colcheias e o andamento saiu dobrado (ou pela metade), os botões
+**×2** e **÷2** corrigem. Um aviso laranja diz quando conferir, por exemplo
+quando o click não acentua o tempo 1.
+
+**Tom.** O tom da música e, se ela modula, cada **mudança de tom** com o seu
+momento. Você pode mudar qualquer um antes de aplicar. As mudanças aparecem
+depois como uma marquinha na faixa da música: veja
+[Mudanças de tom](/pt/docs/tasks/songs/#mudanças-de-tom).
+
+**Marcadores de seção.** Uma linha para cada anúncio da guia, com o que ele
+entendeu entre aspas:
+
+![Os anúncios da guia e a seção de cada um](/guide/desktop-en/song-analysis-review-3.png)
+
+- **▶** toca o anúncio para você ouvir.
+- **Section** é o marcador que será colocado (Intro, Verse, Chorus…) e **Cue**
+  uma indicação extra, como *Drums In*. Os anúncios repetidos com a mesma
+  gravação são agrupados: escolha uma vez o que é e vale para todas as vezes
+  em que ele é dito.
+- **The guide announces**: quantos compassos antes da seção a guia fala. O
+  comum é **1 bar before**; mude se os seus marcadores saírem deslocados.
+- Se a música já tinha marcadores, a proposta os **substitui**; desmarque a
+  caixa para manter os seus.
+
+Aperte **Apply** para escrever na música, ou **Back** para mudar as faixas e
+tentar de novo. O que você aplica se desfaz com <kbd>Ctrl</kbd>+<kbd>Z</kbd>.
+
+## Analisar todas as músicas
+
+Para uma sessão inteira, **File › Analyze all songs…** (no celular, na folha
+File da barra lateral) analisa cada música uma depois da outra. Cada uma usa as
+faixas que a própria análise escolheria pelo nome (Click, Guide…); marque ou
+desmarque as músicas que você quer e aperte **Analyze**. Leva alguns segundos
+por música e usa bastante CPU: melhor não rodar durante um show.
+
+![A janela Analyze all songs](/guide/desktop-en/song-analysis-batch.png)
+
+1. **All songs** marca ou desmarca a lista inteira.
+2. Cada música com o que será lido dela (click, música, tom, guia).
+3. **Analyze** começa, uma música depois da outra.
+
+Quando termina você tem dois caminhos:
+
+- **Review** abre a proposta daquela música na janela de sempre, para você
+  ajustar antes de aplicar.
+- **Apply all** escreve todas as propostas como estão. Os marcadores que uma
+  música já tinha são mantidos; para substituí-los pelos da guia, revise
+  aquela música.
+
+Cada música é aplicada como um passo próprio, então se desfaz sozinha.
+
+## Dicas
+
+- **Confira o andamento antes dos marcadores.** Se as seções caem no meio do
+  compasso ou deslocadas, o andamento quase sempre saiu dobrado ou pela
+  metade: corrija com ×2 / ÷2 antes de aplicar.
+- **Funciona com warp e com a música transposta.** O áudio é analisado como foi
+  gravado, e os marcadores caem no lugar musical deles.
+- **Click e guia na mesma faixa.** Se o click e a guia falada vêm juntos (por
+  exemplo depois de
+  [dividir um arquivo com o click de um lado](/pt/docs/tasks/clips-tracks/#um-arquivo-com-o-click-de-um-lado)),
+  escolha essa faixa como **faixa de click** e como **faixa da guia**. O
+  LibreTracks separa as batidas do click da voz e lê cada um sozinho. Uma
+  faixa em *Left only* ou *Right only* é analisada como soa, com o seu canal.
+- **Revise a proposta uma vez.** A análise acerta a maioria dos multitracks,
+  mas uma guia com muito ruído de fundo ou um click ao vivo que segue a banda
+  podem confundi-la. Para isso serve a revisão.

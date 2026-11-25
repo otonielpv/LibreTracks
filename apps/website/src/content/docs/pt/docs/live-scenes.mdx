@@ -1,0 +1,86 @@
+---
+title: Cenas de mixagem
+description: "Cenas de mixagem no LibreTracks: estados de mixagem que você liga e solta com um botão, por MIDI ou por um cue de automação, como abaixar a banda enquanto alguém fala. Soltar uma devolve a mixagem como estava."
+---
+
+Uma **cena** é um estado de mixagem que você liga e solta à mão: por exemplo,
+abaixar os instrumentos enquanto alguém fala com o público e trazê-los de volta
+depois. Quando você a solta, a mixagem volta **exatamente** como estava antes.
+
+## Criar uma cena
+
+Abra **File › Mix scenes…**. No celular, a folha **File** da barra lateral; na
+[Setlist View](/pt/docs/setlist-view/), o botão **Scenes** do mixer. Não é preciso
+faixa de automação.
+
+![Editor de cenas de mixagem](/guide/desktop-en/mix-scenes-editor.png)
+
+1. **As cenas da sessão**, em ordem. O número de cada uma (1, 2, 3…) é o que os
+   botões e o controlador usam; mude com as setas.
+2. **+ Bring the band down (except vocals)** cria a cena comum num clique:
+   todas as faixas da música menos as chamadas voz, voc, vox, click, guía ou
+   guide, −12 dB, com uma rampa de 2 segundos. **+ New scene** cria uma vazia.
+3. **Name** e **Ramp**: os segundos que ela leva para chegar à mixagem nova (e
+   para voltar quando você a solta).
+4. **As regras**. Cada regra se lê como uma frase: *quais faixas*, *menos
+   quais* e *o que muda*.
+   - **Quais faixas:** `Every track of the song` (a que está sob o cursor),
+     `Folder` (as faixas de uma pasta com aquele nome), `Name contains`
+     (palavras separadas por vírgulas; maiúsculas e acentos são ignorados,
+     então "voz" encontra "Vóz guía") ou uma `Track` específica.
+   - **menos:** zero ou mais seletores que são tirados.
+   - **O que muda:** volume (`± dB` sobre o nível de cada faixa, ou um valor
+     fixo), pan, mute, solo e **EQ** (ligar, desligar ou carregar um preset; a
+     curva do preset fica guardada na cena, então apagar o preset depois não a
+     quebra). O EQ muda na hora, sem rampa. O que ficar em **No change** não é
+     tocado.
+5. **Quais faixas ela afeta na música atual**, para conferir a regra antes de
+   usar ao vivo.
+
+As regras de música, pasta e nome funcionam para **qualquer música** da sessão:
+você não precisa de uma cena por música.
+
+## Ligar e soltar
+
+A [Live View](/pt/docs/live-view/), o mixer da [Setlist View](/pt/docs/setlist-view/)
+e a [Compact View](/pt/docs/compact-view/) têm um botão por cena. Aperte para
+ligar a cena (ele acende) e de novo para soltá-la. No celular, para as tiras
+manterem o espaço, as cenas se recolhem num único botão **Scenes** (na
+Setlist, ao lado de Waveform, Lyrics e Edit): toque para ver a lista. Ele
+acende enquanto uma cena está ligada.
+
+![Botões de cena na Live View](/guide/desktop-en/scene-buttons-live.png)
+
+Você também pode:
+
+- **Usar um controlador MIDI.** Em **Settings › MIDI Learn › Scenes** cada cena
+  tem três linhas: *toggle* (um botão liga e solta), *engage* e *release*.
+  Aperte **Learn** na linha e depois o botão do controlador. No mesmo lugar há
+  **Scene 1** a **Scene 8**, que seguem a ordem do editor e funcionam em
+  qualquer sessão. Ou use o [modo MIDI Map](/pt/docs/tasks/midi/#modo-midi-map):
+  ligue, toque no botão da cena e aperte o botão do controlador. O LED do
+  controlador segue a cena mesmo quando você a liga na tela.
+- **Por um cue de automação**: na ação de cena dele, escolha **Engage the
+  scene**, **Toggle (engage or release)** ou **Release the scene and go back**.
+  Veja [Automação](/pt/docs/automation/).
+
+## Enquanto ela está ligada
+
+- Se você mexer à mão no fader, mute, solo ou EQ de uma faixa (na tela ou no
+  controlador), aquela faixa sai da cena: quando você soltar, a faixa fica onde
+  você a deixou.
+- Se a reprodução passa para a **próxima música**, a cena continua ligada e
+  passa junto: as faixas da música que termina voltam ao nível delas e as da
+  nova descem com a rampa. As regras de uma faixa específica não passam.
+- Parar, tocar de novo ou saltar dentro da música não a solta.
+- Salvar (também ao fechar e ao exportar) grava a mixagem de **antes** da cena:
+  você não vai reabrir a sessão com a música abaixada.
+
+## Cenas nos templates
+
+As cenas viajam com a sessão (`.ltset`) e com os
+[templates de sessão](/pt/docs/integration-ecosystem/#templates-de-sessão). Num
+template, as regras de pasta são as mais úteis: "Folder Instruments, −12 dB"
+funciona em todas as sessões que você criar a partir dele. As regras de uma
+faixa específica não viajam com o template, porque o template não guarda
+aquelas faixas.

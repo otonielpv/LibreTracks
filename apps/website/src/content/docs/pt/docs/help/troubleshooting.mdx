@@ -1,0 +1,155 @@
+---
+title: Solução de problemas
+description: "Soluções para os problemas mais comuns do LibreTracks: o app não abre, sem som ou com estalos, silêncios, arquivos faltando, o Remote não conecta, o vídeo não aparece e problemas no celular."
+sidebar:
+  order: 1
+---
+
+Antes de tudo: **atualize para a versão mais recente**. Muitos destes problemas
+já estão corrigidos, e o LibreTracks avisa quando sai uma nova.
+
+## Instalar e abrir
+
+### O Windows diz "O Windows protegeu o computador" ao instalar
+
+É o SmartScreen do Windows, que avisa sobre instaladores que ele ainda não
+conhece. Clique em **Mais informações** e depois em **Executar assim mesmo**.
+Baixe o LibreTracks só da [página de download](/pt/download/) ou do GitHub.
+
+### No Windows o app fecha alguns segundos depois de abrir
+
+Quase sempre é um **driver ASIO** que falha ao ser consultado (acontece com o
+ASIO4ALL e com drivers de interfaces que não estão conectadas). As versões
+atuais detectam isso e escondem aquele driver da lista em vez de fechar. Se
+ainda acontecer com a versão mais recente, desinstale os drivers ASIO que você
+não usa e mande o log para nós (veja [Pedir ajuda](#pedir-ajuda)).
+
+### No Linux a janela fica em branco
+
+É um bug conhecido do WebKitGTK, o motor web do sistema, com drivers NVIDIA e em
+distribuições imutáveis (Bazzite, Silverblue, SteamOS). O LibreTracks já aplica
+a correção ao abrir. Em distribuições imutáveis, use o **AppImage** (ou um
+contêiner *distrobox*) em vez de instalar o `.rpm` por cima do sistema.
+
+### macOS: não abre no meu Mac
+
+O LibreTracks precisa do **macOS 12 Monterey** ou mais recente. Veja
+[Requisitos do sistema](/pt/docs/system-requirements/).
+
+## Som
+
+### Não toca nada
+
+Confira, nesta ordem:
+
+1. **Settings → Audio**: o **dispositivo de saída** certo, com as saídas
+   ativadas.
+2. A **saída** da faixa (ou da pasta dela): Master ou outra saída que esteja
+   realmente ligada a algo. Veja [Saídas de áudio e metrônomo](/pt/docs/audio-routing-metronome/).
+3. **Mute** e **solo** nas faixas e pastas, e o **master da música**.
+4. Que o áudio não esteja na lista de **arquivos faltando** (veja abaixo).
+
+### Aparece "No audio output — reconnecting…"
+
+A interface de áudio parou de responder (foi desconectada, o driver travou ou o
+Windows a trocou). A reprodução **continua rodando** e o som volta sozinho
+quando o dispositivo responder de novo. Se não voltar, confira o cabo e a saída
+em Settings → Audio.
+
+### Aparece "The app was idle"
+
+Se o app ficou um bom tempo sem uso (ou o computador entrou em suspensão),
+aperte **Resume** para acordar o áudio. Isso não começa a reprodução: tudo fica
+como você deixou.
+
+### Estalos, ou o áudio soa acelerado
+
+O **tamanho do buffer** é pequeno demais para o seu computador ou sistema de
+áudio. Aumente em **Settings → Audio** (512 é um bom ponto de partida). No
+Windows, use **ASIO** se a sua interface tiver, ou **WASAPI**; com
+**DirectSound** um buffer pequeno dá exatamente esses sintomas. Veja
+[Configurações](/pt/docs/interface/settings/).
+
+### Quando aperto Play, algumas faixas ficam mudas no começo e depois entram
+
+O áudio delas ainda está sendo **preparado** (você vê "Preparing audio...").
+A reprodução não espera: as faixas entram sozinhas assim que ficam prontas. Num
+computador modesto, ou com o áudio num disco lento, a primeira vez pode levar um
+momento; a próxima é imediata. Um **SSD** ajuda muito.
+
+### Quando transponho, o som chega um pouco atrasado
+
+A transposição em tempo real adiciona um pequeno atraso (cerca de um décimo de
+segundo). Se o tempo é crítico, prepare a música já no tom certo na sua DAW.
+Veja [Tom, warp e o botão T](/pt/docs/pitch-and-warp/).
+
+## Arquivos e sessões
+
+### Aparece "Missing media files"
+
+O LibreTracks toca o seu áudio **de onde ele estiver**, sem copiar. Se você
+moveu, renomeou ou apagou um arquivo, as faixas dele ficam mudas. Clique no
+aviso para abrir **Missing files**: se o LibreTracks encontrar o arquivo em
+outra pasta, oferece **Use the one in…**, e se não, **Browse…** deixa você
+localizá-lo. Se você não o tem mais, **Remove from session** apaga os clipes
+que o usavam (as músicas ficam). Para evitar isso ao trocar de computador,
+exporte a sessão no modo **Full**; veja
+[Exportar, importar e compartilhar](/pt/docs/integration-ecosystem/).
+
+### Depois de atualizar, a sessão demora mais para abrir
+
+Algumas atualizações mudam como o áudio é preparado, e na primeira vez o
+LibreTracks refaz o cache. As próximas aberturas voltam a ser rápidas.
+
+### O cache de áudio ocupa muito espaço
+
+Em **Settings**, a seção **Audio cache** mostra onde ele está e qual o tamanho,
+e deixa você definir um tamanho máximo, movê-lo para outro disco ou limpá-lo.
+Limpar não apaga nada seu: ele é refeito quando precisar.
+
+## Remote
+
+### O celular ou tablet não conecta
+
+- O computador e o aparelho precisam estar na **mesma rede**. As redes Wi-Fi de
+  **convidados** costumam isolar os aparelhos uns dos outros.
+- No Windows, se o firewall bloquear o Remote, o próprio painel **Remote**
+  avisa, com um botão **Allow through the firewall**.
+- Se o endereço **.local** não abrir, use o **IP URL**.
+
+Veja [Remote personalizado](/pt/docs/remote-control/).
+
+## Vídeo
+
+- **"Video unavailable"** no Linux: instale a biblioteca mpv da sua
+  distribuição (`libmpv2` ou `mpv-libs`).
+- **O projetor não aparece**: conecte-o e aperte **Refresh** em Settings →
+  Video, ou abra o **Wizard…**.
+- **A imagem fica atrás da música**: use **Calibrate…**.
+
+Veja [Vídeo no projetor](/pt/docs/tasks/video/).
+
+## Celular
+
+- **Importar uma sessão grande é muito lento** num celular modesto: é a
+  velocidade do armazenamento dele. Exporte do computador no modo
+  **Optimized**, que abre sem preparar o áudio, ou divida em sessões menores.
+- **Sem espaço para importar**: você precisa do dobro do tamanho do pacote
+  livre, mais uma margem. O LibreTracks confere antes de começar.
+- **Android: "file extension is not valid" ao importar um WAV** escolhido em
+  alguns apps de arquivos: está corrigido; atualize o app pelo Google Play.
+
+Mais em [LibreTracks no celular](/pt/docs/mobile/) e em
+[Requisitos do sistema](/pt/docs/system-requirements/).
+
+## Pedir ajuda
+
+Se o seu problema não está aqui, conte para nós no
+[grupo do Facebook](https://www.facebook.com/groups/1795788251804551), no
+[Reddit](https://www.reddit.com/r/LibreTracks/) ou abrindo uma issue no
+[GitHub](https://github.com/otonielpv/LibreTracks/issues).
+
+Anexar o **log de erros** ajuda muito: em **Settings → Diagnostics**, aperte
+**Copy error log** e cole na sua mensagem, ou **Open logs folder** para mandar
+os arquivos. Diga qual é o seu sistema, a sua interface de áudio e o que você
+estava fazendo quando aconteceu.

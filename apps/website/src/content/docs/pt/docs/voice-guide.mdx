@@ -1,0 +1,119 @@
+---
+title: Guia falada
+description: Anúncios falados das seções, cues dinâmicos e contagens antes dos marcadores e dos saltos agendados.
+---
+
+A **guia falada** diz para a banda o que vem por aí, como o app Playback do
+iPad: antes de cada seção uma voz diz o nome dela ("Chorus", "Verse 2",
+"Bridge") e conta o compasso anterior ("1, 2, 3, 4"), para todos entrarem
+juntos. Ela também diz **cues** curtos onde você os colocar: "Build", "All in",
+"Drums in", "Key change up"…
+
+A voz fala em **inglês ou espanhol**; ainda não há voz em português.
+
+Se você procura um player sem mensalidade, veja como ele se encaixa nos guias
+[alternativa grátis ao Playback da MultiTracks](/pt/alternativa-playback-multitracks/)
+e [alternativa grátis ao Prime Worship](/pt/alternativa-prime-worship/).
+
+A guia falada funciona com os **marcadores** das suas músicas: o que ela diz
+depende do tipo de cada marcador. Como criá-los e mudá-los está em
+[Marcadores](/pt/docs/tasks/markers/).
+
+## Ligar e configurar
+
+O botão **Guide** da barra superior a liga e desliga. A seta ao lado abre os
+ajustes dela:
+
+![Os ajustes da guia falada](/guide/desktop-en/voice-guide-popover.png)
+
+- **Voice guide**: ligada ou desligada, como o botão.
+- **Language**: espanhol ou inglês.
+- **Voice guide output**: para onde ela vai. Como o metrônomo, não passa pela
+  mixagem da música. Mande para os fones da banda, não para o Master. A opção
+  **Monitor** usa os canais 3 e 4 se a sua interface os tiver (se não, a saída
+  principal). Veja [Saídas de áudio e metrônomo](/pt/docs/audio-routing-metronome/).
+- **Lead-in bars**: quantos compassos antes do marcador ela começa a falar (1
+  por padrão). Em músicas rápidas, 2 fica mais confortável.
+- **Count-in** (*Count the remaining beats after the section name*): se ela
+  conta os tempos depois do nome. Desligue para ouvir só o nome.
+- **Count style**: como ela conta. **1-2-3-4** é o comum; **1 · 2 · 1-2-3-4**
+  conta um compasso em meio tempo e depois normal; e **Half time** conta tudo
+  em meio tempo. Os dois últimos combinam com músicas rápidas. Uma música pode
+  ter o seu: botão direito nela › **Voice Guide Count-in ▸**. Em 3/4 ou 6/8 ela
+  sempre conta normal.
+- **Voice volume**.
+
+## O que cada marcador diz
+
+| Marcador | O que você ouve |
+| --- | --- |
+| **Seção** (Intro, Verse, Chorus…) | O nome e a contagem do compasso anterior |
+| **Seção com variante** (Chorus 2, Verse 3) | O nome com o número |
+| **Cue** (Drums In, Last Time…) | O cue quando ele chega, sem contagem |
+| **Custom** | Só a contagem, sem nome |
+
+Se você não quer que um marcador seja anunciado, deixe-o como *Custom*: ele
+continua servindo para saltar, mas em silêncio.
+
+Para trechos em que um instrumento toca sozinho há as seções **Drum Solo**,
+**Bass Solo** e **Guitar Solo**, anunciadas com contagem como qualquer outra
+seção. E para avisar que o andamento muda há os cues **Speed Up** e **Slow
+Down**. São só cues: o andamento da música não muda; para isso, use uma
+[mudança de andamento](/pt/docs/tasks/tempo/).
+
+## Como ela se encaixa no compasso
+
+O compasso antes do marcador leva a **contagem completa** ("1, 2, 3, 4" em
+4/4). O nome da seção é colocado para **terminar logo antes** dessa contagem,
+seja curto ou longo, então eles nunca se sobrepõem:
+
+```
+            [ Verse two ]  one  two  three  four
+                           └─── compasso da contagem ───┘  → o Verse 2 entra aqui
+```
+
+A contagem segue a **fórmula de compasso** da música, mesmo que ela mude no
+meio: em 3/4 conta "1, 2, 3", em 5/4 até cinco. (Em compassos compostos como
+6/8, por enquanto ela conta cada colcheia.)
+
+## Cues
+
+Um **cue** sozinho, longe de qualquer seção, é dito exatamente quando você
+chega a ele, sem contagem.
+
+Um cue que cai no início de uma seção (ou logo antes) **entra no anúncio**,
+entre o nome e a contagem. A banda ouve a seção, depois a indicação e depois a
+contagem:
+
+```
+            [ Chorus ] [ Build ]  one  two  three  four
+                                  └─── compasso da contagem ───┘  → o Chorus entra aqui
+```
+
+Vários cues no mesmo ponto são ditos em ordem ("Last time", "Big ending"…). A
+contagem nunca se move: sempre cai no primeiro tempo da seção.
+
+## Saltos agendados
+
+Quando você agenda um salto para uma seção (no fim da música, depois de alguns
+compassos ou no próximo marcador), a voz anuncia a seção de **destino** e conta
+até o momento do salto. A banda sabe para onde vai antes de chegar.
+
+Os cues do destino também são anunciados: salte para um "Solo" com um cue
+"Guitar" e você ouve "Solo, guitar, 1, 2, 3, 4". Esse cue é dito uma vez só:
+ele não se repete quando a reprodução passa por ele depois.
+
+Se o salto deixa muito pouco espaço (por exemplo, um salto de um compasso), a
+**contagem sempre toca**; o nome só é acrescentado se couber.
+
+Os cues também são destinos de salto: você pode saltar para um cue com um
+clique, pela Live View ou pelo Remote. O que eles não têm é contagem própria.
+
+## Dicas
+
+- Coloque a guia falada e o metrônomo na mesma saída dos fones, ou em saídas
+  separadas se o técnico de monitor quiser controlá-los à parte.
+- Use **cues** para indicações de arranjo (crescer, parar a banda, mudança de
+  tom) sem encher a música de seções.
+- No [Remote](/pt/docs/remote-control/) a banda também vê os marcadores de seção e
+  os cues, com a cor deles.

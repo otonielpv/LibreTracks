@@ -1,0 +1,80 @@
+---
+// Portuguese pair of /guides/backing-track-software/. In Brazil the generic
+// search is "programa de playback" / "app de playback" (or "VS").
+import GuidePage from "../../../components/GuidePage.astro";
+
+const sections = [
+  {
+    heading: "1. O que faz um programa de playback",
+    paragraphs: [
+      "Tocar com playback (ou VS) é somar à banda partes pré-gravadas e travadas no click: pads, cordas, backing vocals, percussão ou qualquer instrumento que não esteja no palco. Um programa de playback toca esses stems separados, manda o click e a guia falada só para os músicos e deixa você se mover pela música quando o momento pede.",
+      "O LibreTracks é um programa de playback grátis e de código aberto. Sem assinatura, sem conta e sem precisar de internet depois de instalado, no Windows, macOS, Linux, Android e iOS.",
+    ],
+    checklist: [
+      "Cada instrumento na sua própria faixa, com volume e saída próprios.",
+      "Click e guia falada que nunca chegam ao público.",
+      "Saltos de seção, loops e mudança de tom durante o show.",
+    ],
+    media: { src: "/guide/articles/en/compact-view.webp", alt: "Um repertório de playback organizado por músicas na Visão Compacta do LibreTracks", width: 1600, height: 940 },
+  },
+  {
+    heading: "2. Prepare as faixas",
+    paragraphs: [
+      "O playback chega em stems: um arquivo de áudio por instrumento, todos com a mesma duração e começando no mesmo ponto. Seja gravado pela sua equipe, comprado ou exportado da sua DAW, o LibreTracks abre WAV, AIFF, FLAC, MP3 e outros formatos comuns.",
+      "Arraste a pasta da música para a biblioteca e o LibreTracks cria uma faixa por arquivo, já alinhada. Se a música já vem com click ou guia próprios, marque-os como tal para irem para os fones.",
+    ],
+    media: { src: "/guide/desktop-en/library-folder-to-song.mp4", poster: "/guide/desktop-en/library-folder-to-song.webp", alt: "Uma pasta de playback transformada em música no LibreTracks", width: 1800, height: 1058, type: "video" as const },
+  },
+  {
+    heading: "3. Click e guia só para a banda",
+    paragraphs: [
+      "Uma interface de áudio com quatro saídas basta para separar: 1-2 para a música que vai para a mesa e 3-4 para o click e a guia que vão para os fones in-ear. Com mais saídas você pode mandar cada instrumento para um canal próprio da mesa.",
+      "Se a música não tem click, o LibreTracks gera um a partir do andamento e da fórmula de compasso. A guia falada anuncia cada seção (intro, verso, refrão, ponte) e conta a entrada da banda, em inglês ou espanhol.",
+    ],
+    media: { src: "/guide/articles/en/track-route.webp", alt: "Atribuindo a faixa de click a uma saída de hardware no LibreTracks", width: 383, height: 408 },
+  },
+  {
+    heading: "4. Toque ao vivo com o playback",
+    paragraphs: [
+      "Coloque marcadores nas seções e salte para elas quando o ministro pedir: repetir o refrão, voltar para a ponte ou ir direto para o final. O Vamp repete uma seção até você decidir seguir, e o salto pode esperar o fim do compasso ou da seção para a banda nunca perder o pulso.",
+      "Cada música guarda o seu tom. Se quem canta hoje precisa de um tom abaixo, mude na música e escolha quais stems acompanham; o click e a guia continuam afinados.",
+    ],
+    media: { src: "/guide/articles/en/live-view.webp", alt: "Visão Live do LibreTracks com os marcadores e saltos da música", width: 1600, height: 940 },
+  },
+  {
+    heading: "5. Um app de playback grátis para Android e iOS",
+    paragraphs: [
+      "O app para Android e iOS é o mesmo programa, não uma versão reduzida: monte a música, coloque na ordem do repertório e toque pelo celular ou tablet com um cabo até a mesa.",
+      "Se você toca pelo computador, o Remote abre os controles no navegador do celular de qualquer músico, sem instalar nada, para iniciar músicas, saltar seções ou ajustar a própria mixagem.",
+    ],
+    checklist: [
+      "Android no Google Play e iOS na App Store.",
+      "Uma sessão montada no computador abre igual no celular.",
+    ],
+  },
+  {
+    heading: "6. De onde vêm as faixas?",
+    paragraphs: [
+      "O LibreTracks é o player, não uma loja de músicas. As faixas são suas: gravadas pela sua equipe, compradas de quem tem os direitos ou separadas das suas próprias gravações.",
+      "O guia de multitracks grátis explica onde conseguir de forma legal e como preparar as que você já tem.",
+    ],
+  },
+];
+---
+
+<GuidePage
+  title="Programa de Playback Grátis para Tocar ao Vivo | LibreTracks"
+  description="Programa e app de playback grátis para tocar ao vivo: stems separados, click e guia nos fones, saltos de seção, mudança de tom, Android e iOS. Sem assinatura."
+  lang="pt"
+  eyebrow="Playback ao vivo"
+  heading="Programa de playback grátis para tocar ao vivo"
+  intro="Tudo o que você precisa para tocar com playback na igreja, no show ou no ensaio: como preparar, como mandar o click só para a banda e como se mover pela música ao vivo, com um programa grátis e sem assinatura."
+  hero={{ src: "/guide/articles/en/compact-view.webp", alt: "Um repertório de playback na Visão Compacta do LibreTracks", width: 1600, height: 940 }}
+  sections={sections}
+  related={[
+    { href: "/pt/download/", label: "Baixar o LibreTracks grátis" },
+    { href: "/pt/guias/multitracks-gratis/", label: "Onde conseguir multitracks grátis" },
+    { href: "/pt/docs/start/first-song/", label: "Sua primeira música, passo a passo" },
+  ]}
+  nextGuide={{ href: "/pt/guias/tocar-playback-ao-vivo/", label: "Como tocar com playback ao vivo" }}
+/>

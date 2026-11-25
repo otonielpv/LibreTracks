@@ -1,0 +1,109 @@
+---
+title: Documentação do LibreTracks
+description: "O guia do LibreTracks, o player multitrack grátis para tocar ao vivo: primeiros passos, cada botão explicado, montar o show, controle ao vivo, o Remote, celular e solução de problemas."
+sidebar:
+  label: Visão geral
+---
+
+import { CardGrid, LinkCard } from "@astrojs/starlight/components";
+import TutorialVideo from "../../../../components/guide/TutorialVideo.astro";
+
+O **LibreTracks** é um player multitrack para tocar ao vivo com playback:
+você carrega os stems das suas músicas, adiciona o click, a guia falada e os
+marcadores de seção, manda cada coisa para a sua saída (a música para o P.A.,
+o click para os fones in-ear) e, no show, salta de seção em seção com um
+toque. É grátis e de código aberto, e roda no **Windows, macOS e Linux**, no
+**iPhone e iPad** e no **Android**.
+
+Não é uma ferramenta de produção: as músicas são gravadas e mixadas na sua
+DAW de sempre (Reaper, Ableton Live, Logic, Cubase…), e o LibreTracks é o que
+você usa no palco.
+
+:::note[Idioma do app]
+A interface do LibreTracks está em inglês e espanhol. Esta documentação usa os
+nomes dos botões em inglês, como aparecem no app, e as capturas podem estar em
+inglês ou espanhol.
+:::
+
+## Primeira vez aqui?
+
+Este vídeo monta uma música do começo ao fim, com narração e o próprio som do
+app (em inglês):
+
+<TutorialVideo
+  src="/video/first-steps.mp4"
+  poster="/video/first-steps.webp"
+  title="Sua primeira música no LibreTracks"
+  duration="4:09"
+/>
+
+Vai usar no celular ou tablet? Veja
+[o mesmo passo a passo no celular](/pt/docs/mobile/), em 3 minutos.
+
+<CardGrid>
+  <LinkCard
+    title="Sua primeira música, passo a passo"
+    description="O vídeo, por escrito: da instalação até tocar ao vivo."
+    href="/pt/docs/start/first-song/"
+  />
+  <LinkCard
+    title="Conceitos básicos"
+    description="Sessão, música, faixa, clipe, marcador: as peças com que o LibreTracks trabalha."
+    href="/pt/docs/core-concepts/"
+  />
+  <LinkCard
+    title="A tela principal"
+    description="O que é cada área da janela e o que faz cada botão."
+    href="/pt/docs/interface/main-screen/"
+  />
+  <LinkCard
+    title="Requisitos do sistema"
+    description="O computador, o sistema e a interface de áudio de que você precisa."
+    href="/pt/docs/system-requirements/"
+  />
+</CardGrid>
+
+## O que tem neste guia
+
+**A interface, botão por botão.** Capturas numeradas de cada parte do app: a
+[tela principal](/pt/docs/interface/main-screen/), a
+[barra de ferramentas](/pt/docs/interface/toolbar/), a
+[régua, as faixas e os seus menus](/pt/docs/interface/timeline/), a
+[barra lateral e a Library](/pt/docs/interface/side-nav-library/), as
+[configurações](/pt/docs/interface/settings/) e o que muda
+[no celular ou tablet](/pt/docs/interface/mobile/).
+
+**Montar o show.** Como fazer cada coisa:
+[trazer o áudio](/pt/docs/tasks/library/), criar e organizar
+[músicas](/pt/docs/tasks/songs/), os seus [templates](/pt/docs/song-templates/) e os seus [arranjos](/pt/docs/arrangements/), colocar [marcadores](/pt/docs/tasks/markers/)
+ou deixar o [Analyze song](/pt/docs/song-analysis/) colocá-los, editar
+[clipes e faixas](/pt/docs/tasks/clips-tracks/), definir o
+[andamento e a fórmula de compasso](/pt/docs/tasks/tempo/), mandar [MIDI](/pt/docs/tasks/midi/)
+e projetar [vídeo](/pt/docs/tasks/video/).
+
+**Ao vivo e saídas de áudio.** As [saídas e o metrônomo](/pt/docs/audio-routing-metronome/),
+[tom e warp](/pt/docs/pitch-and-warp/),
+[saltos, Vamp e transições](/pt/docs/live-control-flow/), a
+[Live View](/pt/docs/live-view/) com letra e acordes, a [Compact View](/pt/docs/compact-view/), a
+[guia falada](/pt/docs/voice-guide/), os [pads de ambiente](/pt/docs/ambient-pads/),
+as [cenas de mixagem](/pt/docs/live-scenes/),
+a [automação](/pt/docs/automation/) e o [Remote](/pt/docs/remote-control/) para
+controlar tudo de um tablet.
+
+**Compartilhar.** [Exportar e importar](/pt/docs/integration-ecosystem/) músicas e
+sessões, a nuvem (Google Drive, OneDrive ou Dropbox), renderizar em WAV e
+templates, e as [sessões em rede](/pt/docs/network-sessions/) para conectar vários
+apps LibreTracks no mesmo Wi-Fi.
+
+## Dentro do app
+
+O botão **Tutorial** da barra lateral abre tours guiados que apontam para os
+controles no próprio app: primeiros passos, montar uma música, preparar o show
+e as três visões. Você pode repeti-los quando quiser.
+
+## Se algo não funcionar
+
+Veja [Solução de problemas](/pt/docs/help/troubleshooting/). Se não estiver lá,
+pergunte no [grupo do Facebook](https://www.facebook.com/groups/1795788251804551) ou no
+[Reddit](https://www.reddit.com/r/LibreTracks/), ou abra uma issue no
+[GitHub](https://github.com/otonielpv/LibreTracks/issues).

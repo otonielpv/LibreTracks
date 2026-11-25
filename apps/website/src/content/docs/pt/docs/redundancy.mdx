@@ -1,0 +1,202 @@
+---
+title: Redundância
+description: "Dois LibreTracks com a mesma sessão: o reserva segue o principal e toca junto, para você passar para ele se o principal falhar. Grátis, como todo o LibreTracks."
+---
+
+A **redundância** roda dois LibreTracks ao mesmo tempo com a mesma sessão. O
+**Main** toca o show; o **Backup** o segue e toca junto, em sincronia, com o
+seu próprio motor de áudio. Se a máquina principal travar, fechar ou perder a
+interface de áudio, você passa para o reserva **sem parar a música**.
+
+O que o LibreTracks faz: mantém o reserva em sincronia com o principal (alguns
+milissegundos por cabo), diz de relance se ele está pronto e emite um **tom
+piloto** que um comutador de hardware pode escutar.
+
+O que ele não faz: não move o áudio sozinho (um comutador ou a mesa de som faz
+isso).
+
+É grátis, como todo o LibreTracks.
+
+## Requisitos
+
+- A **mesma versão do LibreTracks** nas duas máquinas.
+- A **mesma sessão** nas duas. O jeito mais fácil: conecte o reserva e aperte
+  **Copy the main's session** (toque na pastilha no topo). Só viajam os
+  arquivos de áudio que o reserva ainda não tem; uma segunda cópia depois de
+  uma pequena edição leva segundos. Você também pode exportar um pacote de
+  sessão `.ltset` ou usar a sincronização pela nuvem. O reserva confere se as
+  sessões batem (músicas, áudio e os ajustes que mudam o tempo: modos de salto,
+  vamp, fade out) e diz o que é diferente.
+- Um **cabo de rede**: direto entre as duas máquinas ou passando por um switch.
+  O Wi-Fi serve para experimentar, não para um show.
+
+## Três montagens
+
+### Sem comutador (recomendada, e a que testamos)
+
+```
+  Main ── saídas ──► canais 1-2 da mesa   (abertos)
+  Backup ─ saídas ──► canais 3-4 da mesa  (mutados)
+        └──── cabo de rede ────┘
+```
+
+As duas máquinas vão para a mesa em canais diferentes; os canais do reserva
+ficam mutados. Se o principal falhar, o técnico de som muta 1-2 e abre 3-4. O
+reserva já estava tocando no mesmo ponto, então a música continua.
+
+### Comutador analógico (Radial SW8 ou parecido)
+
+```
+  Main ── saídas 1-7 ─► entrada A do comutador ─┐
+         saída 8 (tom piloto) ─► A canal 8 ─────┤
+  Backup ─ saídas 1-7 ─► entrada B do comutador ┼─► mesa / P.A.
+```
+
+Ligue o tom piloto no principal, na saída que o comutador vigia (por exemplo a
+saída 8), e ajuste o limiar do comutador para o tom o manter em A. Quando o
+principal morre, o tom para e o comutador passa para B.
+
+> Montagem feita a partir da documentação do fabricante; não conseguimos
+> testá-la com o aparelho. Se você testar, conte para nós se funciona no
+> [GitHub](https://github.com/otonielpv/LibreTracks/issues).
+
+### Interface redundante (iConnectivity PlayAUDIO1U / 12)
+
+Uma máquina em cada porta USB da interface. Tom piloto no principal, na saída
+que o aparelho pede no manual.
+
+> Montagem feita a partir da documentação do fabricante; não conseguimos
+> testá-la com o aparelho (o sinal "LifeSine" dele não é documentado: o tom
+> piloto pode precisar de outra frequência ou nível). Se você testar, conte para
+> nós se funciona no [GitHub](https://github.com/otonielpv/LibreTracks/issues).
+
+## Passo a passo
+
+Abra **Settings → Redundancy** em cada máquina.
+
+![A aba Redundancy em Settings: o papel desta máquina e a seção do principal](/guide/desktop-en/redundancy-settings-1.png)
+
+**No principal**
+
+1. **This machine's role**: **Main**.
+2. Anote o **Backup PIN** (ou aperte **New PIN**). O reserva o pede na primeira
+   vez; depois fica lembrado (aparece em **Trusted backups**, onde **Forget** o
+   tira).
+3. Com um comutador: ligue **Emit the pilot tone** e escolha a **Physical
+   output** (o número da saída da interface; essa saída fica só para o tom).
+   Padrão: 1000 Hz a -12 dBFS.
+
+**No reserva**
+
+1. Digite o **endereço do principal** (o IP dele, com a porta se não for 3040)
+   e o **PIN do principal**.
+2. Aperte **Connect as backup**.
+3. Espere a pastilha no topo mostrar **Armed: 0.8 ms** em verde.
+
+## O que a pastilha quer dizer
+
+| No principal | No reserva | Significado |
+| --- | --- | --- |
+| (sem pastilha) | Backup: connecting (cinza) | Ainda não conectado |
+| Backup: syncing (âmbar) | Following: 3.4 ms (âmbar) | Conectado, entrando em sincronia |
+| Backup armed (verde) | Armed: 0.8 ms (verde) | Pronto para trocar |
+| Backup: different session (vermelho) | Different session (vermelho) | As sessões são diferentes: o reserva não segue. Toque na pastilha para ver o que é diferente |
+| Backup lost (vermelho piscando) | MAIN LOST (vermelho piscando) | Eles não se veem |
+|  | Standalone (azul) | O reserva está no comando |
+
+Toque na pastilha para ver os detalhes: a outra máquina, a diferença de tempo,
+as correções, o tom piloto e as diferenças entre as sessões.
+
+## Se o principal falhar
+
+No reserva você vê um aviso vermelho grande **Main lost**. O reserva
+**continua tocando** onde estava, e os controles dele voltam a responder na
+hora: você pode parar ou pausar a música pelo reserva.
+
+- Aperte **I'm in charge now** quando decidir que o reserva comanda o show
+  (**Standalone**). Isso nunca acontece sozinho.
+- Se o principal volta no mesmo estado e ninguém mexeu no reserva, o reserva
+  simplesmente volta a segui-lo.
+- Se algo mudou no meio-tempo, o reserva pergunta: **Follow the main again** ou
+  **Make this machine the main**.
+
+**Trocar de propósito.** O principal não precisa travar: se a interface de
+áudio dele falhar ou estalar, abra a pastilha no reserva e aperte **Switch to
+this machine** (ele pede confirmação). O principal desliga o tom piloto, para
+um comutador passar para o reserva, e mostra que o reserva assumiu.
+
+Não há volta automática. Quando o antigo principal reinicia, ele oferece virar
+o reserva do novo principal (**Become the backup**); só troca se você aceitar,
+porque o comutador pode estar mandando ele para o P.A.
+
+Se você usa o tom piloto, um principal que fechou de forma inesperada volta com
+ele **desligado** e o aviso "This machine closed unexpectedly. Re-arm the
+pilot tone when it is the main again." Aperte **Re-arm the pilot tone** quando
+ele for de fato o principal.
+
+## Tablets e celulares seguem o reserva
+
+Quando o reserva assume (principal perdido, ou **Switch to this machine**):
+
+- Os **convidados de sessão em rede** (outros apps LibreTracks) passam para o
+  reserva sozinhos, com o mesmo papel e sem digitar o PIN de novo. O principal
+  diz antes para eles onde está o reserva.
+- O **Remote** (navegador) mostra "The backup took over" ou "Lost the
+  connection with the main" com um botão **Go to the backup's remote**. Se
+  alguém recarregar a página enquanto o principal está fora, precisa abrir o
+  endereço do reserva à mão.
+
+## Um controlador MIDI ligado às duas máquinas
+
+É a montagem comum, e quer dizer que cada toque chega às duas máquinas.
+Enquanto o reserva segue o principal, ele **ignora as próprias entradas de
+transporte** (teclado, MIDI, o Remote, convidados) e mostra "This machine is
+the backup of …", para um play/pause ou um vamp nunca chegar duas vezes.
+
+**Forward my inputs to the main** é para o caso contrário: um controlador ligado
+só ao reserva. Deixe desligado quando o controlador chega às duas máquinas. No
+principal, **Let the backup forward orders** precisa estar ligado para isso
+funcionar.
+
+A mixagem ao vivo (volumes, mute, solo, master da música, click e guia) é
+copiada do principal para o reserva, então trocar soa igual.
+
+As **faixas MIDI** da música (troca de letra, luzes, program changes) só saem
+do principal. Enquanto o reserva segue, ele não manda nada, então um
+ProPresenter ou uma mesa de luz ligados às duas máquinas nunca recebem cada
+mensagem duas vezes. Se o principal se perde ou você aperta **I'm in charge
+now**, o reserva começa a mandar dali em diante.
+
+## Teste antes do show
+
+1. As duas máquinas abrem a mesma sessão, e o reserva mostra **Armed**.
+2. Toque uma música no principal: o reserva a segue (um fone de cada lado).
+3. Salte para uma seção e ligue e desligue o vamp no principal: o reserva faz o
+   mesmo.
+4. Com um comutador: **Cut the tone for 3 s** e confira se ele passa para B e
+   volta.
+5. Puxe o cabo de rede: o reserva continua tocando e mostra **MAIN LOST**.
+   Conecte de novo: ele volta a **Armed**.
+6. Feche o LibreTracks no principal no meio de uma música: o reserva continua
+   tocando, e **I'm in charge now** dá o show para ele.
+
+## Calibrar (opcional)
+
+Para saber a diferença real nos seus cabos, grave a saída do principal no
+canal esquerdo e a do reserva no direito de uma terceira interface, e meça a
+gravação (o método está no repositório,
+`docs/plans/completed/redundancy/mediciones.md`). Se o reserva estiver sempre
+atrasado ou adiantado, ajuste **Manual compensation (ms)** no reserva.
+
+## Limites conhecidos
+
+- As edições estruturais no principal (clipes, marcadores, músicas, faixas,
+  arranjos) não são seguidas ao vivo: o reserva mostra **Different session**
+  até você apertar **Copy the main's session** de novo.
+- Celulares e tablets ainda não podem ser principal nem reserva.
+- Os comutadores de hardware não foram testados com o LibreTracks (veja as
+  montagens).
+
+Procurando outra coisa? As [sessões em rede](/pt/docs/network-sessions/) deixam
+outros apps seguirem e controlarem um LibreTracks, sem tocarem áudio eles
+mesmos.

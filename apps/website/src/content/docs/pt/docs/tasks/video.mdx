@@ -1,0 +1,215 @@
+---
+title: Vídeo no projetor
+description: "Adicione vídeos às suas músicas e projete-os em sincronia numa segunda tela, num projetor ou numa TV: faixa de vídeo, assistente de tela, ajuste, tela de espera, calibrar o atraso e o preto de emergência."
+sidebar:
+  order: 8
+---
+
+import Legend from "../../../../../components/guide/Legend.astro";
+
+O LibreTracks pode tocar **vídeo em sincronia com a música** numa segunda
+tela: o projetor do local, uma TV ou um monitor para a banda. O vídeo fica numa
+faixa própria na timeline, como o áudio, e segue a música quando você toca,
+salta para um marcador, faz Vamp ou muda o andamento com warp.
+
+## Adicionar um vídeo
+
+**Arraste o arquivo de vídeo** do gerenciador de arquivos:
+
+- **para a timeline**: ele é colocado onde você soltar, numa faixa de vídeo
+  (se não houver nenhuma, uma é criada);
+- **para a Library**: ele vai para a seção **Videos**. Dê um clique duplo, ou
+  aperte `+`, para colocá-lo na timeline no cursor.
+
+![A seção Videos da Library](/guide/desktop-en/library-videos.png)
+
+Formatos: **MP4, MOV, MKV, WebM, AVI e MPG**. Como o áudio, o vídeo é usado
+**de onde ele estiver** no seu disco, sem copiar.
+
+:::tip[Para os saltos responderem na hora]
+Um vídeo exportado com poucos keyframes demora para responder quando você salta
+para outro ponto. Se o LibreTracks detecta isso, ele marca com um ícone na
+Library. Ao exportar do seu editor, use **um keyframe por segundo**.
+:::
+
+## O som do vídeo
+
+Se o vídeo que você coloca **tem som**, o LibreTracks pergunta se você quer
+separá-lo numa faixa de áudio normal:
+
+![A pergunta ao colocar um vídeo com som](/guide/desktop-en/video-audio-prompt.png)
+
+- **Extract as audio track**: o som é salvo como mais um arquivo de áudio (um
+  WAV na Library) e colocado numa **faixa de áudio nova abaixo do vídeo**,
+  alinhada com ele. A partir daí é uma faixa como qualquer outra: tem volume,
+  mute e solo, você a manda para a saída que quiser e pode movê-la ou cortá-la.
+- **No**: o vídeo é colocado sem som.
+
+:::caution[Um vídeo nunca toca o próprio som]
+O LibreTracks toca **só a imagem** de um vídeo. Se você não extrair o áudio,
+aquele som não é ouvido em lugar nenhum. Assim o mesmo som nunca toca duas
+vezes, e o som do vídeo passa pela sua mixagem e pelas suas saídas como todo o
+resto.
+:::
+
+Se você colocar vários vídeos de uma vez, a pergunta vem uma vez só para todos.
+**Remember my choice** aplica a mesma resposta dali em diante, sem perguntar de
+novo. Para mudar, ou para voltar a ser perguntado, vá em **Settings → Video →
+When placing a video with sound**: **Ask**, **Always extract the audio to a
+track** ou **Don't extract the audio**.
+
+Disse não para um vídeo e agora quer o som dele? Botão direito no clipe →
+**Extract audio**.
+
+Como o áudio extraído é um arquivo de áudio comum, ele **viaja nos pacotes**
+mesmo se você exportar sem os vídeos: a música soa igual em outro computador.
+
+Você também pode criar uma faixa de vídeo vazia clicando com o botão direito na
+parte vazia da lista de faixas → **Add video track**.
+
+## A faixa e o clipe de vídeo
+
+![Uma faixa de vídeo com o seu clipe](/guide/desktop-en/video-track.png)
+
+<Legend>
+
+1. **Nome** da faixa (botão direito para renomear, mudar a cor ou apagar).
+2. **Olho**: mostra ou esconde esta faixa na saída.
+3. **S** (solo): mostra só esta faixa de vídeo.
+4. O **clipe**, com miniaturas do vídeo. Arraste para movê-lo.
+5. **Bordas** do clipe: arraste para cortar o início ou o fim.
+6. **Alças de fade**, nos cantos de cima (aparecem ao passar o mouse):
+   arraste para o vídeo entrar ou sair do preto com fade.
+
+</Legend>
+
+Com **várias faixas de vídeo** cujos clipes se sobrepõem no tempo, aparece o da
+**faixa de cima**. Assim você pode pôr um fundo longo embaixo e clipes curtos
+por cima.
+
+Botão direito num clipe:
+
+![O menu de um clipe de vídeo](/guide/desktop-en/menu-video-clip.png)
+
+- **Split at cursor** (`S`) e **Duplicate** (`Ctrl+D`).
+- **Fit** para este clipe: o da saída, **Fit (black bars)**, **Fill (crops)**
+  para preencher a tela, ou **Stretch**.
+- **Remove fades**, **Color**, **Extract audio** (separa o som numa faixa de
+  áudio, veja [acima](#o-som-do-vídeo)) e **Delete** (`Del`).
+
+## Escolher a tela: o assistente
+
+Quando você abre uma sessão com vídeo e ainda não escolheu uma tela (ou a que
+escolheu não está conectada), o LibreTracks avisa:
+
+![O aviso de sessão com vídeo](/guide/desktop-en/video-notice.png)
+
+**Set up** abre o assistente (também está em **Settings → Video → Wizard…**).
+Nada é salvo até você apertar **Done** no fim.
+
+1. **Boas-vindas**.
+
+   ![Assistente, passo 1](/guide/desktop-en/video-wizard-1.png)
+
+2. **Escolha a tela**. Cada tela conectada mostra um número grande: escolha o
+   cartão com o número que você vê no projetor. A marcada como *where
+   LibreTracks is* é a tela do próprio computador. Se você só tem uma, pode
+   **usar uma janela por enquanto**.
+
+   ![Assistente, escolhendo a tela](/guide/desktop-en/video-wizard-2.png)
+
+3. **Confira a imagem**: um padrão de teste é projetado. Se você o vê,
+   **Yes, I see it**; se não, **No, try another**.
+
+   ![Assistente, conferindo a imagem](/guide/desktop-en/video-wizard-3.png)
+
+4. **Ajuste e tela de espera**: como o vídeo se adapta à tela (**Fit** com
+   barras pretas, **Fill** cortando, ou **Stretch**) e o que aparece quando não
+   há vídeo (**Black** ou uma **imagem** sua, como o logo da sua igreja ou
+   banda).
+
+   ![Assistente, ajuste e tela de espera](/guide/desktop-en/video-wizard-4.png)
+
+5. **Sincronia** (opcional): calibre o atraso do projetor agora ou depois
+   (veja abaixo).
+
+   ![Assistente, sincronia](/guide/desktop-en/video-wizard-5.png)
+
+6. **Pronto**: resume para onde o vídeo vai.
+
+   ![Assistente, pronto](/guide/desktop-en/video-wizard-6.png)
+
+## Ajustes de vídeo
+
+Tudo o que está no assistente, e um pouco mais, fica em **Settings → Video**:
+
+![Ajustes de vídeo (1)](/guide/desktop-en/settings-video-1.png)
+
+- **Video output**: liga ou desliga a projeção.
+- **Display**, com **Refresh** (se você acabou de conectar uma) e **Identify
+  displays** (mostra o número em cada uma).
+- **Mode**: **Fullscreen** ou **Window**. Um clique duplo no vídeo alterna
+  entre os dois; a janela pode ser movida e redimensionada.
+- **Fullscreen always in front**: nada cobre o projetor, nem as notificações.
+  Desmarque se você precisa pôr outra janela por cima.
+
+![Ajustes de vídeo (2)](/guide/desktop-en/settings-video-2.png)
+
+- **Fit** e **Idle screen**, como no assistente.
+- **When stopped**: o que fica na tela quando você para: o **último quadro**, a
+  **tela de espera** ou **preto**.
+- **Hardware decoding**: **Automatic** usa a placa de vídeo. Desligue só se um
+  vídeo aparecer errado.
+
+![Ajustes de vídeo (3)](/guide/desktop-en/settings-video-3.png)
+
+- **Delay compensation** (veja abaixo).
+- **Test pattern**: projeta uma imagem de teste para focar e enquadrar o
+  projetor.
+- **When placing a video with sound**: perguntar, sempre extrair o áudio para
+  uma faixa ou nunca extrair (veja [O som do vídeo](#o-som-do-vídeo)).
+- Embaixo, algumas **estatísticas** de sincronia e de quadros, úteis se algo
+  der errado.
+
+### Calibrar o atraso
+
+Os projetores e muitas TVs mostram a imagem **um pouco atrasada** em relação ao
+som. **Delay compensation** corrige isso: um valor positivo adianta a imagem.
+
+Com **Calibrate…**, ligue o metrônomo e aperte Play: a saída mostra um **flash
+branco em cada tempo**. Mova o controle até o flash e o click baterem. Ou meça:
+toque 10 vezes quando **vir** o flash e outras 10 quando **ouvir** o click, e o
+LibreTracks sugere o valor. Faça isso **no local**, com o projetor e o som
+reais.
+
+## Ao vivo
+
+- **Preto de emergência**: a tecla **`B`** apaga a projeção na hora, e outro
+  toque a traz de volta. Há também ações para **fade to black**, **mostrar a
+  tela de espera** e **ligar ou desligar a saída**, às quais você pode atribuir
+  teclas em [Settings → Shortcuts](/pt/docs/interface/settings/) ou um controle
+  MIDI.
+- O **Remote** tem um botão **Black** para fazer isso pelo tablet. Veja
+  [Remote personalizado](/pt/docs/remote-control/).
+- Na barra superior, um **indicador** mostra em qual tela o vídeo sai e avisa se
+  ela está desconectada ("Video: display disconnected") ou em preto. Se o
+  projetor cair no meio do show, a música continua tocando e o indicador avisa.
+- **No computador**, se outra janela cobrir a janela do vídeo, botão direito no
+  ícone de câmera do indicador › **Bring to front**; o mesmo menu pode
+  escondê-la.
+- **Transmitir com OBS (Windows)**: a janela de vídeo aparece na *Captura de
+  janela* do OBS, então você pode capturá-la sozinha em vez da tela inteira.
+
+## Levar os vídeos para outro computador
+
+Quando você [exporta](/pt/docs/integration-ecosystem/) uma música ou uma sessão
+que tem vídeo, aparece uma caixa **Include the videos in the package**, com
+quanto eles ocupam. Sem eles o pacote fica bem mais leve, mas você vai precisar
+copiar os vídeos à parte e localizá-los de novo ao abrir. Quando você importa
+um pacote com vídeos, o LibreTracks pergunta se você quer **importar os vídeos
+também** e confere se eles cabem.
+
+No **Android e iPhone/iPad** o vídeo também sai por cabo (USB-C para HDMI, ou o
+adaptador Lightning Digital AV). **Settings → Video** no celular tem um guia
+para conectar. Se você bloquear o celular, o projetor desliga até você
+desbloqueá-lo.

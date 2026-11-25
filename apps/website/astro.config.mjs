@@ -67,10 +67,10 @@ const pageSource = (pathname) => {
     clean === ""
       ? ["src/pages/index.astro"]
       : [`src/pages/${clean}.astro`, `src/pages/${clean}/index.astro`];
-  const docs = clean.match(/^(?:(es)\/)?docs(?:\/(.+))?$/);
+  const docs = clean.match(/^(?:(es|pt)\/)?docs(?:\/(.+))?$/);
   if (docs) {
     // Guide pages with numbered captures are .mdx (they import Legend/Clip).
-    const base = `src/content/docs/${docs[1] ? "es/docs" : "docs"}/${docs[2] ?? "index"}`;
+    const base = `src/content/docs/${docs[1] ? `${docs[1]}/docs` : "docs"}/${docs[2] ?? "index"}`;
     candidates.push(`${base}.md`, `${base}.mdx`);
   }
   return candidates.find((candidate) => existsSync(new URL(candidate, import.meta.url)));
@@ -88,7 +88,7 @@ export default defineConfig({
   },
   i18n: {
     defaultLocale: "en",
-    locales: ["en", "es"],
+    locales: ["en", "es", "pt"],
     routing: {
       prefixDefaultLocale: false,
     },
@@ -100,7 +100,7 @@ export default defineConfig({
     // marked noIndex and listing a page we ask Google not to index is a
     // contradiction the coverage report would keep reminding us about.
     sitemap({
-      filter: (page) => !/^\/(es\/)?(admin\/|download\/stats\/)/.test(new URL(page).pathname),
+      filter: (page) => !/^\/((es|pt)\/)?(admin\/|download\/stats\/)/.test(new URL(page).pathname),
       serialize: (item) => {
         const source = pageSource(new URL(item.url).pathname);
         const lastmod = source && lastCommitDate(source);
@@ -126,6 +126,7 @@ export default defineConfig({
       title: {
         en: "LibreTracks Docs",
         es: "Documentación LibreTracks",
+        pt: "Documentação LibreTracks",
       },
       logo: {
         src: "./src/assets/icon.svg",
@@ -143,7 +144,7 @@ export default defineConfig({
       sidebar: [
         {
           label: "Get started",
-          translations: { es: "Empezar" },
+          translations: { es: "Empezar", pt: "Começar" },
           collapsed: false,
           items: [
             { slug: "docs" },
@@ -154,13 +155,13 @@ export default defineConfig({
         },
         {
           label: "The interface, button by button",
-          translations: { es: "La interfaz, botón a botón" },
+          translations: { es: "La interfaz, botón a botón", pt: "A interface, botão por botão" },
           collapsed: false,
           autogenerate: { directory: "docs/interface" },
         },
         {
           label: "Building the show",
-          translations: { es: "Montar el show" },
+          translations: { es: "Montar el show", pt: "Montar o show" },
           collapsed: false,
           items: [
             { slug: "docs/tasks/library" },
@@ -181,7 +182,7 @@ export default defineConfig({
         },
         {
           label: "Playing live",
-          translations: { es: "Tocar en directo" },
+          translations: { es: "Tocar en directo", pt: "Tocar ao vivo" },
           collapsed: false,
           items: [
             { slug: "docs/live-view" },
@@ -197,7 +198,7 @@ export default defineConfig({
         },
         {
           label: "Sharing and advanced",
-          translations: { es: "Compartir y avanzado" },
+          translations: { es: "Compartir y avanzado", pt: "Compartilhar e avançado" },
           collapsed: false,
           items: [
             { slug: "docs/integration-ecosystem" },
@@ -210,7 +211,7 @@ export default defineConfig({
         },
         {
           label: "Help",
-          translations: { es: "Ayuda" },
+          translations: { es: "Ayuda", pt: "Ajuda" },
           collapsed: false,
           autogenerate: { directory: "docs/help" },
         },

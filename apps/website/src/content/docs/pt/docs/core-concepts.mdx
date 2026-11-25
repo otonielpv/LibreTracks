@@ -1,0 +1,115 @@
+---
+title: Conceitos básicos
+description: "As peças do LibreTracks em poucas palavras: sessão, música, faixa, clipe, marcador, Library e saídas, e como elas se encaixam."
+---
+
+Antes de entrar nos botões, ajuda conhecer as peças com que o LibreTracks
+trabalha. São poucas, e quase todo o resto vem delas.
+
+## A sessão: o seu repertório
+
+Uma **sessão** é o que você leva para o show: uma ou mais músicas em ordem,
+com as suas faixas, a sua mixagem e as suas saídas. É o que você abre, salva
+e leva para outro computador.
+
+No disco, uma sessão é **uma pasta** com:
+
+- o arquivo **`.ltsession`**, o que você abre;
+- uma pasta **`audio`**, para onde vai o áudio que chega **dentro de um
+  pacote** quando você o importa (um `.ltpkg` ou um `.ltset` completo);
+- uma pasta **`cache`** com as formas de onda (elas são refeitas se você a
+  apagar).
+
+Os seus arquivos de áudio **não são copiados** para a sessão: o LibreTracks
+os toca de onde estiverem. Então, se você mover ou apagar um original, aquela
+faixa fica muda (o LibreTracks avisa e deixa você localizá-lo de novo). Para
+levar uma sessão para outro computador, exporte-a; veja
+[Exportar, importar e compartilhar](/pt/docs/integration-ecosystem/).
+
+## A música: a peça principal
+
+Dentro de uma sessão tudo se organiza em **músicas**. Na timeline cada
+música é um trecho da régua com nome (a **barra da música**), e tudo o que
+está embaixo dela pertence a ela: os seus clipes, os seus marcadores, o seu
+andamento.
+
+O que mais importa:
+
+- **Cada clipe pertence a uma música.** Mova uma música e tudo o que está
+  nela se move; apague-a e tudo o que está nela vai junto.
+- **Muitos ajustes são da música, não da sessão**: o **andamento** e a
+  **fórmula de compasso**, o **tom**, a **transposição** e o **warp**, e o
+  seu **volume master**. Assim cada música do repertório pode estar no seu
+  tom e na sua velocidade.
+- Ao vivo, você salta **entre músicas** com uma transição (no fim, no próximo
+  marcador, com fade…).
+
+As músicas são criadas a partir de um trecho da timeline, de uma pasta da
+Library, soltando arquivos de áudio ou importando um `.ltpkg`. Veja [Músicas](/pt/docs/tasks/songs/).
+
+## Faixas
+
+As **faixas** são as linhas da timeline. Elas pertencem à sessão inteira: a
+faixa "Bateria" é a mesma em todas as músicas, mesmo que cada música tenha
+clipes diferentes nela (ou nenhum).
+
+| Faixa | Para quê |
+| --- | --- |
+| **Audio** | Guarda os clipes de áudio: os stems da música, o click, a guia. |
+| **Folder** | Agrupa outras faixas. O seu volume, mute e solo valem para todas, e ela pode definir a saída de todas de uma vez. |
+| **MIDI** | Manda mensagens MIDI para outros equipamentos (mesa de luz, letra). Veja [MIDI](/pt/docs/tasks/midi/). |
+| **Video** | Guarda os vídeos que são projetados. Veja [Vídeo](/pt/docs/tasks/video/). |
+| **Automation** | Uma linha especial com ações num momento exato: saltar, mutar, mover um fader… Veja [Automação](/pt/docs/automation/). |
+
+Cada faixa tem uma **saída**: para onde ela manda o som (Master, um par de
+fones, outra saída da sua interface). Veja
+[Saídas de áudio e metrônomo](/pt/docs/audio-routing-metronome/).
+
+As faixas que o LibreTracks cria sozinho quando você solta um arquivo de
+áudio são apagadas automaticamente quando ficam sem clipes. As faixas que você
+mesmo cria nunca são apagadas sozinhas.
+
+## Clipes
+
+Um **clipe** é um pedaço de um arquivo de áudio colocado numa faixa, num
+ponto de uma música. É só uma **referência**: cortar, dividir ou duplicar
+nunca altera o arquivo original. Veja [Clipes e faixas](/pt/docs/tasks/clips-tracks/).
+
+## A Library
+
+A **Library** é a lista de todos os arquivos de áudio (e vídeo) da sessão,
+estejam ou não na timeline. Dali você arrasta arquivos para a timeline,
+organiza em **pastas** (que só existem na Library: elas não movem os
+arquivos) e cria músicas a partir de uma pasta. Veja
+[Biblioteca e áudio](/pt/docs/tasks/library/).
+
+## Marcadores
+
+Os **marcadores** apontam momentos da música. Há dois tipos:
+
+- **Sections** (Intro, Verse, Chorus…): os destinos para saltar ao vivo,
+  anunciados pela [guia falada](/pt/docs/voice-guide/).
+- **Cues** (Drums in, Last time…): indicações para a banda, que também
+  aparecem no Remote e na Live View.
+
+Arrastar um marcador de uma linha para a outra muda o seu tipo. Veja
+[Marcadores](/pt/docs/tasks/markers/).
+
+## Andamento e fórmula de compasso
+
+Cada música tem o seu **andamento** e a sua **fórmula de compasso**, e pode
+mudá-los no meio com uma mudança de andamento ou de compasso na régua. O
+click, a grade e os saltos "depois de alguns compassos" seguem esses valores.
+Veja [Andamento e fórmula de compasso](/pt/docs/tasks/tempo/).
+
+## Três formas de ver a mesma coisa
+
+A sessão pode ser mostrada de três formas, e o que você muda numa aparece nas
+outras (`Tab` alterna entre elas):
+
+- A **DAW view**, a timeline: para montar e editar.
+- A [Compact View](/pt/docs/compact-view/): cada música numa coluna, para
+  organizar o repertório e mixar.
+- A [Live View](/pt/docs/live-view/): botões grandes para tocar ao vivo.
+
+E de outro aparelho, o [Remote](/pt/docs/remote-control/).

@@ -1,0 +1,98 @@
+---
+import AlternativePage from "../../components/AlternativePage.astro";
+
+const rows = [
+  [
+    "Quanto você paga",
+    "Uma licença do AbleSet somada a uma licença do Ableton Live.",
+    "Nada. Grátis e de código aberto (AGPL-3.0), sem conta, sem assinatura.",
+  ],
+  [
+    "Onde roda",
+    "Um app complementar que precisa do Ableton Live aberto no mesmo computador.",
+    "Um player independente. Não precisa de DAW para tocar o show.",
+  ],
+  [
+    "Montar o repertório",
+    "As músicas são seções de um único Set do Live, marcadas com locators.",
+    "Cada música é uma unidade própria, com stems, andamento, tom, marcadores e volume master. O seu .als é importado como ponto de partida.",
+  ],
+  [
+    "Controle pelo celular e tablet",
+    "Interface web em qualquer aparelho da rede.",
+    "Remote web integrado em qualquer aparelho da rede: transporte, marcadores e mixer, com layout editável.",
+  ],
+  [
+    "Click e guia falada",
+    "Montados como faixas e roteamento dentro do Live.",
+    "Metrônomo e guia falada integrados, cada um com a sua saída.",
+  ],
+  [
+    "Mudança de tom",
+    "Feita no Live, com warp e transposição faixa por faixa.",
+    "Por música, escolhendo quais stems acompanham; click e guia continuam afinados.",
+  ],
+  [
+    "Plataformas",
+    "macOS e Windows, onde o Live rodar.",
+    "Windows, macOS, Linux, Android e iOS.",
+  ],
+];
+
+const strengths = [
+  [
+    "Sem licença do Ableton",
+    "O rig inteiro é grátis. Útil para um segundo computador, uma máquina reserva ou uma equipe que só usava o Live para tocar stems renderizados.",
+  ],
+  [
+    "Começa pelo seu Set do Live",
+    "File → Import Reaper/Ableton lê arquivos .als: clipes de áudio do Arrangement, faixas, andamento, fórmula de compasso e locators, que viram marcadores de seção.",
+  ],
+  [
+    "Saltos que respeitam o compasso",
+    "Salte para uma seção agora, no próximo marcador, depois de alguns compassos ou no fim da música, e segure um Vamp quando o momento se estender.",
+  ],
+  [
+    "Roda no celular ou tablet",
+    "O app para Android e iOS é o player completo, então o repertório pode ficar num tablet em vez de num notebook.",
+  ],
+];
+
+const limits = [
+  "Se o seu show usa instrumentos, efeitos ou dispositivos Max for Live do Ableton tocando em tempo real, continue com o Live e o AbleSet. O LibreTracks reproduz áudio renderizado, sem plugins nem instrumentos virtuais.",
+  "O AbleSet é uma ferramenta madura e focada, com recursos para a banda inteira construídos ao longo de anos. Se o seu rig funciona e você já tem as duas licenças, trocar só para economizar não vale a pena.",
+  "O importador de .als traz o que importa no palco, não cada detalhe do Set. Confira o resultado antes de tocar ao vivo.",
+  "O suporte aqui é a documentação, o repositório no GitHub e a comunidade, não um canal de suporte comercial.",
+];
+
+const faq = [
+  [
+    "Existe uma alternativa grátis ao AbleSet?",
+    "O LibreTracks é grátis e de código aberto e faz o mesmo trabalho no palco: repertório por músicas, click, guia falada, saltos de seção, MIDI e um remote no celular ou tablet. Não precisa do Ableton Live para rodar.",
+  ],
+  [
+    "Preciso do Ableton Live para usar o LibreTracks?",
+    "Não. O LibreTracks é um player independente. Se você já tem Sets do Live, ele pode importá-los como ponto de partida.",
+  ],
+  [
+    "Posso levar o meu show do AbleSet para o LibreTracks?",
+    "O LibreTracks importa o Set do Live (.als) por trás do seu show no AbleSet: clipes de áudio, faixas, andamento e locators. Instrumentos e efeitos precisam ser renderizados em áudio antes.",
+  ],
+];
+---
+
+<AlternativePage
+  lang="pt"
+  rival="AbleSet"
+  title="Alternativa Grátis ao AbleSet sem Ableton | LibreTracks"
+  description="Uma alternativa grátis e de código aberto ao AbleSet que roda sem o Ableton Live: repertório, click, guia falada, saltos de seção, MIDI e remote no celular. Sem licença."
+  eyebrow="Alternativa grátis ao AbleSet"
+  heading="Alternativa grátis ao AbleSet que roda sem o Ableton Live"
+  intro="O AbleSet transforma o Ableton Live num player de repertório para o palco, o que significa pagar duas licenças e manter uma DAW aberta durante o show. O LibreTracks faz a parte do palco sozinho: músicas, click, guia falada, saltos musicais, MIDI e remote no celular, de graça e com código aberto, e abre os seus Sets do Live."
+  rows={rows}
+  strengths={strengths}
+  limitsTitle="Onde o AbleSet e o Live são a melhor escolha"
+  limits={limits}
+  faq={faq}
+  closing="Importe um Set do Live com o qual você já toca, confira os marcadores e passe a música inteira no ensaio. Não há nada para comprar nem teste que expire."
+/>

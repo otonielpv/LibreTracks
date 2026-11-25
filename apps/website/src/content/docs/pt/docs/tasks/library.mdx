@@ -1,0 +1,145 @@
+---
+title: Biblioteca e áudio
+description: "Como importar áudio no LibreTracks, organizá-lo em pastas, levá-lo para a timeline (um arquivo, vários ou uma pasta inteira como música) e o que fazer quando falta um arquivo."
+sidebar:
+  order: 1
+---
+
+import Clip from "../../../../../components/guide/Clip.astro";
+
+Todo o áudio de uma sessão passa pela **Library**. Dali você o organiza e o
+leva para a timeline. Abra o painel com o botão **Library** da barra lateral;
+o que cada botão faz está em
+[Barra lateral e Library](/pt/docs/interface/side-nav-library/#a-library).
+
+## Importar áudio
+
+Há quatro formas, e todas chegam ao mesmo lugar:
+
+- **Das suas pastas**, no topo da Library: adicione a pasta onde você guarda
+  os seus multitracks (**Add folder**), expanda-a e arraste o áudio para a
+  timeline. Ele é importado e colocado onde você soltar. Veja
+  [As suas pastas](/pt/docs/interface/side-nav-library/#as-suas-pastas).
+- **Import audio**, em *In this session*: você escolhe um ou mais arquivos.
+- **Arraste arquivos** do Explorador do Windows ou do Finder do macOS para a
+  timeline. Eles são importados e colocados onde você soltar.
+- **No celular**, o botão **Audio** da barra de ações ou **Import audio** na
+  Library. Ao terminar, o app pergunta se você quer adicioná-los à timeline:
+  cada arquivo de áudio ganha a sua faixa na posição do cursor.
+
+Formatos: WAV, AIFF, FLAC, MP3 e outros formatos comuns; no celular também
+AAC/M4A, OGG e Opus.
+
+Cada arquivo aparece na Library **assim que começa a ser importado**, com o
+seu progresso, sem esperar o lote inteiro. O áudio comprimido (MP3, FLAC…) é
+preparado uma vez em segundo plano e guardado no
+[cache de áudio](/pt/docs/interface/settings/#storage), para que na próxima vez que
+você abrir a sessão ele carregue na hora. Você pode dar play enquanto ele é
+preparado: as faixas que ainda não estão prontas entram sozinhas assim que
+ficam.
+
+:::note[O meu arquivo é copiado?]
+Não. O LibreTracks **usa o áudio de onde ele estiver** no seu disco; importar
+só o adiciona à sessão. Por isso, se depois você mover ou apagar aquele
+arquivo, a faixa fica muda (veja [Quando falta um arquivo](#quando-falta-um-arquivo)).
+
+O áudio só é copiado quando você **exporta** uma música (`.ltpkg`) ou uma
+sessão inteira (`.ltset`), para viajar dentro do pacote. No celular funciona
+igual por padrão; se preferir que ele seja copiado, desligue *Import without
+copying audio into the session* (veja [LibreTracks no celular](/pt/docs/mobile/#importar-áudio-sem-copiar)).
+:::
+
+## Organizar em pastas
+
+As pastas da Library são **virtuais**: organizam a lista, mas não movem nem
+copiam nada no disco. O comum é uma pasta por música, com os stems dentro.
+
+<Clip
+  src="/guide/desktop-en/library-folder.mp4"
+  width={380}
+  poster="/guide/desktop-en/library-folder.webp"
+  caption="Botão direito em “Unfiled” › Create virtual folder, e arraste os arquivos de áudio para a pasta nova."
+/>
+
+- **Criar uma pasta**: o botão **Folder** do cabeçalho, ou botão direito em
+  *Unfiled* › **Create virtual folder**.
+- **Colocar áudio numa pasta**: arraste-o sobre o nome da pasta. Com vários
+  selecionados (<kbd>Ctrl</kbd>+clique, <kbd>Shift</kbd>+clique) todos se movem
+  juntos. Também com botão direito › **Move to folder…**, que fica ativo assim
+  que existe uma pasta.
+- **Tirar da pasta**: botão direito › **Move to root**, ou arraste para
+  *Unfiled*.
+- **Renomear** ou **apagar** uma pasta: botão direito no nome dela. Ao apagá-la,
+  o áudio dela **não é apagado**: volta para *Unfiled*.
+- **Tirar áudio da Library**: selecione-o e aperte <kbd>Del</kbd>, ou botão
+  direito › **Delete**. O seu arquivo original não é tocado. Só o áudio que
+  está dentro da pasta da sessão, como o que veio com uma música ou sessão
+  importada, é apagado do disco. Um arquivo de áudio em uso na timeline não
+  pode ser tirado: apague os clipes dele antes.
+- **Recolher ou expandir** uma pasta: clique no nome dela. O LibreTracks
+  lembra quais você deixou recolhidas.
+- **Organizar tudo de uma vez**: o botão da varinha em *Unfiled* (**Organise by
+  song**) cria uma pasta por música e coloca em cada uma o áudio que aquela
+  música usa. Veja
+  [Organizar por música](/pt/docs/interface/side-nav-library/#organizar-por-música).
+
+## Levar áudio para a timeline
+
+### Um arquivo ou vários
+
+Arraste o arquivo da Library para a timeline:
+
+- **Sobre uma faixa**: o clipe cai naquela faixa, onde você soltar.
+- **No espaço abaixo das faixas**: uma faixa nova é criada para ele.
+- **Sobre a coluna de nomes das faixas** (à esquerda): um atalho para
+  colocá-lo **no início da timeline**, naquela faixa, ou numa faixa nova se
+  você soltar abaixo da última.
+
+Com vários arquivos selecionados, arraste-os juntos. Enquanto arrasta você vê
+onde cada um vai cair e, se não couber, o app diz por quê ao soltar (por
+exemplo, porque cruzaria outra música).
+
+Se você soltar o áudio fora de qualquer música, o LibreTracks cria uma música
+nova para ele. Se soltar dentro de uma música mas ele passar do fim, a música é
+estendida para comportá-lo.
+
+### Uma pasta inteira, como música
+
+É o jeito mais rápido de montar uma música: **arraste o nome da pasta** para a
+timeline. Funciona igual para uma pasta de *In this session* e para **uma pasta
+do seu disco** em *Your folders*: nesse caso o áudio dela é importado antes de a
+música ser criada. Uma música é criada com o nome da pasta, e cada arquivo de
+áudio vai para **a sua própria faixa**, todos começando juntos, como os stems
+que são.
+
+<Clip
+  src="/guide/desktop-en/library-folder-to-song.mp4"
+  poster="/guide/desktop-en/library-folder-to-song.webp"
+  caption="Arrastar uma pasta da Library para o fim da timeline cria a música com uma faixa por arquivo de áudio."
+/>
+
+- Segure <kbd>Ctrl</kbd> ao soltar para os arquivos de áudio irem **um depois
+  do outro na mesma faixa**, em vez de um por faixa. Útil para uma pasta de
+  takes ou de partes da mesma faixa.
+- A música precisa **caber inteira** onde você soltar. Se fosse colidir com a
+  próxima, o app avisa e não muda nada. Você pode encostá-la bem no fim da
+  anterior.
+- Sem arrastar: botão direito na pasta › **Add to timeline as a song**. A
+  música é colocada no **fim da sessão**, no primeiro tempo forte livre.
+
+Se o ajuste *Merge tracks with the same name on import* estiver ligado
+(Settings › General › Editing), os arquivos de áudio são unidos às faixas que
+já têm aquele nome. Desligue se quiser que cada música tenha as suas faixas.
+
+## Quando falta um arquivo
+
+Se você mover ou apagar um arquivo de áudio que a sessão usa, as faixas dele
+tocam mudas e o aviso **Missing media files** aparece acima da timeline.
+Apertá-lo abre **Missing files**, com cada arquivo perdido e as faixas que o
+usam:
+
+- **Use the one in *pasta***: o LibreTracks achou um arquivo com o mesmo nome
+  em outra pasta. Um clique e ele é vinculado de novo.
+- **Browse…**: você mesmo escolhe o arquivo novo.
+
+Na Library, o arquivo que falta também oferece **Locate file...** no menu dele.

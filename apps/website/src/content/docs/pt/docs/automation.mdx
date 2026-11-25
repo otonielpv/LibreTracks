@@ -1,0 +1,110 @@
+---
+title: Automação
+description: "A faixa de automação do LibreTracks: ações que disparam sozinhas num ponto exato (saltos, mute, solo, volume, cenas de mixagem, pads, click, guia falada e esperas) e como limitar as repetições delas."
+---
+
+Uma **automação** é uma lista de ações que o LibreTracks executa sozinho
+quando a reprodução passa por um ponto exato: saltar para outra seção, mutar
+uma faixa, abaixar um fader, mudar o pad… Ela deixa uma música "se tocar
+sozinha" para você não precisar lembrar de cada mudança ao vivo.
+
+As automações ficam na **faixa de automação** (só há uma por sessão) e
+aparecem como losangos na linha dela.
+
+## Criar a faixa de automação
+
+Botão direito no espaço abaixo das faixas, ou use o menu de qualquer faixa ›
+**Add automation track**. O botão de energia do cabeçalho dela desliga todas
+as automações de uma vez, para um ensaio, por exemplo.
+
+## Criar uma automação
+
+1. Botão direito na linha de automação, no ponto exato › **Create automation
+   here**. (Também pela régua: **Create automation**.)
+2. Adicione as ações com os botões **Add action**.
+3. **Save**.
+
+![O editor de automação](/guide/desktop-en/automation-cue-editor.png)
+
+As ações rodam **em ordem**, de cima para baixo; use as setas para
+reordená-las.
+
+| Ação | O que faz |
+| --- | --- |
+| **Jump to...** | Salta para uma música, um marcador ou uma posição exata. Pode ser instantâneo ou com **fade out** de alguns segundos. É sempre a última ação. |
+| **Mute / unmute track** | Muta uma faixa ou a liga de novo. |
+| **Solo / unsolo track** | Põe ou tira o solo de uma faixa. |
+| **Volume / pan** | Leva o volume (0–100) e o pan de uma faixa a um valor, na hora ou com alguns segundos de **suavização**. |
+| **Track EQ** | Coloca uma curva de equalizador numa faixa: a atual dela, um preset ou nenhuma (tira o EQ). Com **suavização**, a curva muda aos poucos naqueles segundos, sem degraus, igual ao vivo e ao renderizar. |
+| **EQ on / off** | Liga ou desliga o equalizador de uma faixa sem mexer na curva dele. |
+| **Apply scene** | Liga, alterna ou solta uma [cena de mixagem](/pt/docs/live-scenes/). |
+| **Control pads** | Liga ou desliga o [pad](/pt/docs/ambient-pads/) e define pacote, tom, saída, volume e fades. |
+| **Set click** | Muda o [metrônomo](/pt/docs/audio-routing-metronome/) no meio da música: ligado ou desligado, acento, sons, subdivisão e saída. O que ficar vazio não muda. |
+| **Set voice guide** | Muda a [guia falada](/pt/docs/voice-guide/): ligada ou desligada, idioma, contagem e o estilo dela, compassos de aviso e saída. O que ficar vazio não muda. |
+| **Wait** | Deixa passar alguns segundos antes da próxima ação. |
+
+**Escolher a faixa**: nas ações de mute, solo e volume, a lista de faixas fica
+**agrupada por música**, como os destinos de um salto. Assim você distingue a
+"Bateria" de cada música mesmo quando elas têm o mesmo nome. Quando você
+adiciona uma ação, a primeira faixa da música em que a automação está já vem
+escolhida, e passar o mouse sobre o losango mostra "Bateria (Oceans)" quando o
+nome se repete. O que uma automação muda aparece nos botões: se ela desmuta uma
+faixa, o **M** dela se apaga sozinho.
+
+**Limit repeats**: por padrão a automação dispara toda vez que a reprodução
+passa por ela. Ligue isto para ela disparar só algumas vezes (por exemplo,
+voltar ao refrão só na primeira vez). Quando as repetições acabam, o losango
+aparece apagado. As contagens voltam a zero quando você aperta **Stop**.
+
+**Adiantamento**: para as ações saírem antes de a seção começar (uma cena, uma
+mudança de mixagem que precisa estar pronta no tempo forte). Coloque a
+automação no marcador de seção e escolha 1 tempo, 1 compasso etc., ou um valor
+personalizado em tempos, compassos ou segundos. Funciona como nos
+[clipes MIDI](/pt/docs/tasks/midi/#4-mandar-antes-da-seção-adiantamento): com um
+salto ao vivo, saem as ações do destino antes do salto, não as da seção que
+você pula. Se a automação tem um **salto**, o salto não é movido: fica no
+compasso.
+
+**Collapse all** e **Expand all** recolhem ou abrem todas as ações. O editor
+lembra quais você deixou recolhidas.
+
+## Editar, mover e desativar
+
+- **Clique** no losango: abre o editor. Passar o mouse sobre ele mostra um
+  resumo do que faz.
+- **Arraste** para movê-lo. Segure <kbd>Alt</kbd> (<kbd>Option</kbd> no Mac)
+  **ao soltar** e uma cópia cai ali; o original fica onde está.
+- **Ctrl+clique** (**Cmd+clique** no Mac) o seleciona sem abrir o editor;
+  **Shift+clique** adiciona os que estão entre o último escolhido e este. Com
+  uma seleção, <kbd>Ctrl</kbd>+<kbd>D</kbd> duplica logo depois e
+  <kbd>Del</kbd> apaga.
+- **Botão direito**:
+
+![O menu de uma automação](/guide/desktop-en/menu-automation-cue.png)
+
+**Edit automation...**, **Duplicate**, **Rename automation**, **Disable
+automation** (fica no lugar sem disparar) e **Delete automation**. Com várias
+selecionadas, o botão direito numa delas oferece **Duplicate** e **Delete**
+para todas.
+
+As automações viajam com a música delas: se você mover ou reordenar a música,
+elas se movem junto.
+
+## Cenas de mixagem
+
+As cenas de mixagem têm página própria: [Cenas de mixagem](/pt/docs/live-scenes/).
+Elas são criadas em **File › Mix scenes…** e não precisam da faixa de
+automação; num cue de automação, a ação **Apply scene** pode ligar, alternar ou
+soltar uma num ponto exato da música.
+
+## Dicas
+
+- Um **salto** de uma automação é anunciado pela
+  [guia falada](/pt/docs/voice-guide/) como qualquer outro: a banda ouve para onde
+  vai.
+- Use uma **suavização** curta nas mudanças de volume para não ouvir um
+  degrau.
+- Se você quer ensaiar sem que elas saltem, desligue a faixa de automação com o
+  botão de energia.
+- Para saltos que você decide na hora (não agendados), veja
+  [Controle ao vivo](/pt/docs/live-control-flow/).

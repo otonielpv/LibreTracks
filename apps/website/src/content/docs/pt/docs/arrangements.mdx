@@ -1,0 +1,152 @@
+---
+title: Arranjos de música
+description: "Como montar arranjos de música no LibreTracks: repetir, tirar ou reordenar seções sem mexer no áudio, guardar vários arranjos e voltar ao original, no computador, celular e tablet."
+---
+
+import Legend from "../../../../components/guide/Legend.astro";
+import Clip from "../../../../components/guide/Clip.astro";
+
+Um **arranjo** muda a forma de uma música sem configurar saltos: mais dois
+refrões no fim, tirar a ponte, repetir o verso. O LibreTracks **o escreve na
+timeline do jeito que é**: se você repete o verso, vê o verso duas vezes, e as
+músicas seguintes se movem sozinhas. Por isso a guia falada, o Remote, a
+renderização e as músicas exportadas o seguem sem mais nada a fazer.
+
+Você pode guardar **vários arranjos** da mesma música (o de domingo, o curto,
+o acústico) e voltar ao original quando quiser.
+
+## Antes de começar: as seções
+
+Um arranjo é montado com as **seções** da música: Intro, Verse, Chorus…
+Marque-as na linha de seções da régua, como sempre (veja
+[Marcadores](/pt/docs/tasks/markers/)). Você precisa de pelo menos duas. Os
+marcadores de cue (Build, Drums in…) não dividem seções: viajam com a seção
+em que estão.
+
+## Salvar o original
+
+Botão direito na música na régua e escolha **Arrangement** (no celular, toque e
+segure a música). Na visão Compact ele está no menu da música. O editor de
+arranjo abre embaixo, sobre a timeline.
+
+![Primeiro passo do editor de arranjo: as seções detectadas e Save as original](/guide/desktop-en/arrangement-capture.png)
+
+<Legend>
+
+1. **Seções detectadas**: as que o LibreTracks encontrou na música, com a cor
+   e a duração em compassos.
+2. **Save as original**: salva a música como está, para você montar qualquer
+   arranjo e voltar a ela quando quiser.
+
+</Legend>
+
+Se um marcador não cai no primeiro tempo de um compasso, o editor avisa
+(repetir aquela seção a tiraria do compasso) e oferece **Snap to bar**.
+
+## Montar um arranjo
+
+<Clip
+  src="/guide/desktop-en/arrangement-build.mp4"
+  poster="/guide/desktop-en/arrangement-build.webp"
+  caption="Clique duas vezes em Chorus para adicioná-lo no fim e depois em Apply: a música cresce na timeline."
+/>
+
+![O editor de arranjo com as suas áreas numeradas](/guide/desktop-en/arrangement-editor.png)
+
+<Legend>
+
+1. **Arranjo salvo**: o seletor com os seus arranjos. O primeiro é sempre
+   **Original**.
+2. **New**, **Rename**, **Delete** e **Save the original again**. *New* começa
+   um arranjo a partir do original.
+3. **Sections**: a paleta com as seções da música. **Clique** numa para
+   adicioná-la no fim; **arraste** para a faixa de baixo para inseri-la onde
+   você soltar.
+4. **Order**: os blocos do arranjo, na ordem em que vão tocar. Arraste para
+   mudá-los de lugar. Com um bloco selecionado, <kbd>Del</kbd> o tira e
+   <kbd>Ctrl</kbd>+<kbd>D</kbd> o duplica. A duração total em compassos
+   aparece embaixo.
+5. **Apply**: escreve o arranjo na timeline. Até você apertar, as mudanças
+   existem só no editor (*Unapplied changes* avisa).
+
+</Legend>
+
+Quando ele é aplicado, as músicas seguintes se alinham atrás dele, no
+compasso. Com um arranjo aplicado, a música leva o nome dele na régua
+(`⇄ Domingo`), e a régua sombreia levemente as seções que são repetições.
+
+![Uma música com um arranjo aplicado na régua](/guide/desktop-en/arrangement-ruler.png)
+
+- Para **voltar ao original**, escolha *Original* no seletor e aperte
+  **Apply**. Os seus arranjos não são apagados.
+- O original não pode ser apagado nem renomeado. Se você mudar os blocos dele,
+  um arranjo novo é criado a partir dele.
+- Se salvou o original por engano (faltava um marcador, uma seção estava no
+  lugar errado), corrija a música na timeline e use **Save the original
+  again**.
+
+## Editar uma música com arranjo
+
+O volume, o mute, o pan e as saídas das faixas mudam como sempre.
+
+**Cada bloco pode ser editado sozinho.** Se você repete o refrão, a cópia traz
+tudo o que o refrão original tem: clipes, MIDI, automação, cues e ajustes de
+vídeo. Mas você pode mover, cortar ou adicionar clipes, criar uma automação,
+mandar uma mensagem MIDI especial ou mudar o vídeo só no segundo refrão: a
+mudança fica naquele bloco e não mexe no primeiro nem no original. No editor de
+arranjo esse bloco aparece como **edited**, e **Reset to the original** o
+transforma de novo numa cópia do refrão original.
+
+O que dá forma à música se muda no original: **marcadores de seção**,
+**andamento**, **compasso**, **tom** e a duração da música. Para isso, o
+LibreTracks pergunta antes: *This song has an arrangement*. **Edit original**
+leva a música de volta ao original (o arranjo é mantido), você edita o que
+precisar e, quando aperta **Apply** de novo, o arranjo é refeito sobre a música
+editada:
+
+- Os blocos que seguem o original recebem as mudanças.
+- Os blocos editados mantêm o seu conteúdo e não as recebem.
+- Se você tirou uma seção que um arranjo usava, ele diz de quais arranjos ela
+  foi tirada e se um bloco editado se perdeu junto.
+- Se uma seção ficou mais curta, o que os blocos editados dela tinham depois
+  do novo fim é cortado, e ele avisa.
+
+## Onde o arranjo aparece
+
+- Na **visão Compact**, o cabeçalho da música mostra o arranjo aplicado;
+  aperte para abrir o editor.
+- Na [Live View](/pt/docs/live-view/) e no [Remote](/pt/docs/remote-control/), a
+  música no repertório leva o nome do arranjo.
+- Os arranjos viajam nas músicas (`.ltpkg`) e sessões (`.ltset`) exportadas, e a
+  [renderização](/pt/docs/tasks/songs/#exportar-renderizar-e-apagar) gera a música
+  como ela soa com o arranjo.
+
+Se você abrir a sessão com uma versão mais antiga do LibreTracks, vai ver o
+arranjo escrito na timeline e ele vai soar igual, mas salvar naquela versão
+perde o original do arranjo, e aplicar o arranjo de novo ali perde as mudanças
+dos blocos editados.
+
+## No celular e tablet
+
+Toque e segure a música e escolha **Arrangement**: o editor ocupa a tela
+inteira. Na primeira vez, aperte **Save as original**, como no computador.
+
+![O editor de arranjo no celular](/guide/mobile-en/arrangement-editor.png)
+
+<Legend>
+
+1. **Arranjo salvo**: o seletor de arranjos e o que está aplicado.
+2. **Os blocos do arranjo**, na ordem em que vão tocar. Arraste pela alça para
+   reordenar, deslize um bloco para a esquerda para tirá-lo e toque e segure
+   para duplicá-lo. Depois de tirar uma seção você tem alguns segundos para
+   **Undo**.
+3. **+**: abre a paleta para inserir seções naquele ponto. No fim da lista,
+   **Add section** as adiciona depois de tudo. Na paleta, toque numa seção para
+   adicioná-la (quantas vezes quiser) e aperte **Done**.
+4. **Mais opções**: New, Rename, Delete e Save the original again.
+
+</Legend>
+
+![A paleta de seções do celular](/guide/mobile-en/arrangement-add-sheet.png)
+
+Quando o arranjo estiver do jeito que você quer, aperte **Apply**.

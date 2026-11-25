@@ -1,0 +1,229 @@
+---
+title: Configurações
+description: "Todas as abas de Settings do LibreTracks: dispositivo de áudio, saídas, buffer, idioma, salvamento automático, cache, vídeo, atalhos de teclado, MIDI, MIDI Learn e diagnóstico."
+sidebar:
+  order: 5
+---
+
+import Legend from "../../../../../components/guide/Legend.astro";
+
+Abra as configurações com o botão **Settings** da barra lateral. As mudanças
+são salvas sozinhas na hora, menos as saídas de hardware, que têm o seu
+próprio botão *Apply*. Os títulos abaixo usam os nomes das abas como aparecem
+no app.
+
+![A janela Settings e as suas abas](/guide/desktop-en/settings-overview.png)
+
+<Legend>
+
+1. [**General**](#general): abre em Interface, Timeline, Playback, Editing,
+   Storage e System.
+2. [**Audio**](#audio): placa de som, saídas e desempenho.
+3. [**MIDI**](#midi): abre em Devices e MIDI Learn.
+4. [**Video**](#video): a tela ou o projetor das faixas de vídeo.
+5. [**Projection**](/pt/docs/tasks/lyrics/): mandar a letra para o ProPresenter,
+   FreeShow ou Holyrics.
+6. [**Redundancy**](/pt/docs/redundancy/): um segundo computador reserva,
+   sincronizado.
+7. [**Shortcuts**](#shortcuts): as teclas de cada ação.
+8. [**Diagnostics**](#diagnostics): logs para quando algo dá errado.
+9. **Fechar**. Também com <kbd>Esc</kbd>.
+
+General e MIDI são grupos: clicar num deles o abre e mostra a primeira aba.
+Os dois podem estar abertos ao mesmo tempo.
+
+</Legend>
+
+## General
+
+Os ajustes do app, divididos em seis abas.
+
+### Interface
+
+![A aba Interface](/guide/desktop-en/settings-general.png)
+
+- O **idioma** do app (inglês ou espanhol).
+- **Interface size**: diminua se não couber na sua tela, ou aumente para ler
+  de longe. Atalhos: <kbd>Ctrl</kbd>+<kbd>+</kbd>, <kbd>Ctrl</kbd>+<kbd>−</kbd> e
+  <kbd>Ctrl</kbd>+<kbd>0</kbd>. Vai até 150%.
+- **Mixer size**: aumenta só as tiras, os faders e os botões M/S/T do mixer,
+  deixando o resto da interface como está. *Automatic* os deixa grandes em
+  tablets e normais no resto. Cada aparelho guarda o seu.
+- **Startup view**: a visão em que as sessões abrem.
+
+### Timeline
+
+![A aba Timeline](/guide/desktop-en/settings-timeline.png)
+
+- **Timeline navigation**: como a roda do mouse e o trackpad respondem. No
+  modo *Ableton*, a pinça ou <kbd>Ctrl</kbd>+roda dá zoom; <kbd>Alt</kbd>+roda
+  muda a altura da faixa sob o mouse.
+- **Playhead follow**: onde o cursor fica quando a timeline o segue.
+
+### Playback
+
+![A aba Playback](/guide/desktop-en/settings-playback.png)
+
+- **Pause at the end of each song**: em vez de passar sozinha para a próxima,
+  a reprodução para no fim de cada música. Ideal quando alguém precisa falar
+  entre as músicas.
+- **Vamp between songs (click and pad)**: como a pausa, mas entre as músicas o
+  click continua no andamento da que terminou e o pad continua soando até
+  você apertar *Play*. Veja
+  [Passar de uma música para a próxima](/pt/docs/tasks/songs/#passar-de-uma-música-para-a-próxima-ao-vivo).
+- **"Fade out and stop" length**: quantos segundos aquele botão leva para
+  sumir com a música (5 por padrão). Veja
+  [Fade out and stop](/pt/docs/interface/main-screen/#fade-out-and-stop).
+
+### Editing
+
+![A aba Editing: músicas e templates](/guide/desktop-en/settings-editing-1.png)
+
+- **Each song's tracks**: se as músicas compartilham faixas, se cada uma ganha
+  a sua pasta ou a sua própria cópia das faixas. Veja
+  [Templates de música](/pt/docs/song-templates/#as-faixas-de-cada-música).
+- **Template for new songs**: com quais faixas e pastas as músicas novas vêm e
+  onde cai o áudio que você solta. Veja [Templates de música](/pt/docs/song-templates/).
+- **My templates**: os templates deste computador, para importá-los ou
+  enviá-los para a nuvem.
+
+![A aba Editing: cor, warp e salvamento](/guide/desktop-en/settings-editing-2.png)
+
+- **Colour new tracks automatically**.
+- **Automatic warp**: liga o warp quando você muda o tom ou o andamento. Veja
+  [Warp automático](/pt/docs/pitch-and-warp/#warp-automático).
+- **Prepared pitch changes (slow devices)**: o tom e o andamento são
+  preparados em segundo plano em vez de calculados enquanto a música toca.
+  Veja [Mudanças de tom preparadas](/pt/docs/pitch-and-warp/#mudanças-de-tom-preparadas).
+- **Autosave**: salva a sessão de tempos em tempos, nunca enquanto você toca.
+  **Save every**: de quantos em quantos minutos.
+
+### Storage
+
+![A aba Storage](/guide/desktop-en/settings-storage.png)
+
+- **Use the classic library**: a Library mostra só o áudio importado na
+  sessão, com as pastas virtuais, como antes, em vez das pastas do seu disco.
+  Veja [A Library](/pt/docs/interface/side-nav-library/#a-library).
+- **Audio cache**: MP3, FLAC e outros áudios comprimidos são descomprimidos uma
+  vez e guardados aqui, para a sessão carregar na hora da próxima vez. Você
+  pode mudar a pasta, dar um tamanho máximo ou esvaziá-la para liberar espaço.
+
+### System
+
+![A aba System](/guide/desktop-en/settings-system.png)
+
+- **Check for updates**: verifica se há uma versão nova. O app também avisa
+  sozinho ao abrir.
+- **Optional usage statistics**: dados agregados e anônimos que ajudam a
+  melhorar o LibreTracks. Áudio, nomes e o conteúdo das suas sessões nunca são
+  enviados.
+
+## Audio
+
+![A aba Audio, primeira parte](/guide/desktop-en/settings-audio-1.png)
+
+- **Audio System**: o tipo de driver. A lista depende do seu computador. No
+  Windows, **ASIO** tem o menor atraso se a sua interface suportar, e
+  **Windows Audio** (WASAPI) funciona com qualquer placa de som. Evite o
+  **DirectSound** para tocar ao vivo.
+- **Audio device**: a placa de som ou interface por onde o som sai.
+- **Refresh audio devices**: procura interfaces de novo, por exemplo se você
+  conectou uma com o app aberto.
+- **Sample rate**: deixe em *Auto*, a menos que a sua interface precise de uma
+  específica. Ao abrir uma sessão, o LibreTracks tenta igualar a taxa do áudio
+  para não precisar convertê-lo.
+
+![A aba Audio, segunda parte](/guide/desktop-en/settings-audio-2.png)
+
+- **Buffer size**: menor quer dizer menos atraso; maior quer dizer menos risco
+  de falhas. Se você ouvir estalos ou cortes, aumente.
+- **Hardware outputs**: marque os canais da sua interface que você quer usar
+  e aperte **Apply**. Só os canais marcados aparecem como saídas nas faixas.
+  Veja [Saídas de áudio e metrônomo](/pt/docs/audio-routing-metronome/).
+- **Multicore processing**: distribui o trabalho de áudio entre vários núcleos
+  do processador. Deixe ligado.
+- **Track meters**: o que o medidor de cada faixa mede. Por padrão,
+  **Post-fader** (depois do pan, volume, mute e solo, como no Ableton): uma
+  faixa mutada marca zero. **Post-pan** mede antes do volume e **Pre-fader**,
+  o que entra na faixa.
+
+## MIDI
+
+O grupo MIDI tem duas abas.
+
+### Devices
+
+![A aba Devices: entrada e saídas](/guide/desktop-en/settings-midi-1.png)
+
+- **MIDI input device**: o pedal, pad ou controlador com que você quer
+  controlar o LibreTracks. O botão à direita procura dispositivos de novo.
+- **MIDI output**: a porta pela qual as faixas MIDI mandam notas e program
+  changes, para teclados, mesas de luz ou software de letra. **Send test note**
+  confere se chega.
+- **Controller output (LEDs)**: a porta em que o seu controlador de faders
+  escuta o estado de mute, solo, play e vamp. Costuma ter o mesmo nome da
+  entrada.
+
+![A aba Devices: tiras e takeover](/guide/desktop-en/settings-midi-2.png)
+
+- **Strips follow the active song**: os 8 faders do controlador movem só as
+  faixas da música que está tocando e voltam ao primeiro banco quando a música
+  muda.
+- **Takeover mode**: o que acontece quando o fader físico não está onde a
+  faixa está. Veja [Controladores de faders](/pt/docs/tasks/midi/#tiras-1-8-perfis-e-faders-motorizados).
+
+### MIDI Learn
+
+![A aba MIDI Learn](/guide/desktop-en/settings-midiLearn-1.png)
+
+Há duas formas de atribuir um pedal ou um botão do seu controlador a uma ação:
+
+- **Pela lista**: aperte **Relearn** na linha da ação e depois pise no pedal.
+- **Pela tela**: aperte **MIDI Learn**, feche Settings, clique no botão que
+  você quer controlar (*Play*, *Vamp*, um marcador, o BPM…) e pise no pedal.
+  Aperte *MIDI Learn* de novo para sair.
+
+A atribuição aparece na coluna **Current MIDI binding**, e a última que você
+fez, no topo. **Reset MIDI mappings** apaga todas. As abas **Markers** e
+**Songs** atribuem saltos para marcadores e músicas específicos.
+
+## Video
+
+![A aba Video: saída e tela](/guide/desktop-en/settings-video-1.png)
+
+- **Video output**: ligue para as faixas de vídeo saírem em outra tela.
+- **Display**: o projetor ou a TV. **Identify displays** mostra um número em
+  cada uma para você saber qual é qual.
+- **Mode**: tela cheia ou janela.
+
+![A aba Video: comportamento](/guide/desktop-en/settings-video-2.png)
+
+- **Fit**: como a imagem se adapta à tela.
+- **Idle screen**: o que aparece quando nenhum vídeo está tocando.
+- **When stopped**: o que fica na tela quando você para a reprodução.
+
+![A aba Video: sincronia](/guide/desktop-en/settings-video-3.png)
+
+- **Delay compensation**: se o projetor mostra a imagem atrasada em relação ao
+  áudio, adiante aqui. **Calibrate…** e **Test pattern** ajudam a medir.
+- **When placing a video with sound**: perguntar, sempre extrair o áudio para
+  uma faixa ou nunca extrair. Veja
+  [Vídeo no projetor](/pt/docs/tasks/video/#o-som-do-vídeo).
+
+## Shortcuts
+
+![A aba Shortcuts](/guide/desktop-en/settings-shortcuts-1.png)
+
+Procure uma ação, aperte **Edit** e depois a combinação de teclas. O **×** tira
+o atalho e **Reset all** volta aos de fábrica. Se outra ação já usa a
+combinação, o app avisa. A lista completa de atalhos padrão está em
+[Atalhos de teclado](/pt/docs/live-control-flow/#atalhos-de-teclado).
+
+## Diagnostics
+
+![A aba Diagnostics](/guide/desktop-en/settings-diagnostics.png)
+
+Se o app fechar, travar ou uma faixa ficar muda, aqui estão os logs que nos
+ajudam a achar a causa. **Save log...** cria um arquivo que você pode mandar
+quando pedir ajuda. Os logs não contêm áudio nem dados pessoais.

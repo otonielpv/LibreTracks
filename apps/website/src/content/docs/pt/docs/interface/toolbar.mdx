@@ -1,0 +1,134 @@
+---
+title: A barra de ferramentas
+description: "O que faz cada controle da barra de ferramentas do LibreTracks: seletor de visão, snap, seguir o cursor, Vamp, salto para marcador, transição entre músicas, master, transposição e warp."
+sidebar:
+  order: 2
+---
+
+import Legend from "../../../../../components/guide/Legend.astro";
+
+A barra de ferramentas fica logo abaixo da barra superior. À esquerda você
+troca de visão e de modo de edição. À direita você decide **como** o show se
+move: o que acontece quando você aperta Vamp, quando um salto acontece e como
+cada música soa.
+
+A maioria dos grupos tem um botão <kbd>☰</kbd> (três linhas com controles
+deslizantes) que abre o painel de ajustes. O resumo mostrado no grupo, como
+*At next marker*, é o ajuste que está ativo agora.
+
+## Visão e edição
+
+![A parte esquerda da barra de ferramentas](/guide/desktop-en/toolbar-left.png)
+
+<Legend>
+
+1. **DAW view**: a timeline completa, para montar e editar músicas.
+2. **Compact View**: uma coluna por música, com um mixer compartilhado. Veja
+   [Compact View](/pt/docs/compact-view/).
+3. **Live View**: botões grandes para tocar ao vivo, sem edição. Veja
+   [Live View](/pt/docs/live-view/).
+4. **Snap** (à grade): quando você move clipes, marcadores ou músicas, eles
+   grudam na subdivisão da grade. Desligue para posicioná-los livremente. Com
+   o snap desligado, uma linha diagonal sobre o ícone indica isso.
+5. **Seguir o cursor**: durante a reprodução a timeline rola sozinha para o
+   cursor não sair da tela. Com a reprodução parada, ela também leva você à
+   música quando você usa *Previous* ou *Next*.
+6. **Vamp**: repete um trecho em loop até você apertar de novo. Veja
+   [abaixo](#vamp).
+7. **Marker Jump**: quando acontece um salto para um marcador. Veja
+   [abaixo](#marker-jump).
+
+</Legend>
+
+## Saltos e ajustes da música
+
+![A parte direita da barra de ferramentas](/guide/desktop-en/toolbar-right.png)
+
+<Legend>
+
+8. **Song Transition**: quando e como você passa para outra música. Veja
+   [abaixo](#song-transition).
+9. **Master** da música selecionada.
+10. **Transpose** da música selecionada, em semitons.
+11. **Warp** da música selecionada.
+12. **Cancel jump**: cancela um salto agendado que ainda não aconteceu.
+    Também com <kbd>Esc</kbd>.
+
+</Legend>
+
+Os grupos 9, 10 e 11 agem sobre **a música selecionada**. Clique no nome de
+uma música na régua para selecioná-la. Sem música selecionada, o grupo lembra
+você de selecionar uma região.
+
+## Vamp
+
+![O painel de ajustes do Vamp](/guide/desktop-en/toolbar-vamp-panel.png)
+
+O botão **Vamp** do grupo liga e desliga o loop. No painel você escolhe o que
+se repete:
+
+- **Section**: a seção em que o cursor está, do marcador dela até o próximo.
+- **Bars**: o número de compassos que você definir, a partir do início do
+  compasso em que você está.
+
+Útil quando a banda estica um final, o pastor continua falando ou alguém
+precisa de mais tempo no palco. Aperte Vamp de novo para sair e a música segue
+dali.
+
+## Marker Jump
+
+![O painel de ajustes do salto para marcador](/guide/desktop-en/toolbar-marker-jump-panel.png)
+
+Um salto para um marcador é agendado quando você clica num marcador de seção,
+aperta o número dele (<kbd>1</kbd>…<kbd>9</kbd>, <kbd>0</kbd>), pelo Remote ou
+com um pedal MIDI. Este painel decide **quando** ele acontece:
+
+- **Immediate**: na hora.
+- **After X bars**: depois de passarem os compassos que você definir.
+- **At next marker**: quando chega o próximo marcador de seção, para a
+  mudança cair no início de uma frase.
+
+Enquanto o salto espera, *Cancel jump* acende; passe o mouse por cima para ver
+para qual marcador você vai. Se escolheu o marcador errado, aperte
+<kbd>Esc</kbd> ou clique no mesmo marcador de novo.
+
+## Song Transition
+
+![O painel de transição entre músicas](/guide/desktop-en/toolbar-song-jump-panel.png)
+
+Vale quando você salta para outra música: com os botões *Previous* e *Next*,
+com <kbd>Shift</kbd>+número, pela Live View ou pelo Remote. A linha de cima diz
+**quando**:
+
+- **Immediate**.
+- **At song end** da que está tocando.
+- **After X bars**.
+- **At next marker**.
+
+A linha de baixo diz **como**: **Clean cut** vai direto para a outra música;
+**Fade out** abaixa a atual antes de saltar.
+
+## Master, transposição e warp
+
+![Master da música selecionada](/guide/desktop-en/toolbar-master-panel.png)
+
+**Master** sobe ou desce o volume da música selecionada inteira, sem mexer no
+metrônomo nem na guia falada. Serve para igualar músicas que entram mais altas
+ou mais baixas.
+
+![Transposição da música selecionada](/guide/desktop-en/toolbar-transpose-panel.png)
+
+**Transpose** muda o tom da música selecionada entre −12 e +12 semitons com os
+botões <kbd>−</kbd> e <kbd>+</kbd>.
+
+![Warp da música selecionada](/guide/desktop-en/toolbar-warp-panel.png)
+
+**Warp & tempo** muda o andamento sem mudar a afinação. Com o warp desligado,
+transpor também muda a velocidade, como um disco acelerado; com o warp ligado,
+a música mantém a sua duração. Abaixo, **Song tempo** acelera ou desacelera a
+música com <kbd>−</kbd> e <kbd>+</kbd> sem mudar a afinação (liga o warp se
+precisar), e **Original** a devolve ao andamento dela. O BPM original do áudio
+é definido no menu da música, com *Change Original BPM*.
+
+Como a transposição, o warp e o botão **T** de cada faixa se combinam está
+explicado passo a passo em [Tom, warp e o botão T](/pt/docs/pitch-and-warp/).

@@ -1,0 +1,143 @@
+---
+title: Barra lateral e Library
+description: "O que abre cada botão da barra lateral do LibreTracks (Library, Remote, Settings e Tutorial) e como usar a Library para importar, organizar e levar áudio para a timeline."
+sidebar:
+  order: 4
+---
+
+import Legend from "../../../../../components/guide/Legend.astro";
+
+A barra lateral é a coluna estreita à esquerda. Ela está sempre visível, com
+ou sem uma sessão aberta.
+
+![Os botões da barra lateral](/guide/desktop-en/side-nav.png)
+
+<Legend>
+
+1. **Library**: abre ou fecha o painel com as suas pastas e o áudio da sessão.
+   Veja [abaixo](#a-library).
+2. **Remote**: mostra o QR code e o endereço para controlar o LibreTracks pelo
+   celular ou tablet. Veja [abaixo](#remote).
+3. **Settings**: áudio, interface, vídeo, atalhos, MIDI e diagnóstico. Veja
+   [Configurações](/pt/docs/interface/settings/).
+4. **Tutorial**: tours guiados dentro do próprio app.
+
+</Legend>
+
+## A Library
+
+A Library tem duas partes: em cima, **as suas pastas no disco**, para achar
+áudio e levá-lo para a timeline; abaixo delas, **In this session**, com todo o
+áudio que você já trouxe para a sessão.
+
+### As suas pastas
+
+![A biblioteca de pastas](/guide/desktop-en/library-folders.png)
+
+<Legend>
+
+1. **Add folder**: escolha uma pasta do seu disco (os seus multitracks, os
+   seus samples…). Ela fica salva para todas as suas sessões.
+2. **Busca**: filtra por nome o que você expandiu, ignorando maiúsculas e
+   acentos (*bateria* encontra *Batería*).
+3. **Uma pasta que você adicionou**. Clique para expandi-la. Ao passar o
+   mouse, **Refresh** (lê de novo, se você adicionou arquivos) e o **X**, que
+   a remove da Library sem apagar nada no disco.
+4. **In this session**: o áudio que já está na sessão. Veja
+   [abaixo](#in-this-session).
+
+</Legend>
+
+- **Arraste um arquivo de áudio** para a timeline para usá-lo: ele é importado
+  e colocado onde você soltar. Com <kbd>Ctrl</kbd>+clique você escolhe vários e
+  arrasta todos juntos.
+- **Arraste uma pasta** para a timeline e uma música é criada com o nome dela,
+  cada arquivo de áudio na sua faixa. Veja
+  [Uma pasta inteira, como música](/pt/docs/tasks/library/#uma-pasta-inteira-como-música).
+- As pastas são lidas **quando você as expande**, uma de cada vez, então o
+  tamanho do disco não importa.
+
+Se preferir a Library antiga, só com o áudio da sessão, ligue **Use the
+classic library** em
+[Settings › General › Storage](/pt/docs/interface/settings/#storage).
+
+### In this session
+
+Aqui está todo o áudio que você trouxe para a sessão, esteja ou não sendo
+usado na timeline. Daqui você o importa, organiza em pastas virtuais e o
+arrasta para as faixas. Clique em **In this session** para recolher ou
+expandir.
+
+![O painel da Library](/guide/desktop-en/library-panel.png)
+
+<Legend>
+
+1. **Folder**: cria uma pasta para organizar o áudio. São pastas *virtuais*:
+   não movem nem copiam nada no disco.
+2. **Import audio**: escolha arquivos WAV, AIFF, MP3, FLAC… Você também pode
+   arrastá-los do gerenciador de arquivos direto para a timeline: eles são
+   importados e colocados onde você soltar.
+3. **Unfiled**: o áudio que ainda não está em nenhuma pasta.
+4. **Um arquivo de áudio**, com a duração. Arraste-o para a timeline para
+   criar um clipe.
+
+</Legend>
+
+Você também pode arrastar **uma pasta inteira** para a timeline: cada arquivo
+de áudio vai para a sua faixa, um embaixo do outro, como os stems de uma
+música. Se segurar <kbd>Ctrl</kbd> ao soltar, eles vão um depois do outro na
+mesma faixa.
+
+Para selecionar vários arquivos use <kbd>Ctrl</kbd>+clique ou
+<kbd>Shift</kbd>+clique e arraste todos juntos. <kbd>Del</kbd> tira a seleção da
+Library. Importar não copia o áudio (a sessão o usa de onde ele está), e
+tirá-lo da Library **não apaga o seu arquivo original**. Mais em
+[Biblioteca e áudio](/pt/docs/tasks/library/).
+
+### Organizar por música
+
+![O botão "Organizar por música"](/guide/desktop-en/library-organize.png)
+
+O botão da varinha em **Unfiled** (1) arruma o áudio solto de uma vez: cria
+**uma pasta por música**, com o nome dela, e coloca nela o áudio que aquela
+música usa na timeline.
+
+- Se a pasta já existe, ela é reaproveitada.
+- O áudio que nenhuma música usa, ou que várias usam (um click compartilhado,
+  por exemplo), fica em *Unfiled*, e a mensagem diz quantos são.
+- Só aparece quando há áudio em *Unfiled*.
+
+### Botão direito num arquivo
+
+![O menu de um arquivo da Library](/guide/desktop-en/menu-library-asset.png)
+
+- **Move to folder…** e **Move to root**.
+- **Delete**: tira o arquivo da Library.
+
+### Botão direito numa pasta
+
+![O menu de uma pasta da Library](/guide/desktop-en/menu-library-folder.png)
+
+- **Add to timeline as a song**: cria uma música nova com todo o áudio da
+  pasta, cada arquivo na sua faixa. É o jeito mais rápido de montar uma música
+  a partir dos stems: uma pasta por música, e um clique.
+- **Create virtual folder**.
+
+As pastas que você criou também mostram **Rename folder** e **Delete folder**.
+
+## Remote
+
+![A janela de conexão do Remote](/guide/desktop-en/remote-modal.png)
+
+O computador e o celular precisam estar na **mesma rede Wi-Fi**. Escaneie o QR
+code com a câmera do celular, ou digite um dos dois endereços no navegador
+dele. Não é preciso instalar nada no celular. O que você pode fazer dali, e
+como personalizar as telas, está em [Remote personalizado](/pt/docs/remote-control/).
+
+## Tutorial
+
+![O menu de tours guiados](/guide/desktop-en/tutorial-menu.png)
+
+Cada tour aponta para os controles reais na tela, passo a passo. Alguns passos
+pedem para você abrir o painel de que falam e continuam sozinhos quando você
+abre. Os que você já fez ficam marcados, e você pode repeti-los quando quiser.

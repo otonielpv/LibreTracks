@@ -13,9 +13,9 @@ const { lang } = Astro.props;
 const es = lang === "es";
 const pt = lang === "pt";
 const prefix = es ? "/es" : pt ? "/pt" : "";
-// Docs, guides and screenshots exist in English and Spanish only. The app has
-// no Portuguese interface either, so the Portuguese page shows the English UI.
-const docsPrefix = es ? "/es" : "";
+// Screenshots exist in English and Spanish only. The app has no Portuguese
+// interface either, so the Portuguese page shows the English UI.
+const docsPrefix = prefix;
 const shots = `/screenshots/home/${es ? "es" : "en"}`;
 
 const PT = {
@@ -26,7 +26,7 @@ const PT = {
   h1: "Player multitrack para tocar ao vivo",
   lead: "LibreTracks é um programa grátis para tocar com playback e multitracks. Organiza o show por músicas: faixas, click, guia falada, marcadores e saídas de áudio. Prepare na timeline, ensaie na Visão Compacta e toque ao vivo com saltos musicais, mudança de tom e andamento, MIDI e controle remoto pelo celular.",
   download: "Baixar grátis",
-  howTo: "Como usar (em inglês)",
+  howTo: "Como usar",
   heroAlt: "Timeline do LibreTracks com três músicas, marcadores de seção e faixas com forma de onda",
   phoneAlt: "Visão Live do LibreTracks no celular com os marcadores da música",
   facts: [
@@ -56,8 +56,8 @@ const PT = {
     ["live", "Visão Live", "Legível do palco", "As seções da música em botões grandes, com o marcador atual, o próximo e o modo de salto à vista. Um toque dispara a seção.", "Visão Live do LibreTracks com os marcadores da música em botões grandes", 1200, 750],
     ["remote", "Remote", "Controle de outro aparelho", "Abra o controle remoto no celular ou tablet para comandar o transporte, saltar entre seções e ajustar a mixagem sem tocar no computador.", "Controles do Remote do LibreTracks: transporte, saltos, músicas e marcadores", 1200, 659],
   ],
-  viewsPrimary: "Sua primeira música (vídeo, em inglês)",
-  viewsSecondary: "Todos os guias (em inglês)",
+  viewsPrimary: "Sua primeira música (vídeo)",
+  viewsSecondary: "Todos os guias",
   workflowEyebrow: "Fluxo",
   workflowTitle: "Das faixas ao repertório pronto para tocar.",
   workflow: [
@@ -91,14 +91,16 @@ const PT = {
   ],
   alternatives: [
     ["/pt/alternativa-playback-multitracks/", "Alternativa grátis ao Playback"],
-    ["/alternatives/", "Outras alternativas (em inglês)"],
-    ["/ableton-live-alternative/", "vs Ableton Live (em inglês)"],
-    ["/ableset-alternative/", "vs AbleSet (em inglês)"],
+    ["/pt/alternativas/", "Outras alternativas grátis"],
+    ["/pt/alternativa-ableton-live/", "vs Ableton Live"],
+    ["/pt/alternativa-reaper-ao-vivo/", "vs Reaper"],
+    ["/pt/alternativa-ableset/", "vs AbleSet"],
+    ["/pt/alternativa-prime-worship/", "vs Prime"],
   ],
   ctaTitle: "Leve suas faixas para o próximo show.",
   ctaLead: "Baixe o LibreTracks, importe seus multitracks e tenha o repertório pronto para ensaiar hoje.",
-  ctaDocs: "Ler a documentação (em inglês)",
-  guidesPath: "/guides/",
+  ctaDocs: "Ler a documentação",
+  guidesPath: "/pt/guias/",
 };
 
 const t = pt

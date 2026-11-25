@@ -1,0 +1,100 @@
+---
+import AlternativePage from "../../components/AlternativePage.astro";
+
+const rows = [
+  [
+    "Custo",
+    "Licença paga por edição, com as atualizações principais vendidas à parte.",
+    "Grátis e de código aberto (AGPL-3.0). Sem licença, sem conta, sem assinatura.",
+  ],
+  [
+    "Para que serve",
+    "Produção musical completa: compor, gravar, editar, mixar e criar timbres.",
+    "Tocar faixas prontas no palco.",
+  ],
+  [
+    "Organizar o repertório",
+    "A Session View oferece cenas e clipes; a ordem do show você monta com cenas, locators ou um Set por música.",
+    "A música é a unidade de trabalho: cada uma leva seus stems, andamento, tom, marcadores e volume master.",
+  ],
+  [
+    "Click e guia falada",
+    "Com faixas dedicadas e roteamento manual para o bus de retorno.",
+    "Metrônomo e guia falada são sinais de retorno com saídas próprias configuráveis.",
+  ],
+  [
+    "Mudar o tom no ensaio",
+    "Exige warp e transposição faixa por faixa.",
+    "Transposição por música, com um botão T em cada faixa para escolher quais stems acompanham.",
+  ],
+  [
+    "Controle remoto",
+    "Via Ableton Link ou apps MIDI de terceiros.",
+    "Remote web integrado: transporte, mixer e marcadores pelo celular ou tablet, com superfície editável.",
+  ],
+  [
+    "Computador necessário",
+    "Um notebook com folga para uma sessão de produção.",
+    "Um app nativo leve (Rust + Tauri). Também roda no Android e no iOS.",
+  ],
+];
+
+const strengths = [
+  [
+    "Abre o seu Set do Ableton",
+    "File → Import Reaper/Ableton lê arquivos .als. Os clipes de áudio do Arrangement viram clipes em faixas recriadas, os locators viram marcadores de seção e o andamento e a fórmula de compasso vêm junto. Nada de exportar cada stem e remontar o show na mão.",
+  ],
+  [
+    "Uma coluna por música",
+    "A Visão Compacta mostra o repertório em colunas com controles de reprodução próprios e um mixer compartilhado, legível no palco.",
+  ],
+  [
+    "Saltos que pensam em compassos",
+    "Salte para uma seção na hora, no próximo marcador, depois de alguns compassos ou no fim da música. Segure um Vamp quando o momento se estender.",
+  ],
+  [
+    "Guia falada",
+    "Anuncia a próxima seção e conta a entrada da banda antes do tempo forte, para ninguém precisar olhar a tela.",
+  ],
+];
+
+const limits = [
+  "Se você compõe, grava ou mixa, continue com o Ableton Live. O LibreTracks não grava áudio, não tem instrumentos virtuais, não carrega plugins VST e não tenta substituir uma DAW de produção.",
+  "Se o seu show depende de instrumentos e efeitos do Ableton tocando em tempo real, isso não está coberto aqui: o LibreTracks reproduz áudio já renderizado.",
+  "Se você já tem o Live e o seu rig funciona, trocar só para economizar não vale a pena. Esta página é para quem está começando, para quem usa o Live apenas como player de faixas ou para quem monta um segundo rig sem comprar outra licença.",
+  "O importador traz o que importa ao vivo (clipes, faixas, andamento, fórmula de compasso e locators), não cada detalhe interno do Set. Confira o resultado antes de tocar com ele.",
+];
+
+const faq = [
+  [
+    "O LibreTracks é uma alternativa totalmente grátis ao Ableton Live?",
+    "O LibreTracks é grátis e de código aberto, sem conta nem assinatura. Ele substitui a parte de playback ao vivo de um rig com Ableton, não a gravação, os instrumentos, os plugins nem as ferramentas de produção do Live.",
+  ],
+  [
+    "Posso usar o LibreTracks para playback num show ao vivo?",
+    "Sim. Ele foi pensado em torno de stems por música, saídas de click e guia falada, marcadores de seção, saltos musicais, controle MIDI e um remote no celular ou tablet.",
+  ],
+  [
+    "O LibreTracks abre um Set do Ableton Live?",
+    "Sim. Importa os clipes de áudio do Arrangement, recria as faixas, converte locators em marcadores de seção e traz o andamento e a fórmula de compasso. Instrumentos e efeitos do Live precisam ser renderizados em áudio antes.",
+  ],
+];
+---
+
+<AlternativePage
+  lang="pt"
+  rival="Ableton Live"
+  title="Alternativa Grátis ao Ableton Live para Playback | LibreTracks"
+  description="Uma alternativa grátis e de código aberto ao Ableton Live para playback. Importe Sets .als e tenha click, guia falada, mudança de tom, MIDI e controle pelo celular."
+  eyebrow="Alternativa grátis ao Ableton Live"
+  heading="Alternativa grátis ao Ableton Live para tocar com playback"
+  intro="Muitas bandas compram uma licença do Live e acabam usando uma fração dela: carregam os stems na Session View e apertam play no show. O LibreTracks faz exatamente essa parte (stems por música, click, guia falada, mudança de tom, MIDI e remote no celular), de graça, com código aberto, e lê os seus arquivos .als."
+  heroImage="/screenshots/Proyecto.webp"
+  heroAlt="Arrangement do Ableton importado na timeline multitrack do LibreTracks"
+  rows={rows}
+  strengths={strengths}
+  limitsTitle="Onde o Ableton Live continua sendo a escolha certa"
+  limits={limits}
+  faq={faq}
+  closing="Importe um Set que você já tem, coloque os marcadores de seção e experimente saltar entre eles com a banda. Se não funcionar para vocês, você perdeu uma tarde e nada mais: não há licença nem conta envolvida."
+/>
