@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { create } from "zustand";
 
+import { useDismissOnBack } from "../mobile/backNavigation";
 import { PopoverShell } from "../panels/PopoverShell";
 import {
   CHART_FONT_FAMILIES,
@@ -34,6 +35,42 @@ export function resetSystemFontsCache() {
 
 const MAX_LISTED_FONTS = 300;
 
+/** Phone or tablet. There the list opens as a full-screen sheet: inside the
+ * popover it got ~180 px in landscape on an iPhone, and the keyboard covered
+ * all of it. The search also waits to be tapped instead of popping the
+ * keyboard on open. */
+function touchFirst(): boolean {
+  try {
+    return window.matchMedia("(pointer: coarse)").matches;
+  } catch {
+    return false;
+  }
+}
+
+/** The part of the screen above the keyboard. Neither Android's WebView nor
+ * WKWebView shrink the window for it, only `visualViewport`. */
+function useVisibleArea(enabled: boolean): { top: number; height: number } | null {
+  const [area, setArea] = useState<{ top: number; height: number } | null>(null);
+  useEffect(() => {
+    const viewport = window.visualViewport;
+    if (!enabled || !viewport) return;
+    const update = () => setArea({ top: viewport.offsetTop, height: viewport.height });
+    update();
+    viewport.addEventListener("resize", update);
+    viewport.addEventListener("scroll", update);
+    return () => {
+      viewport.removeEventListener("resize", update);
+      viewport.removeEventListener("scroll", update);
+    };
+  }, [enabled]);
+  return enabled ? area : null;
+}
+
+function dismissKeyboard() {
+  const active = document.activeElement;
+  if (active instanceof HTMLInputElement) active.blur();
+}
+
 /** "Font installed on this device": a button showing the chosen one, which
  * opens a searchable list, each name drawn in its own font. */
 function SystemFontPicker({
@@ -47,24 +84,9 @@ function SystemFontPicker({
 }) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
-  const [fonts, setFonts] = useState<string[] | null>(null);
-  const [query, setQuery] = useState("");
+  const [asSheet] = useState(touchFirst);
+  const close = useCallback(() => setOpen(false), []);
   const chosen = systemFamilyOf(value);
-  useEffect(() => {
-    if (!open || fonts !== null) return;
-    let alive = true;
-    void loadSystemFonts().then((names) => {
-      if (alive) setFonts(names);
-    });
-    return () => {
-      alive = false;
-    };
-  }, [open, fonts]);
-  const matches = useMemo(() => {
-    const needle = query.trim().toLowerCase();
-    const all = fonts ?? [];
-    return (needle ? all.filter((name) => name.toLowerCase().includes(needle)) : all).slice(0, MAX_LISTED_FONTS);
-  }, [fonts, query]);
   const listLabel = `${label}: ${t("chartStyle.systemFonts")}`;
   return (
     <div className="lt-chart-style-system">
@@ -81,44 +103,130 @@ function SystemFontPicker({
         <span className="material-symbols-outlined" aria-hidden="true">{open ? "expand_less" : "expand_more"}</span>
       </button>
       {open ? (
-        <div className="lt-chart-style-system-panel">
-          <input
-            type="search"
-            className="lt-chart-style-system-search"
-            placeholder={t("chartStyle.searchFonts")}
-            aria-label={t("chartStyle.searchFonts")}
-            value={query}
-            autoFocus
-            onChange={(event) => setQuery(event.target.value)}
-          />
-          {fonts === null ? (
-            <p className="lt-chart-style-system-note">{t("chartStyle.loadingFonts")}</p>
-          ) : fonts.length === 0 ? (
-            <p className="lt-chart-style-system-note">{t("chartStyle.noSystemFonts")}</p>
-          ) : matches.length === 0 ? (
-            <p className="lt-chart-style-system-note">{t("chartStyle.noFontMatch")}</p>
-          ) : (
-            <ul className="lt-chart-style-system-list" role="listbox" aria-label={listLabel}>
-              {matches.map((name) => (
-                <li key={name} role="option" aria-selected={name === chosen}>
-                  <button
-                    type="button"
-                    className={name === chosen ? "is-active" : undefined}
-                    style={{ fontFamily: chartFontFamily(systemFont(name)) }}
-                    onClick={() => {
-                      onPick(systemFont(name));
-                      setOpen(false);
-                    }}
-                  >
-                    {name}
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
+        asSheet ? (
+          <SystemFontSheet listLabel={listLabel} chosen={chosen} onPick={onPick} onClose={close} />
+        ) : (
+          <div className="lt-chart-style-system-panel">
+            <SystemFontList listLabel={listLabel} chosen={chosen} onPick={onPick} onClose={close} autoFocus />
+          </div>
+        )
       ) : null}
     </div>
+  );
+}
+
+type FontListProps = {
+  listLabel: string;
+  chosen: string | null;
+  onPick: (font: ChartFont) => void;
+  onClose: () => void;
+};
+
+/** Touch: the list over the whole screen above the keyboard (in landscape
+ * that leaves ~190 px, so search and close share one row). Fixed inside the
+ * popover so its taps still count as inside it. */
+function SystemFontSheet({ listLabel, chosen, onPick, onClose }: FontListProps) {
+  const { t } = useTranslation();
+  useDismissOnBack(onClose);
+  const area = useVisibleArea(true);
+  return (
+    <div
+      className="lt-chart-style-system-panel is-sheet"
+      style={area ? { top: `${area.top}px`, height: `${area.height}px` } : undefined}
+    >
+      <SystemFontList
+        listLabel={listLabel}
+        chosen={chosen}
+        onPick={onPick}
+        onClose={onClose}
+        searchAside={
+          <button
+            type="button"
+            className="lt-icon-button"
+            aria-label={t("common.close")}
+            title={t("common.close")}
+            onClick={onClose}
+          >
+            <span className="material-symbols-outlined" aria-hidden="true">close</span>
+          </button>
+        }
+      />
+    </div>
+  );
+}
+
+function SystemFontList({
+  listLabel,
+  chosen,
+  onPick,
+  onClose,
+  autoFocus = false,
+  searchAside,
+}: FontListProps & { autoFocus?: boolean; searchAside?: ReactNode }) {
+  const { t } = useTranslation();
+  const [fonts, setFonts] = useState<string[] | null>(null);
+  const [query, setQuery] = useState("");
+  useEffect(() => {
+    let alive = true;
+    void loadSystemFonts().then((names) => {
+      if (alive) setFonts(names);
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
+  const matches = useMemo(() => {
+    const needle = query.trim().toLowerCase();
+    const all = fonts ?? [];
+    return (needle ? all.filter((name) => name.toLowerCase().includes(needle)) : all).slice(0, MAX_LISTED_FONTS);
+  }, [fonts, query]);
+  return (
+    <>
+      <div className="lt-chart-style-system-search-row">
+        <input
+          type="search"
+          className="lt-chart-style-system-search"
+          placeholder={t("chartStyle.searchFonts")}
+          aria-label={t("chartStyle.searchFonts")}
+          value={query}
+          autoFocus={autoFocus}
+          onChange={(event) => setQuery(event.target.value)}
+        />
+        {searchAside}
+      </div>
+      {fonts === null ? (
+        <p className="lt-chart-style-system-note">{t("chartStyle.loadingFonts")}</p>
+      ) : fonts.length === 0 ? (
+        <p className="lt-chart-style-system-note">{t("chartStyle.noSystemFonts")}</p>
+      ) : matches.length === 0 ? (
+        <p className="lt-chart-style-system-note">{t("chartStyle.noFontMatch")}</p>
+      ) : (
+        <ul
+          className="lt-chart-style-system-list"
+          role="listbox"
+          aria-label={listLabel}
+          // Scrolling the list means the search is done: drop the keyboard
+          // so the list gets the screen back.
+          onTouchStart={dismissKeyboard}
+        >
+          {matches.map((name) => (
+            <li key={name} role="option" aria-selected={name === chosen}>
+              <button
+                type="button"
+                className={name === chosen ? "is-active" : undefined}
+                style={{ fontFamily: chartFontFamily(systemFont(name)) }}
+                onClick={() => {
+                  onPick(systemFont(name));
+                  onClose();
+                }}
+              >
+                {name}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </>
   );
 }
 

@@ -312,6 +312,43 @@
   font-size: 0.76rem;
 }
 
+/* Touch: the installed-font list takes the screen above the keyboard (the
+   inline style sets top/height from visualViewport; 100% is the fallback).
+   Fixed inside the popover on purpose, so taps still count as inside it. */
+.lt-chart-style-system-panel.is-sheet {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 200;
+  height: 100%;
+  padding: max(0.75rem, env(safe-area-inset-top)) max(0.75rem, env(safe-area-inset-right)) 0.5rem
+    max(0.75rem, env(safe-area-inset-left));
+  background: rgb(var(--lt-c-0a0a0a, 10 10 10));
+}
+
+.lt-chart-style-system-search-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.lt-chart-style-system-search-row .lt-chart-style-system-search {
+  flex: 1;
+  min-width: 0;
+}
+
+.lt-chart-style-system-panel.is-sheet .lt-chart-style-system-search {
+  min-height: 2.4rem;
+  font-size: 1rem; /* under 16px iOS zooms the page on focus */
+}
+
+.lt-chart-style-system-panel.is-sheet .lt-chart-style-system-list {
+  flex: 1;
+  min-height: 0;
+  max-height: none;
+}
+
 .lt-mobile .lt-chart-style-system-list button {
   padding: 0.55rem 0.5rem;
 }
