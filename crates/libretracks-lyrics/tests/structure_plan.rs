@@ -245,6 +245,27 @@ fn holyrics_plan_uses_order_positions() {
 }
 
 #[test]
+fn holyrics_missing_intro_does_not_shift_section_indexes() {
+    let lyrics = serde_json::json!({
+        "id": "812", "title": "Way Maker",
+        "slides": [
+            {"text": "a", "slide_description": "Verso 1"},
+            {"text": "b", "slide_description": "Coro 1"},
+            {"text": "c", "slide_description": "Verso 2"}
+        ],
+        "order": "1,2,3"
+    });
+    let structure = parse_holyrics(&lyrics, None).unwrap();
+    let markers = song_markers();
+    let refs: Vec<&Marker> = markers.iter().collect();
+    let plan = build_plan(LyricsSoftware::Holyrics, &refs, &structure, &link(LyricsSoftware::Holyrics, vec![]));
+    assert_eq!(plan.markers["intro"].status, MarkerStatus::ClearText { automatic: true });
+    assert_eq!(index_of(&plan, "v1"), 1);
+    assert_eq!(index_of(&plan, "c"), 2);
+    assert_eq!(index_of(&plan, "v2"), 3);
+}
+
+#[test]
 fn corrections_clear_skip_and_choose_a_group() {
     let markers = song_markers();
     let refs: Vec<&Marker> = markers.iter().collect();

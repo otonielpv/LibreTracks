@@ -20,7 +20,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use libretracks_core::lyrics_match::{match_presentation, PresentationCandidate, PresentationMatch};
-use libretracks_core::lyrics_schedule::{region_section_markers, LyricsEvent};
+use libretracks_core::lyrics_schedule::{region_section_markers, LyricsEvent, START_SLACK_SECONDS};
 use libretracks_core::section_vocab::normalize_title;
 use libretracks_core::{LyricsLink, LyricsSoftware, Marker, Song, SongRegion};
 use serde::Serialize;
@@ -393,12 +393,12 @@ impl LyricsWorker {
             } => {
                 if self.client.is_some() {
                     let event = LyricsEvent::Land {
-                        region_id,
-                        marker_id: Some(marker_id),
+                        region_id: region_id.clone(),
+                        marker_id: Some(marker_id.clone()),
                         occurrence: 0,
                         k_passed: k,
                     };
-                    self.on_event(event).await;
+                    self.show(region_id, marker_id, k, event, false).await;
                 }
             }
         }
@@ -462,7 +462,7 @@ impl LyricsWorker {
                 marker_id,
                 ..
             } => {
-                self.show(region_id.clone(), marker_id.clone(), 0, event.clone())
+                self.show(region_id.clone(), marker_id.clone(), 0, event.clone(), true)
                     .await;
             }
             LyricsEvent::Land {
@@ -471,7 +471,7 @@ impl LyricsWorker {
                 k_passed,
                 ..
             } => {
-                self.show(region_id.clone(), marker_id.clone(), *k_passed, event.clone())
+                self.show(region_id.clone(), marker_id.clone(), *k_passed, event.clone(), true)
                     .await;
             }
             LyricsEvent::Land {
@@ -521,7 +521,7 @@ impl LyricsWorker {
     }
 
     /// Show a marker's section, then `k` of its slide changes.
-    async fn show(&mut self, region_id: String, marker_id: String, k: u32, event: LyricsEvent) {
+    async fn show(&mut self, region_id: String, marker_id: String, k: u32, event: LyricsEvent, playback: bool) {
         self.entered = Some(region_id.clone());
         let plan = match self.ensure_plan(&region_id).await {
             Ok(Some(plan)) => plan,
@@ -547,6 +547,26 @@ impl LyricsWorker {
         let Some(marker) = plan.markers.get(&marker_id) else {
             return;
         };
+        let show_initial_slide = playback
+            && !plan.start_automatic
+            && matches!(plan.start, LyricsCommand::Slide { .. })
+            && self.song.as_ref().is_some_and(|song| {
+                song.regions.iter().find(|region| region.id == region_id).is_some_and(|region| {
+                    region_section_markers(song, region).first().is_some_and(|first| {
+                        first.id == marker_id
+                            && first.start_seconds <= region.start_seconds + START_SLACK_SECONDS
+                    })
+                })
+            });
+        if show_initial_slide {
+            let already_showing = self.showing.as_ref().is_some_and(|(region, marker)| {
+                region == &region_id && marker == START_MARKER
+            });
+            if !already_showing || matches!(event, LyricsEvent::Land { .. }) {
+                self.show_start(&region_id).await;
+            }
+            return;
+        }
         let label = match &marker.status {
             MarkerStatus::Matched { group_label, .. } => Some(group_label.clone()),
             _ => None,

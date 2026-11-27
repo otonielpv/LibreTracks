@@ -231,6 +231,41 @@ fn cue_markers_send_nothing() {
 }
 
 #[test]
+fn cue_markers_do_not_end_sections_or_change_landing() {
+    let mut song = song();
+    song.section_markers.push(marker("build", MarkerKind::Build, None, 10.0));
+    let grid = LeadGrid::new(&song);
+    let counts = HashMap::from([("v1".to_string(), 2)]);
+    let items = lyrics_items(&song, &grid, &ONE_BEAT, Some(&counts));
+    assert_eq!(items.iter().find(|item| item.id == "v1#1").unwrap().anchor, 12.0);
+    assert!(matches!(
+        land_lyrics(&song, &items, 11.0),
+        Some(LyricsEvent::Land { marker_id: Some(id), k_passed: 0, .. }) if id == "v1"
+    ));
+}
+
+#[test]
+fn cue_markers_before_the_intro_keep_the_song_start_on_screen() {
+    let mut song = song();
+    song.section_markers[0].start_seconds = 4.0;
+    song.section_markers.retain(|marker| marker.id != "v1");
+    song.section_markers.push(marker("count-in", MarkerKind::Build, None, 1.0));
+    let grid = LeadGrid::new(&song);
+    let items = lyrics_items(&song, &grid, &ONE_BEAT, None);
+    assert!(matches!(items[0].kind, LyricsItemKind::EnterSong { show_start: true }));
+    for position in [0.0, 1.0, 3.0] {
+        assert!(matches!(
+            land_lyrics(&song, &items, position),
+            Some(LyricsEvent::Land { marker_id: None, .. })
+        ));
+    }
+    assert!(matches!(
+        land_lyrics(&song, &items, 4.0),
+        Some(LyricsEvent::Land { marker_id: Some(id), .. }) if id == "intro"
+    ));
+}
+
+#[test]
 fn song_lead_in_bars_seconds_and_across_a_tempo_change() {
     for lead in [LeadTime::Bars { count: 1.0 }, LeadTime::Seconds { seconds: 0.25 }] {
         let mut song = song();

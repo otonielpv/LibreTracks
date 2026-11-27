@@ -14,7 +14,7 @@ use serde_json::{json, Value};
 
 use super::{encode_segment, text, CurrentSlide, Http, LyricsClient, Presentation, ProbeInfo};
 use crate::plan::LyricsCommand;
-use crate::structure::{parse_holyrics, LyricsStructure, HOLYRICS_FIRST_LYRIC};
+use crate::structure::{is_title_label, parse_holyrics, LyricsStructure, HOLYRICS_FIRST_LYRIC};
 use libretracks_core::section_vocab::normalize_title;
 use crate::LyricsError;
 
@@ -52,14 +52,21 @@ pub fn holyrics_index(ours: u32, title_slide: bool) -> Option<u32> {
     }
 }
 
-/// Whether what Holyrics shows (`GetCurrentPresentation` with slides) opens
-/// with a title slide: no description and the song's name as its text.
+/// Whether the first slide can be identified as a title or a lyric.
 pub fn shows_title_slide(current: &Value) -> Option<bool> {
     let first = current.get("slides")?.as_array()?.first()?;
     let name = text(current.get("name")).unwrap_or_default();
     let description = text(first.get("slide_description")).unwrap_or_default();
     let body = text(first.get("text")).unwrap_or_default();
-    Some(description.trim().is_empty() && !name.is_empty() && normalize_title(&body) == normalize_title(&name))
+    if is_title_label(&description)
+        || (!name.is_empty() && normalize_title(&body) == normalize_title(&name))
+    {
+        Some(true)
+    } else if !description.trim().is_empty() {
+        Some(false)
+    } else {
+        None
+    }
 }
 
 /// Stands for «clear the screen» in `send`: it is F10 or F8 depending on
@@ -75,6 +82,9 @@ pub struct HolyricsClient {
     black: AtomicBool,
     /// Whether we hid the text with F9 (lifted before showing lyrics again).
     text_hidden: AtomicBool,
+    /// First lyric in each loaded presentation, for identifying a title
+    /// slide even when Holyrics includes the artist or other text on it.
+    first_lyrics: Mutex<HashMap<String, String>>,
 }
 
 impl HolyricsClient {
@@ -84,6 +94,7 @@ impl HolyricsClient {
             blanked: AtomicBool::new(false),
             black: AtomicBool::new(false),
             text_hidden: AtomicBool::new(false),
+            first_lyrics: Mutex::new(HashMap::new()),
         }
     }
 
@@ -143,7 +154,21 @@ impl HolyricsClient {
         let same_song = [current.get("song_id"), current.get("reference_id")]
             .into_iter()
             .any(|id| text(id).as_deref() == Some(presentation_id));
-        let Some(shown) = shows_title_slide(&current).filter(|_| same_song) else {
+        let expected = self.first_lyrics.lock().ok()
+            .and_then(|lyrics| lyrics.get(presentation_id).cloned());
+        let from_lyrics = expected.as_deref().and_then(|expected| {
+            let slides = current.get("slides")?.as_array()?;
+            let matches = |slide: &Value| {
+                text(slide.get("text"))
+                    .is_some_and(|body| normalize_title(&body) == expected)
+            };
+            match (slides.first().is_some_and(matches), slides.get(1).is_some_and(matches)) {
+                (true, false) => Some(false),
+                (false, true) => Some(true),
+                _ => None,
+            }
+        });
+        let Some(shown) = from_lyrics.or_else(|| shows_title_slide(&current)).filter(|_| same_song) else {
             return Ok(elapsed);
         };
         if shown == assumed {
@@ -279,6 +304,15 @@ impl LyricsClient for HolyricsClient {
             .ok()
             .map(|(data, _)| data);
         let mut structure = parse_holyrics(&lyrics, descriptions.as_ref())?;
+        if let Ok(mut lyrics) = self.first_lyrics.lock() {
+            lyrics.remove(presentation_id);
+            if let Some(first) = structure.slides.iter().find(|slide| !slide.title) {
+                let normalized = normalize_title(&first.text);
+                if !normalized.is_empty() {
+                    lyrics.insert(presentation_id.to_string(), normalized);
+                }
+            }
+        }
         if !self.title_slide() {
             structure.slides.retain(|slide| !slide.title);
         }

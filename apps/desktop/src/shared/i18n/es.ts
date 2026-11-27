@@ -4364,7 +4364,7 @@ const es = {
       saving: "Guardando…",
       saved: "Guardado ✓",
       start: "Al empezar la canción",
-      startHelp: "Lo que se ve desde que empieza la canción hasta su primera marca.",
+      startHelp: "Lo que se ve hasta la siguiente marca de sección; las marcas de aviso no cuentan.",
       startAuto: "Automático: {{what}}",
       startClear: "Limpiar pantalla",
       markerLead: "Adelanto {{lead}}",

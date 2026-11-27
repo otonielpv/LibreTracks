@@ -412,3 +412,98 @@ async fn a_song_whose_first_marker_sends_nothing_still_shows_its_start() {
     worker.handle(vec![section("intro")]).await;
     assert!(slide_orders(&sent).is_empty());
 }
+
+#[tokio::test]
+async fn holyrics_chosen_start_survives_the_opening_section_until_the_next_section() {
+    let sent: Sent = Arc::default();
+    let log = Arc::clone(&sent);
+    let base = serve(move |request, _| {
+        let action = request.target.trim_start_matches("/api/").split('?').next().unwrap();
+        let body: Value = serde_json::from_slice(&request.body).unwrap_or(Value::Null);
+        log.lock().unwrap().push(serde_json::json!({ "action": action, "body": body }));
+        match action {
+            "CheckPermissions" => Response::json(200, r#"{"status":"ok","data":{"unauthorized_actions":[]}}"#),
+            "GetLyrics" => Response::json(200, r#"{"status":"ok","data":{"id":"812","title":"Way Maker","slides":[{"text":"a","slide_description":"Verso 1"},{"text":"b","slide_description":"Coro 1"},{"text":"c","slide_description":"Verso 2"}],"order":"1,2,3"}}"#),
+            "GetCurrentPresentation" => Response::json(200, r#"{"status":"ok","data":{"song_id":"812","name":"Way Maker","slides":[{"text":"Way Maker","slide_description":""}]}}"#),
+            _ => Response::json(200, r#"{"status":"ok","data":null}"#),
+        }
+    }).await;
+    let connection = Connection {
+        host: "127.0.0.1".into(),
+        port: base.rsplit(':').next().unwrap().parse().unwrap(),
+        token: Some("token".into()),
+    };
+    let link = LyricsLink {
+        software: LyricsSoftware::Holyrics,
+        presentation_id: Some("812".into()),
+        presentation_name: "Way Maker".into(),
+        overrides: vec![],
+        slides: vec![],
+        start: Some(libretracks_core::StartTarget::Slide { index: 0 }),
+    };
+    let mut track = song(Some(link));
+    track.section_markers.push(marker("cue", MarkerKind::Build, None, 2.0));
+    let mut worker = LyricsWorker::new(Arc::new(Recorder::default()));
+    let mut settings = config(connection);
+    settings.software = LyricsSoftware::Holyrics;
+    worker.handle(vec![
+        WorkerInput::Configure(Some(settings)),
+        WorkerInput::Song(Arc::new(track)),
+    ]).await;
+    worker.ensure_plan("r1").await.unwrap().expect("plan");
+    sent.lock().unwrap().clear();
+
+    // Both a landing at the start and a normal entry with a coincident
+    // section must show the selected cover, not the intro's ClearText.
+    worker.handle(vec![WorkerInput::Event(LyricsEvent::Land {
+        region_id: "r1".into(), marker_id: Some("intro".into()), occurrence: 0, k_passed: 0,
+    })]).await;
+    worker.handle(vec![step("intro", 1), section("intro")]).await;
+    let shows = || sent.lock().unwrap().iter()
+        .filter(|entry| entry["action"] == "ShowLyrics")
+        .map(|entry| entry["body"]["initial_index"].as_u64().unwrap())
+        .collect::<Vec<_>>();
+    assert_eq!(shows(), vec![0]);
+    assert!(!sent.lock().unwrap().iter().any(|entry| entry["action"] == "SetF9"));
+    worker.handle(vec![section("v1"), section("c"), section("v2")]).await;
+    // Coalescing intentionally keeps only the last section in a single batch.
+    assert_eq!(shows(), vec![0, 3]);
+    sent.lock().unwrap().clear();
+    worker.handle(vec![WorkerInput::Event(LyricsEvent::EnterSong {
+        region_id: "r1".into(), show_start: false,
+    }), section("intro")]).await;
+    assert_eq!(shows(), vec![0]);
+    worker.handle(vec![section("v1")]).await;
+    worker.handle(vec![section("c")]).await;
+    worker.handle(vec![section("v2")]).await;
+    assert_eq!(shows(), vec![0, 1, 2, 3]);
+
+    // The panel's test button still tests the section rather than the cover.
+    sent.lock().unwrap().clear();
+    worker.handle(vec![WorkerInput::TestSend {
+        region_id: "r1".into(), marker_id: "intro".into(), k: 0,
+    }]).await;
+    assert!(sent.lock().unwrap().iter().any(|entry| entry["action"] == "SetF9"));
+
+    // With count-in cues before a later intro, landing at the song start
+    // shows the cover until the intro's own section event.
+    let mut later_intro = song(Some(LyricsLink {
+        software: LyricsSoftware::Holyrics,
+        presentation_id: Some("812".into()),
+        presentation_name: "Way Maker".into(),
+        overrides: vec![],
+        slides: vec![],
+        start: Some(libretracks_core::StartTarget::Slide { index: 0 }),
+    }));
+    later_intro.section_markers[0].start_seconds = 4.0;
+    later_intro.section_markers[1].start_seconds = 24.0;
+    later_intro.section_markers.push(marker("cue", MarkerKind::Build, None, 1.0));
+    worker.handle(vec![WorkerInput::Song(Arc::new(later_intro))]).await;
+    sent.lock().unwrap().clear();
+    worker.handle(vec![WorkerInput::Event(LyricsEvent::Land {
+        region_id: "r1".into(), marker_id: None, occurrence: 0, k_passed: 0,
+    })]).await;
+    assert_eq!(shows(), vec![0]);
+    worker.handle(vec![section("intro")]).await;
+    assert!(sent.lock().unwrap().iter().any(|entry| entry["action"] == "SetF9"));
+}

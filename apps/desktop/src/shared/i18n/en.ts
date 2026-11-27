@@ -4332,7 +4332,7 @@ const en = {
       saving: "Saving…",
       saved: "Saved ✓",
       start: "When the song starts",
-      startHelp: "What shows from the start of the song until its first marker.",
+      startHelp: "What shows until the next section marker; cue markers do not count.",
       startAuto: "Automatic: {{what}}",
       startClear: "Clear the screen",
       markerLead: "Lead {{lead}}",

@@ -18,9 +18,8 @@ use crate::model::{
 };
 
 const EPSILON: f64 = 1.0e-6;
-/// A first marker this close to the start of its song opens it: no start
-/// slide flashes before it.
-const START_SLACK_SECONDS: f64 = 0.05;
+/// A first marker this close to the start of its song opens it.
+pub const START_SLACK_SECONDS: f64 = 0.05;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum LyricsEvent {

@@ -342,6 +342,41 @@ async fn holyrics_without_a_title_slide_is_learned_and_corrected_at_once() {
 }
 
 #[tokio::test]
+async fn holyrics_recognizes_a_title_with_extra_text_and_corrects_the_indexes() {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    let calls = Arc::new(AtomicUsize::new(0));
+    let counter = calls.clone();
+    let (connection, log) = server(move |request| match holyrics_action(&request.target).as_str() {
+        "GetLyrics" => Response::json(200, r#"{"status":"ok","data":{"id":"812","title":"Song","slides":[{"text":"First lyric","slide_description":"Verso 1"},{"text":"Chorus lyric","slide_description":"Coro 1"}],"order":"1,2"}}"#),
+        "GetCurrentPresentation" if counter.fetch_add(1, Ordering::SeqCst) == 0 => Response::json(
+            200, r#"{"status":"ok","data":{"song_id":"812","name":"Song","slides":[{"text":"First lyric","slide_description":"Verso 1"},{"text":"Chorus lyric","slide_description":"Coro 1"}]}}"#,
+        ),
+        "GetCurrentPresentation" => Response::json(
+            200, r#"{"status":"ok","data":{"song_id":"812","name":"Song","slides":[{"text":"Song\nArtist","slide_description":""},{"text":"First lyric","slide_description":"Verso 1"},{"text":"Chorus lyric","slide_description":"Coro 1"}]}}"#,
+        ),
+        _ => Response::json(200, r#"{"status":"ok","data":null}"#),
+    }).await;
+    let holyrics = client(LyricsSoftware::Holyrics, connection);
+    holyrics.structure("812").await.unwrap();
+    let verse = LyricsCommand::Section { presentation_id: "812".into(), group_label: "Verso 1".into(), index: 1 };
+    holyrics.send(&verse).await.unwrap();
+    holyrics.send(&verse).await.unwrap();
+    holyrics.send(&LyricsCommand::Section { presentation_id: "812".into(), group_label: "Coro 1".into(), index: 2 }).await.unwrap();
+    let sent: Vec<(String, serde_json::Value)> = log.lock().unwrap().iter()
+        .map(|request| (holyrics_action(&request.target), json(&request.body)))
+        .filter(|(action, _)| action == "ShowLyrics" || action == "ActionGoToIndex")
+        .collect();
+    assert_eq!(sent, vec![
+        ("ShowLyrics".into(), json(r#"{"id":"812","initial_index":1}"#)),
+        ("ActionGoToIndex".into(), json(r#"{"index":0}"#)),
+        ("ShowLyrics".into(), json(r#"{"id":"812","initial_index":0}"#)),
+        ("ActionGoToIndex".into(), json(r#"{"index":1}"#)),
+        ("ShowLyrics".into(), json(r#"{"id":"812","initial_index":2}"#)),
+    ]);
+}
+
+#[tokio::test]
 async fn holyrics_reports_missing_permissions_and_a_bad_token() {
     let (connection, _) = server(|request| match holyrics_action(&request.target).as_str() {
         "GetTokenInfo" => Response::json(200, fixture("holyrics/GetTokenInfo.json")),
