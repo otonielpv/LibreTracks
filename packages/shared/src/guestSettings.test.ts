@@ -70,12 +70,13 @@ describe("guest settings", () => {
     state.updateHost({ globalJumpBars: 16 });
     const saved = await state.bridge.save({
       ...settings, pauseAtSongEnd: !settings.pauseAtSongEnd,
-      vampBetweenSongs: !settings.vampBetweenSongs, fadeOutStopSeconds: 8,
+      vampBetweenSongs: !settings.vampBetweenSongs, fadeOutStopSeconds: 8, fadeOutPause: false,
     });
     expect(saved.globalJumpBars).toBe(16);
     expect(saved.pauseAtSongEnd).toBe(!settings.pauseAtSongEnd);
     expect(saved.vampBetweenSongs).toBe(!settings.vampBetweenSongs);
     expect(saved.fadeOutStopSeconds).toBe(8);
+    expect(saved.fadeOutPause).toBe(false);
     expect(state.local.mock.calls.filter(([command]) => command === "save_settings")).toHaveLength(0);
   });
 

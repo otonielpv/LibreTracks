@@ -5198,6 +5198,9 @@ fn song_master_gains_are_set_together_and_undone_together() {
 fn fade_out_and_stop_fades_then_stops() {
     let mut session = session_with_song_dir("fade-stop-demo", demo_song());
     let audio = crate::audio::engine::AudioController::default();
+    let mut settings = audio.current_settings().expect("settings");
+    settings.fade_out_pause = false;
+    audio.replace_settings(settings).expect("replace settings");
 
     // Not playing: nothing to fade.
     let idle = session.fade_out_and_stop(5.0, &audio).expect("idle press is fine");
@@ -5228,6 +5231,39 @@ fn fade_out_and_stop_fades_then_stops() {
     session.fade_out_and_stop(5.0, &audio).expect("fade should start");
     let paused = session.pause(&audio).expect("pause should succeed");
     assert!(!paused.fading_to_stop);
+}
+
+#[test]
+fn fade_out_pauses_at_the_current_position_by_default() {
+    let mut session = session_with_song_dir("fade-pause-demo", demo_song());
+    let audio = crate::audio::engine::AudioController::default();
+    session.seek(2.0, &audio).expect("seek");
+    session.play(&audio).expect("play");
+    session.fade_out_and_stop(5.0, &audio).expect("fade");
+    session.expire_fade_stop_for_test();
+    assert!(session.finish_fade_stop_if_due(&audio).expect("tick"));
+    let paused = session.snapshot();
+    assert_eq!(paused.playback_state, "paused");
+    assert!(paused.position_seconds >= 2.0);
+    assert!(!paused.fading_to_stop);
+    let resumed = session.toggle_fade(5.0, &audio).expect("fade in");
+    assert_eq!(resumed.playback_state, "playing");
+    assert!(resumed.position_seconds >= 2.0);
+}
+
+#[test]
+fn follower_finishes_fade_locally_while_transport_is_locked() {
+    let mut session = session_with_song_dir("fade-follower-demo", demo_song());
+    let audio = crate::audio::engine::AudioController::default();
+    session.play(&audio).expect("play");
+    session.set_transport_locked(true, None);
+    {
+        let _origin = session.intent_origin_scope(super::IntentOrigin::Follower);
+        session.fade_out_and_stop(5.0, &audio).expect("fade");
+    }
+    session.expire_fade_stop_for_test();
+    assert!(session.finish_fade_stop_if_due(&audio).expect("tick"));
+    assert_eq!(session.snapshot().playback_state, "paused");
 }
 
 /// «Fade in y reproducir»: the same button with the transport stopped or

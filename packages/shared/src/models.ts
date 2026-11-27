@@ -1781,6 +1781,8 @@ export type AppSettings = {
   songTransitionMode: "instant" | "fade_out";
   /** Length of the «Fade out y parar» live action, in seconds (0.1–30). */
   fadeOutStopSeconds: number;
+  /** Pause at the current position when the fade finishes, rather than stop. */
+  fadeOutPause: boolean;
   /** Sidebar library: browse folders of the disk ("folders", default) or the
    * session's imported assets with virtual folders ("classic", as before). */
   libraryMode: "folders" | "classic";
@@ -1963,6 +1965,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   songJumpBars: 4,
   songTransitionMode: "instant",
   fadeOutStopSeconds: 5,
+  fadeOutPause: true,
   libraryMode: "folders",
   libraryPlaces: [],
   vampMode: "section",
@@ -2296,6 +2299,7 @@ export function normalizeAppSettings(settings: AppSettings): AppSettings {
     fadeOutStopSeconds: Number.isFinite(settings.fadeOutStopSeconds)
       ? Math.min(30, Math.max(0.1, settings.fadeOutStopSeconds))
       : DEFAULT_APP_SETTINGS.fadeOutStopSeconds,
+    fadeOutPause: settings.fadeOutPause !== false,
     libraryMode: settings.libraryMode === "classic" ? "classic" : "folders",
     libraryPlaces: Array.isArray(settings.libraryPlaces)
       ? settings.libraryPlaces.filter(

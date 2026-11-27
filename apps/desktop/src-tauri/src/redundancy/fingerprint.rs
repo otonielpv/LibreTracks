@@ -28,6 +28,7 @@ pub fn timing_settings(settings: &AppSettings) -> TimingSettings {
         song_jump_bars: settings.song_jump_bars,
         song_transition_mode: settings.song_transition_mode.clone(),
         fade_out_stop_seconds: settings.fade_out_stop_seconds,
+        fade_out_pause: settings.fade_out_pause,
         vamp_mode: settings.vamp_mode.clone(),
         vamp_bars: settings.vamp_bars,
         pause_at_song_end: settings.pause_at_song_end,
@@ -54,6 +55,7 @@ pub fn apply_timing(
             "songJumpBars" => set_parsed(&mut settings.song_jump_bars, value),
             "songTransitionMode" => settings.song_transition_mode = value.to_string(),
             "fadeOutStopSeconds" => set_parsed(&mut settings.fade_out_stop_seconds, value),
+            "fadeOutPause" => set_parsed(&mut settings.fade_out_pause, value),
             "vampMode" => settings.vamp_mode = value.to_string(),
             "vampBars" => set_parsed(&mut settings.vamp_bars, value),
             "pauseAtSongEnd" => set_parsed(&mut settings.pause_at_song_end, value),
@@ -135,6 +137,7 @@ mod tests {
         main.global_jump_bars += 3;
         main.pause_at_song_end = !main.pause_at_song_end;
         main.fade_out_stop_seconds = 2.5;
+        main.fade_out_pause = false;
         main.vamp_mode = "custom".into();
         let canonical = timing_settings(&main).canonical();
         let mut backup = AppSettings::default();

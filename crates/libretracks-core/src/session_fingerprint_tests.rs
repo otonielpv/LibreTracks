@@ -57,6 +57,7 @@ fn timing() -> TimingSettings {
         song_jump_bars: 4,
         song_transition_mode: "instant".into(),
         fade_out_stop_seconds: 2.0,
+        fade_out_pause: true,
         vamp_mode: "section".into(),
         vamp_bars: 4,
         pause_at_song_end: false,

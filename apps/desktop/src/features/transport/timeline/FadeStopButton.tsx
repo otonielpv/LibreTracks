@@ -14,7 +14,7 @@ type FadeStopButtonProps = {
 };
 
 /**
- * «Fade out y parar»: cut the playing song with a fade instead of a hard stop.
+ * Fade out the playing song and pause or stop according to the setting.
  * Lit while the fade runs; pressing it again then stops at once.
  *
  * Stopped or paused it is «Fade in y reproducir»: plays from the cursor with

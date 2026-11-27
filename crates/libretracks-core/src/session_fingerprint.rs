@@ -86,6 +86,7 @@ pub struct TimingSettings {
     pub song_jump_bars: u32,
     pub song_transition_mode: String,
     pub fade_out_stop_seconds: f64,
+    pub fade_out_pause: bool,
     pub vamp_mode: String,
     pub vamp_bars: u32,
     pub pause_at_song_end: bool,
@@ -106,6 +107,7 @@ impl TimingSettings {
         put("songJumpBars", self.song_jump_bars.to_string());
         put("songTransitionMode", self.song_transition_mode.clone());
         put("fadeOutStopSeconds", round(self.fade_out_stop_seconds));
+        put("fadeOutPause", self.fade_out_pause.to_string());
         put("vampMode", self.vamp_mode.clone());
         put("vampBars", self.vamp_bars.to_string());
         put("pauseAtSongEnd", self.pause_at_song_end.to_string());

@@ -121,6 +121,10 @@ fn default_fade_out_stop_seconds() -> f64 {
     DEFAULT_FADE_OUT_STOP_SECONDS
 }
 
+fn default_fade_out_pause() -> bool {
+    true
+}
+
 fn default_song_transition_mode() -> String {
     "instant".into()
 }
@@ -384,6 +388,8 @@ pub struct AppSettings {
     /// Duration of the «Fade out y parar» live action, in seconds.
     #[serde(default = "default_fade_out_stop_seconds")]
     pub fade_out_stop_seconds: f64,
+    #[serde(default = "default_fade_out_pause")]
+    pub fade_out_pause: bool,
     #[serde(default = "default_vamp_mode")]
     pub vamp_mode: String,
     #[serde(default = "default_vamp_bars")]
@@ -588,6 +594,7 @@ impl Default for AppSettings {
             song_jump_bars: default_song_jump_bars(),
             song_transition_mode: default_song_transition_mode(),
             fade_out_stop_seconds: default_fade_out_stop_seconds(),
+            fade_out_pause: default_fade_out_pause(),
             library_mode: default_library_mode(),
             library_places: Vec::new(),
             vamp_mode: default_vamp_mode(),
@@ -911,6 +918,17 @@ fn settings_file_path(app: &AppHandle) -> Result<PathBuf, io::Error> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn fade_out_pause_defaults_for_legacy_settings_and_round_trips() {
+        let legacy: AppSettings = serde_json::from_str("{}").expect("legacy settings");
+        assert!(legacy.fade_out_pause);
+        assert!(AppSettings::default().fade_out_pause);
+        let settings: AppSettings = serde_json::from_str(r#"{"fadeOutPause":false}"#).expect("settings");
+        assert!(!settings.fade_out_pause);
+        let restored: AppSettings = serde_json::from_str(&serde_json::to_string(&settings).unwrap()).unwrap();
+        assert!(!restored.fade_out_pause);
+    }
 
     #[test]
     fn displayed_ui_language_is_reported_and_cleared() {

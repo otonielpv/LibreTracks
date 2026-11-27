@@ -52,7 +52,7 @@ function settingsProps(activeTab: Props["activeTab"] = "general"): Props {
     selectedLocale: "es", onLocaleChange: vi.fn(),
     onTimelineNavigationSchemeChange: noop, onTimelinePlayheadFollowModeChange: noop,
     onPauseAtSongEndChange: vi.fn(), onVampBetweenSongsChange: noop,
-    onFadeOutStopSecondsChange: noop, onSongTrackLayoutChange: noop,
+    onFadeOutStopSecondsChange: noop, onFadeOutPauseChange: noop, onSongTrackLayoutChange: noop,
     onDefaultSongTemplateChange: noop, onReferenceImportedAudioChange: noop,
     onAutoColorNewTracksChange: noop, onAutoWarpChange: noop, onPrerenderedPitchChange: noop, onAutoSaveEnabledChange: noop,
     onAutoSaveIntervalMinutesChange: noop, midiLearnMode: null,
@@ -99,6 +99,7 @@ describe("guest settings panel", () => {
     pause.click();
     expect(props.onPauseAtSongEndChange).not.toHaveBeenCalled();
     expect(screen.getByRole("spinbutton", { name: /transport.settingsModal.fadeOutStopSeconds/ }).matches(":disabled")).toBe(true);
+    expect(screen.getByRole("combobox", { name: /transport.settingsModal.fadeOutAction/ }).matches(":disabled")).toBe(true);
     // Editing is hidden: asking for it lands on General, without its fields.
     rerender(<SettingsPanel {...props} activeTab="editing" />);
     expect(screen.queryByText("transport.settingsModal.autoSave")).toBeNull();
@@ -113,8 +114,13 @@ describe("guest settings panel", () => {
     expect(pause.matches(":disabled")).toBe(false);
     fireEvent.click(pause);
     expect(props.onPauseAtSongEndChange).toHaveBeenCalled();
+    const fadeAction = screen.getByRole("combobox", { name: /transport.settingsModal.fadeOutAction/ }) as HTMLSelectElement;
+    expect(fadeAction.value).toBe("pause");
+    fireEvent.change(fadeAction, { target: { value: "stop" } });
+    expect(props.onFadeOutPauseChange).toHaveBeenCalledWith(false);
     act(() => setRole("viewer"));
     expect(pause.matches(":disabled")).toBe(true);
+    expect(fadeAction.matches(":disabled")).toBe(true);
   });
 
   it.each(["viewer", "controller", "editor"] as const)("%s: exposes only the permitted host metering option in Audio", (role) => {

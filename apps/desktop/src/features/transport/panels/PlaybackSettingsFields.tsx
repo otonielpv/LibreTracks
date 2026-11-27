@@ -3,11 +3,12 @@ import { useTranslation } from "react-i18next";
 import { NumberInput } from "../../../shared/NumberInput";
 
 type PlaybackSettingsFieldsProps = {
-  settings: Pick<AppSettings, "pauseAtSongEnd" | "vampBetweenSongs" | "fadeOutStopSeconds">;
+  settings: Pick<AppSettings, "pauseAtSongEnd" | "vampBetweenSongs" | "fadeOutStopSeconds" | "fadeOutPause">;
   disabled: boolean;
   onPauseAtSongEndChange: (value: boolean) => void;
   onVampBetweenSongsChange: (value: boolean) => void;
   onFadeOutStopSecondsChange: (value: number) => void;
+  onFadeOutPauseChange: (value: boolean) => void;
 };
 
 export function PlaybackSettingsFields({
@@ -16,6 +17,7 @@ export function PlaybackSettingsFields({
   onPauseAtSongEndChange,
   onVampBetweenSongsChange,
   onFadeOutStopSecondsChange,
+  onFadeOutPauseChange,
 }: PlaybackSettingsFieldsProps) {
   const { t } = useTranslation();
   return (
@@ -52,6 +54,18 @@ export function PlaybackSettingsFields({
           <span>{t("transport.settingsModal.vampBetweenSongs")}</span>
           <small>{t("transport.settingsModal.vampBetweenSongsHint")}</small>
         </span>
+      </label>
+      <label className="lt-settings-field">
+        <span className="lt-settings-field-label">{t("transport.settingsModal.fadeOutAction")}</span>
+        <select
+          value={settings.fadeOutPause ? "pause" : "stop"}
+          disabled={disabled}
+          onChange={(event) => onFadeOutPauseChange(event.target.value === "pause")}
+        >
+          <option value="pause">{t("transport.settingsModal.fadeOutActionPause")}</option>
+          <option value="stop">{t("transport.settingsModal.fadeOutActionStop")}</option>
+        </select>
+        <small>{t("transport.settingsModal.fadeOutActionHint")}</small>
       </label>
       <label className="lt-settings-field">
         <span className="lt-settings-field-label">

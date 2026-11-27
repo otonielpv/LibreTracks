@@ -102,6 +102,7 @@ type SettingsPanelProps = {
   onPauseAtSongEndChange: (value: boolean) => void;
   onVampBetweenSongsChange: (value: boolean) => void;
   onFadeOutStopSecondsChange: (value: number) => void;
+  onFadeOutPauseChange: (value: boolean) => void;
   onSongTrackLayoutChange: (value: AppSettings["songTrackLayout"]) => void;
   onDefaultSongTemplateChange: (value: string | null) => void;
   onReferenceImportedAudioChange: (value: boolean) => void;
@@ -182,6 +183,7 @@ export function SettingsPanel({
   onPauseAtSongEndChange,
   onVampBetweenSongsChange,
   onFadeOutStopSecondsChange,
+  onFadeOutPauseChange,
   onSongTrackLayoutChange,
   onDefaultSongTemplateChange,
   onReferenceImportedAudioChange,
@@ -654,6 +656,7 @@ export function SettingsPanel({
                     onPauseAtSongEndChange={onPauseAtSongEndChange}
                     onVampBetweenSongsChange={onVampBetweenSongsChange}
                     onFadeOutStopSecondsChange={onFadeOutStopSecondsChange}
+                    onFadeOutPauseChange={onFadeOutPauseChange}
                   />
                 </SettingsTabSection>
               ) : null}

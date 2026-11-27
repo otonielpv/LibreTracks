@@ -2111,7 +2111,7 @@ export async function stopTransport(): Promise<TransportSnapshot> {
 
 /**
  * «Fade out y parar»: fade the playing song out over the configured
- * `fadeOutStopSeconds`, then stop. Calling it again during the fade stops at
+ * `fadeOutStopSeconds`, then pause or stop. Calling it again during the fade stops at
  * once. A no-op unless playing.
  */
 export type LibraryDirEntry = {

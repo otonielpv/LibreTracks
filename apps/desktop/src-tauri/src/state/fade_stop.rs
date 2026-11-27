@@ -8,8 +8,7 @@
 //! remata los saltos con fade (`sync_position`).
 //!
 //! - Primera pulsación: rampa a silencio durante la duración configurada.
-//! - Al terminar: se para y la ganancia vuelve a 1, para que el siguiente Play
-//!   suene a volumen normal.
+//! - Al terminar: se pausa o se para según el ajuste y se restaura la ganancia.
 //! - Segunda pulsación durante el fade: parada inmediata (salida de emergencia).
 //! - Pausa o Stop manual durante el fade: lo cancelan y devuelven la ganancia.
 //!
@@ -38,6 +37,7 @@ const MAX_FADE_SECONDS: f64 = 30.0;
 pub(crate) struct FadeStop {
     started_at: Instant,
     duration: Duration,
+    pause: bool,
 }
 
 /// The configured duration, made safe to use.
@@ -67,12 +67,14 @@ impl DesktopSession {
         }
 
         let seconds = sanitize_fade_stop_seconds(duration_seconds);
+        let pause = audio.current_settings()?.fade_out_pause;
         // From wherever a fade in left the gain; fade_stop now owns the reset.
         audio.start_master_fade(0.0, seconds)?;
         self.fade_in = false;
         self.fade_stop = Some(FadeStop {
             started_at: Instant::now(),
             duration: Duration::from_secs_f64(seconds),
+            pause,
         });
         Ok(self.snapshot())
     }
@@ -110,8 +112,7 @@ impl DesktopSession {
         self.fade_in
     }
 
-    /// Called from the transport sync tick: stop once the fade has run out.
-    /// Returns true when it stopped the transport.
+    /// Called from the transport sync tick when the fade has run out.
     pub(super) fn finish_fade_stop_if_due(
         &mut self,
         audio: &AudioController,
@@ -122,7 +123,21 @@ impl DesktopSession {
         if fade.started_at.elapsed() < fade.duration {
             return Ok(false);
         }
-        self.stop(audio)?;
+        let _origin = self
+            .transport_locked()
+            .then(|| self.intent_origin_scope(super::IntentOrigin::Follower));
+        if fade.pause {
+            // pause synchronizes the transport, so remove the expired fade
+            // first to avoid re-entering this method.
+            self.fade_stop = None;
+            if let Err(error) = self.pause(audio) {
+                self.fade_stop = Some(fade);
+                return Err(error);
+            }
+            audio.start_master_fade(1.0, 0.0)?;
+        } else {
+            self.stop(audio)?;
+        }
         Ok(true)
     }
 

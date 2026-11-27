@@ -48,6 +48,12 @@ function lastPatch(persist: ReturnType<typeof vi.fn>): AppSettings {
 }
 
 describe("createSettingsHandlers", () => {
+  it("persists the fade out action", () => {
+    const { handlers, persistAudioSettings } = setup();
+    handlers.handleFadeOutPauseChange(false);
+    expect(lastPatch(persistAudioSettings).fadeOutPause).toBe(false);
+  });
+
   it("al activar el cambio de tono preparado avisa del disco y respeta un no", async () => {
     const { handlers, persistAudioSettings } = setup();
     confirmDialog.mockReset();

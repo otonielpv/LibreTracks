@@ -225,6 +225,12 @@ describe("regionPadKey", () => {
 });
 
 describe("normalizeAppSettings", () => {
+  it("defaults the fade action to pause for older settings and preserves stop", () => {
+    const { fadeOutPause: _fadeOutPause, ...legacy } = DEFAULT_APP_SETTINGS;
+    expect(normalizeAppSettings(legacy as AppSettings).fadeOutPause).toBe(true);
+    expect(normalizeAppSettings({ ...DEFAULT_APP_SETTINGS, fadeOutPause: false }).fadeOutPause).toBe(false);
+  });
+
   it("returns the defaults untouched when given the defaults", () => {
     expect(normalizeAppSettings(DEFAULT_APP_SETTINGS)).toEqual(
       DEFAULT_APP_SETTINGS,

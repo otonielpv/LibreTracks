@@ -199,6 +199,7 @@ pub fn merge_live_settings(
     next.pause_at_song_end = from_guest.pause_at_song_end;
     next.vamp_between_songs = from_guest.vamp_between_songs;
     next.fade_out_stop_seconds = from_guest.fade_out_stop_seconds;
+    next.fade_out_pause = from_guest.fade_out_pause;
     if role >= Role::Editor {
         next.metronome_enabled = from_guest.metronome_enabled;
         next.metronome_volume = from_guest.metronome_volume;
@@ -463,6 +464,7 @@ mod tests {
         guest.pause_at_song_end = !host.pause_at_song_end;
         guest.vamp_between_songs = !host.vamp_between_songs;
         guest.fade_out_stop_seconds = 9.0;
+        guest.fade_out_pause = !host.fade_out_pause;
         guest.metronome_enabled = !host.metronome_enabled;
         guest.metronome_volume = 0.9;
         guest.track_meter_mode = lt_audio_engine_v2::TrackMeterMode::PreFader;
@@ -478,6 +480,7 @@ mod tests {
         expected.pause_at_song_end = guest.pause_at_song_end;
         expected.vamp_between_songs = guest.vamp_between_songs;
         expected.fade_out_stop_seconds = guest.fade_out_stop_seconds;
+        expected.fade_out_pause = guest.fade_out_pause;
         assert_eq!(
             merge_live_settings(&host, &guest, Role::Controller),
             expected
@@ -491,11 +494,12 @@ mod tests {
     #[test]
     fn live_engine_playback_changes_never_reopen_the_device() {
         let host = host_settings();
-        for field in ["pauseAtSongEnd", "vampBetweenSongs", "fadeOutStopSeconds"] {
+        for field in ["pauseAtSongEnd", "vampBetweenSongs", "fadeOutStopSeconds", "fadeOutPause"] {
             let mut guest = host.clone();
             match field {
                 "pauseAtSongEnd" => guest.pause_at_song_end = !host.pause_at_song_end,
                 "vampBetweenSongs" => guest.vamp_between_songs = !host.vamp_between_songs,
+                "fadeOutPause" => guest.fade_out_pause = !host.fade_out_pause,
                 _ => guest.fade_out_stop_seconds = host.fade_out_stop_seconds + 1.0,
             }
             let merged = merge_live_settings(&host, &guest, Role::Controller);
@@ -503,7 +507,7 @@ mod tests {
             assert!(!plan.rebuild_stream, "{field}");
             // Fade duration is read from the engine's settings snapshot, which
             // update_audio_settings replaces even when no mixer command is due.
-            assert_eq!(plan.apply, field != "fadeOutStopSeconds", "{field}");
+            assert_eq!(plan.apply, field != "fadeOutStopSeconds" && field != "fadeOutPause", "{field}");
             assert_ne!(merged, host);
         }
         let mut guest = host.clone();

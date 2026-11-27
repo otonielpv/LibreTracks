@@ -17,6 +17,7 @@ export const GUEST_CONTROL_SETTING_KEYS = [
   "pauseAtSongEnd",
   "vampBetweenSongs",
   "fadeOutStopSeconds",
+  "fadeOutPause",
 ] as const satisfies readonly (keyof AppSettings)[];
 
 const GUEST_MIX_SETTING_KEYS = ["metronomeEnabled", "metronomeVolume", "trackMeterMode"] as const;

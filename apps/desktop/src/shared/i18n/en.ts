@@ -250,7 +250,7 @@ const en = {
     action: {
       playPause: "Play / Pause",
       stop: "Stop",
-      fadeOutStop: "Fade out and stop / fade in and play",
+      fadeOutStop: "Fade out / fade in and play",
       gotoStart: "Go to start",
       splitClip: "Split clip at cursor",
       splitSong: "Split song at cursor",
@@ -741,9 +741,13 @@ const en = {
       classicLibrary: "Use the classic library",
       classicLibraryHint:
         "The library shows only the audio imported into the session, with its own folders, instead of the folders of your disk.",
-      fadeOutStopSeconds: "“Fade out and stop” length (s)",
+      fadeOutAction: "After fade out",
+      fadeOutActionPause: "Pause",
+      fadeOutActionStop: "Stop",
+      fadeOutActionHint: "Pause keeps the current position; stop returns to the start. Pressing again during the fade stops immediately.",
+      fadeOutStopSeconds: "Fade out length (s)",
       fadeOutStopSecondsHint:
-        "How long the song takes to fade when you press “Fade out and stop”. Pressing it again during the fade stops at once. With playback stopped or paused, the same button plays from the cursor, bringing the volume up over this time.",
+        "How long the song takes to fade when you press the fade out button. With playback stopped or paused, the same button plays from the cursor, bringing the volume up over this time.",
       pauseAtSongEndHint:
         "Playback stops when a song ends instead of rolling straight into the next one. Press Play to start the next song. A song jump you queued still happens.",
       songTrackLayoutHint_shared:
@@ -1712,7 +1716,7 @@ const en = {
       pauseAtSongEndUpdated: "Pause at song end updated.",
       vampBetweenSongsUpdated: "Vamp between songs updated.",
       trackMeterModeUpdated: "Track meters updated.",
-      fadeOutStopUpdated: "Fade out length updated.",
+      fadeOutStopUpdated: "Fade out settings updated.",
       midiSettingsUpdated: "MIDI settings updated.",
       referenceImportedAudioUpdated: "Audio import behaviour updated.",
       autoColorNewTracksUpdated: "Automatic track colours updated.",
@@ -2604,7 +2608,7 @@ const en = {
     tapTempoShort: "Tap",
     previous: "Previous",
     stop: "Stop",
-    fadeOutStop: "Fade out and stop",
+    fadeOutStop: "Fade out",
     fadeOutStopActive: "Fading out: press again to stop now",
     fadeInPlay: "Fade in and play",
     undo: "Undo",
@@ -4113,6 +4117,7 @@ const en = {
       songJumpBars: "bars of the jump between songs",
       songTransitionMode: "transition between songs",
       fadeOutStopSeconds: "fade out on stop",
+      fadeOutPause: "action after fade out",
       vampMode: "vamp mode",
       vampBars: "vamp bars",
       pauseAtSongEnd: "pause at song end",

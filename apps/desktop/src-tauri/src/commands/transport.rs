@@ -96,8 +96,8 @@ pub(crate) fn fade_toggle_lifecycle_kind(snapshot: &TransportSnapshot) -> &'stat
 }
 
 /// «Fade out y parar» / «Fade in y reproducir»: while playing, fade the song
-/// out over the configured time and stop (a second call during the fade stops
-/// at once); stopped or paused, play from the cursor fading the tracks in.
+/// out over the configured time and pause or stop (a second call during the
+/// fade stops at once); stopped or paused, play from the cursor fading in.
 /// See `state::fade_stop`.
 #[tauri::command(async)]
 pub fn fade_out_and_stop(

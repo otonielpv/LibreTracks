@@ -325,6 +325,13 @@ export function createSettingsHandlers(deps: SettingsHandlerDeps) {
       );
     },
 
+    handleFadeOutPauseChange(nextValue: boolean) {
+      persistAudioPatch(
+        { fadeOutPause: nextValue },
+        t("transport.status.fadeOutStopUpdated"),
+      );
+    },
+
     handleVampModeChange(nextValue: AppSettings["vampMode"]) {
       persistAudioPatch({ vampMode: nextValue }, "Vamp settings updated.");
     },

@@ -1862,6 +1862,7 @@ export function TransportPanelContent() {
     handleVampBetweenSongsChange,
     handleTrackMeterModeChange,
     handleFadeOutStopSecondsChange,
+    handleFadeOutPauseChange,
     handleMidiPlatformSettingsChange,
     handleSongTrackLayoutChange,
     handleDefaultSongTemplateChange,
@@ -7646,6 +7647,7 @@ export function TransportPanelContent() {
               onPauseAtSongEndChange={handlePauseAtSongEndChange}
               onVampBetweenSongsChange={handleVampBetweenSongsChange}
               onFadeOutStopSecondsChange={handleFadeOutStopSecondsChange}
+              onFadeOutPauseChange={handleFadeOutPauseChange}
               onSongTrackLayoutChange={
                 handleSongTrackLayoutChange
               }
