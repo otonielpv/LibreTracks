@@ -44,6 +44,7 @@ const copy = {
   reviews: L("written reviews", "reseñas escritas", "avaliações escritas"),
   storeRatings: (count: number) =>
     `${number.format(count)} ${count === 1 ? L("rating", "valoración", "avaliação") : L("ratings", "valoraciones", "avaliações")}`,
+  ratingsWord: L("ratings", "valoraciones", "avaliações"),
   inCountries: (count: number) =>
     count > 1 ? L(`in ${count} countries`, `en ${count} países`, `em ${count} países`) : "",
   playUser: L("Google Play user", "Usuario de Google Play", "Usuário do Google Play"),
@@ -104,7 +105,7 @@ const starPercent = (value: number) => `${Math.max(0, Math.min(100, (value / 5) 
               <b data-stat="ratings.appstore.average" data-format="decimal">{decimal.format(stats.ratings.appstore.average)}</b> ★
             </span>
             <span class="store-proof-store-detail">
-              {copy.storeRatings(stats.ratings.appstore.count)} {copy.inCountries(stats.ratings.appstore.countries)}
+              <b data-stat="ratings.appstore.count">{number.format(stats.ratings.appstore.count)}</b> {copy.ratingsWord} {copy.inCountries(stats.ratings.appstore.countries)}
             </span>
           </a>
         </li>
@@ -114,7 +115,7 @@ const starPercent = (value: number) => `${Math.max(0, Math.min(100, (value / 5) 
             <span class="store-proof-store-score">
               <b data-stat="ratings.play.average" data-format="decimal">{decimal.format(stats.ratings.play.average)}</b> ★
             </span>
-            <span class="store-proof-store-detail">{copy.storeRatings(stats.ratings.play.count)}</span>
+            <span class="store-proof-store-detail"><b data-stat="ratings.play.count">{number.format(stats.ratings.play.count)}</b> {copy.ratingsWord}</span>
           </a>
         </li>
       </ul>
