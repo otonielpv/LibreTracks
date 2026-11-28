@@ -42,7 +42,7 @@ pub use model::{
 pub use track_eq::{EqBand, EqBandKind, TrackEq, TRACK_EQ_MAX_BANDS};
 pub use validation::{
     validate_song, validate_song_structure, DomainError, MAX_COMPACT_COLUMN_WIDTH_REM, MAX_TRANSPOSE_SEMITONES,
-    MAX_WARP_SOURCE_BPM, MIN_COMPACT_COLUMN_WIDTH_REM, MIN_TRANSPOSE_SEMITONES,
+    MAX_WARP_SOURCE_BPM, MIN_CLIP_DURATION_SECONDS, MIN_COMPACT_COLUMN_WIDTH_REM, MIN_TRANSPOSE_SEMITONES,
     MIN_WARP_SOURCE_BPM,
 };
 pub use warp::{

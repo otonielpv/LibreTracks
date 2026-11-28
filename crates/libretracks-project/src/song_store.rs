@@ -4,7 +4,7 @@ use std::{
 };
 
 use libretracks_core::{
-    validate_song, Clip, DomainError, Marker, MarkerKind, Song, SongRegion, TempoMetadata,
+    validate_song, Clip, DomainError, MIN_CLIP_DURATION_SECONDS, Marker, MarkerKind, Song, SongRegion, TempoMetadata,
     TimeSignatureMarker, Track, TrackKind,
 };
 use serde::{Deserialize, Serialize};
@@ -413,12 +413,14 @@ fn migrate_v4_song(document: LegacySongDocumentV4) -> Result<Song, ProjectError>
 /// v5 had the same on-disk shape as v6 but predates the "clip lives inside
 /// one region" invariant. Apply the tolerant fitting pass and validate.
 fn migrate_v5_song(mut song: Song) -> Result<Song, ProjectError> {
+    drop_degenerate_clips(&mut song);
     fit_regions_to_clips(&mut song);
     validate_song(&song)?;
     Ok(song)
 }
 
-fn load_current_song(song: Song) -> Result<Song, ProjectError> {
+fn load_current_song(mut song: Song) -> Result<Song, ProjectError> {
+    drop_degenerate_clips(&mut song);
     match validate_song(&song) {
         Ok(()) => Ok(song),
         Err(
@@ -432,6 +434,16 @@ fn load_current_song(song: Song) -> Result<Song, ProjectError> {
         }
         Err(error) => Err(ProjectError::InvalidSong(error)),
     }
+}
+
+/// Drop audio clips shorter than `MIN_CLIP_DURATION_SECONDS` (or with a
+/// non-finite length). Cuts at a clip's very edge used to leave such crumbs;
+/// they are inaudible, but they round to 0 frames and the engine refuses the
+/// whole session over them, so a saved session carrying one could not open.
+fn drop_degenerate_clips(song: &mut Song) {
+    song.clips.retain(|clip| {
+        clip.duration_seconds.is_finite() && clip.duration_seconds >= MIN_CLIP_DURATION_SECONDS
+    });
 }
 
 /// Adjust the song's regions in-place so every clip falls inside exactly one
@@ -819,6 +831,21 @@ mod tests {
             voice_guide_count_style: None,
             structure: None,
         }
+    }
+
+    #[test]
+    fn loading_drops_clips_too_short_to_play() {
+        // A user's session: an edge cut had left a 5.7e-13 s clip that rounds to
+        // 0 frames, and the engine refused to load the whole session.
+        let mut song = base_song();
+        song.regions = vec![region("r1", 0.0, 20.0)];
+        song.clips = vec![clip("c1_l", 0.0, 10.0), clip("c1_r", 10.0, 5.684341886080801e-13)];
+        let json = serialize_song_document(&song).expect("serialize");
+
+        let loaded = parse_song_document(&json, SONG_FORMAT_VERSION).expect("load");
+
+        let ids: Vec<&str> = loaded.clips.iter().map(|clip| clip.id.as_str()).collect();
+        assert_eq!(ids, ["c1_l"]);
     }
 
     #[test]

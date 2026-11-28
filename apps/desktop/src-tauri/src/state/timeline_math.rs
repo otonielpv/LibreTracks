@@ -6,7 +6,7 @@
 use libretracks_core::tempo_ramp::{bpm_at, tempo_span_at, TempoSpan};
 use libretracks_core::{
     audible_clip_duration_seconds, effective_bpm_at, source_seconds_at_view,
-    warp_timeline_seconds_at, Clip, Song, SongRegion, TempoMarker,
+    warp_timeline_seconds_at, Clip, Song, SongRegion, TempoMarker, MIN_CLIP_DURATION_SECONDS,
 };
 
 use crate::infra::error::DesktopError;
@@ -789,8 +789,8 @@ pub(super) fn sort_song_regions(regions: &mut Vec<SongRegion>) {
     });
 }
 
-/// Cut `clip` at `split_seconds_source`, or `None` if the point isn't strictly
-/// inside it. Clip positions and durations are stored in source time (the view
+/// Cut `clip` at `split_seconds_source`, or `None` if either half would be
+/// shorter than `MIN_CLIP_DURATION_SECONDS`. Clip positions and durations are stored in source time (the view
 /// maps them through `warp_timeline_seconds_at`), so the cut point must be
 /// converted from view time by the caller — comparing a view-time cursor
 /// against them lands the cut early once a stretched song precedes the clip.
@@ -801,7 +801,11 @@ pub(super) fn split_clip_at_source(
     right_id: String,
 ) -> Option<(Clip, Clip)> {
     let clip_end = clip.timeline_start_seconds + clip.duration_seconds;
-    if split_seconds_source <= clip.timeline_start_seconds || split_seconds_source >= clip_end {
+    // Not just strictly inside: a point a float error away from an edge would
+    // leave a crumb that rounds to 0 frames and makes the engine refuse the song.
+    if split_seconds_source - clip.timeline_start_seconds < MIN_CLIP_DURATION_SECONDS
+        || clip_end - split_seconds_source < MIN_CLIP_DURATION_SECONDS
+    {
         return None;
     }
     let left_duration = split_seconds_source - clip.timeline_start_seconds;
@@ -1099,6 +1103,17 @@ mod clip_fade_tests {
         assert_eq!(left.fade_out_seconds, None);
         assert_eq!(right.fade_in_seconds, None);
         assert_eq!(right.fade_out_seconds, Some(2.0));
+    }
+
+    #[test]
+    fn splitting_a_float_error_away_from_an_edge_leaves_the_clip_whole() {
+        // 10 + 8 computed another way lands a hair short of the clip end; the
+        // old strict check cut there and left a ~1e-13 s clip of 0 frames.
+        let end = 10.0 + 8.0 - 5.684341886080801e-13;
+        assert!(split_clip_at_source(&clip(None, None), end, "l".into(), "r".into()).is_none());
+        let start = 10.0 + 1.0e-9;
+        assert!(split_clip_at_source(&clip(None, None), start, "l".into(), "r".into()).is_none());
+        assert!(split_clip_at_source(&clip(None, None), 17.99, "l".into(), "r".into()).is_some());
     }
 
     #[test]

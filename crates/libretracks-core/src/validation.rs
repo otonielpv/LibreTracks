@@ -24,6 +24,11 @@ pub const MAX_WARP_SOURCE_BPM: f64 = 300.0;
 pub const MIN_COMPACT_COLUMN_WIDTH_REM: f64 = 5.0;
 pub const MAX_COMPACT_COLUMN_WIDTH_REM: f64 = 48.0;
 const CLIP_REGION_BOUNDARY_EPSILON_SECONDS: f64 = 1.0e-6;
+/// Shortest audio clip worth keeping. A cut closer than this to a clip's edge
+/// is refused, and a clip shorter than this is dropped when a song loads:
+/// float error in a cut at the very edge left crumbs of ~1e-13 s that round to
+/// 0 frames, and the engine refuses the whole session over one of them.
+pub const MIN_CLIP_DURATION_SECONDS: f64 = 1.0e-3;
 
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum DomainError {
