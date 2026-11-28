@@ -3,7 +3,8 @@
 use std::fs;
 
 use libretracks_core::{
-    Clip, Marker, MarkerKind, MidiClip, Song, SongMaster, SongRegion, TempoMarker, Track, TrackKind,
+    effective_bpm_at, Clip, Marker, MarkerKind, MidiClip, Song, SongMaster, SongRegion,
+    TempoMarker, TimeSignatureMarker, Track, TrackKind,
 };
 use libretracks_project::{create_song_folder, save_song, SONG_FILE_NAME};
 use tempfile::tempdir;
@@ -186,6 +187,58 @@ fn moving_the_last_song_first_carries_everything_inside_it() {
         2.0,
         "clip MIDI de r3",
     );
+}
+
+#[test]
+fn the_first_song_keeps_the_base_tempo_when_it_moves_after_one_with_a_marker() {
+    // r1 no tiene marca: suena a `song.bpm` (120). r2 tiene la suya a 90 y
+    // compás 3/4. Al subir r2 a la 1ª posición, r1 no debe heredar sus 90.
+    let mut song = three_back_to_back();
+    song.tempo_markers = vec![TempoMarker {
+        id: "t2".into(),
+        start_seconds: 8.0,
+        bpm: 90.0,
+        ramp: false,
+    }];
+    song.time_signature_markers = vec![TimeSignatureMarker {
+        id: "ts2".into(),
+        start_seconds: 8.0,
+        signature: "3/4".into(),
+    }];
+
+    assert!(reorder_song_regions(&mut song, "r2", 0));
+
+    assert_eq!(order(&song), vec!["r2", "r1", "r3"]);
+    let (r2_start, _) = span(&song, "r2");
+    let (r1_start, _) = span(&song, "r1");
+    let (r3_start, _) = span(&song, "r3");
+    assert_close(effective_bpm_at(&song, r2_start), 90.0, "tempo de r2");
+    assert_close(effective_bpm_at(&song, r1_start + 0.5), 120.0, "tempo de r1");
+    // r3 sonaba a 90 heredado de r2: conserva lo que tenía.
+    assert_close(effective_bpm_at(&song, r3_start + 0.5), 90.0, "tempo de r3");
+    let signature_at = |position: f64| {
+        song.time_signature_markers
+            .iter()
+            .filter(|m| m.start_seconds <= position + 0.001)
+            .last()
+            .map(|m| m.signature.clone())
+            .unwrap_or_else(|| song.time_signature.clone())
+    };
+    assert_eq!(signature_at(r2_start), "3/4");
+    assert_eq!(signature_at(r1_start + 0.5), "4/4");
+    assert_eq!(signature_at(r3_start + 0.5), "3/4");
+    assert_eq!(song.tempo_markers.len(), 3, "{:?}", song.tempo_markers);
+    assert_eq!(song.time_signature_markers.len(), 3);
+}
+
+#[test]
+fn reordering_songs_with_the_same_tempo_adds_no_markers() {
+    let mut song = three_back_to_back();
+
+    assert!(reorder_song_regions(&mut song, "r3", 0));
+
+    assert!(song.tempo_markers.is_empty(), "{:?}", song.tempo_markers);
+    assert!(song.time_signature_markers.is_empty());
 }
 
 #[test]

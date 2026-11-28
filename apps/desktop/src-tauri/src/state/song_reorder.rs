@@ -16,7 +16,10 @@
 //! mueve. Las cues de automatización, que no están en el `Song`, las arrastra
 //! `cue_follow` con la misma regla de pertenencia.
 
-use libretracks_core::{source_seconds_at_view, warp_timeline_seconds_at, Song};
+use libretracks_core::{
+    effective_bpm_at, source_seconds_at_view, warp_timeline_seconds_at, Song, TempoMarker,
+    TimeSignatureMarker,
+};
 
 use crate::audio::engine::AudioController;
 use crate::infra::error::DesktopError;
@@ -24,8 +27,8 @@ use crate::models::TransportSnapshot;
 
 use super::{
     next_downbeat_after_in_view_timeline, refresh_song_duration,
-    region_boundary_was_downbeat_aligned, sort_song_regions, AudioChangeImpact, DesktopSession,
-    UpdatePhase,
+    region_boundary_was_downbeat_aligned, sort_song_regions, timestamp_suffix, AudioChangeImpact,
+    DesktopSession, UpdatePhase,
 };
 
 impl DesktopSession {
@@ -102,8 +105,9 @@ pub(super) fn reorder_song_regions(song: &mut Song, region_id: &str, target_inde
         return false;
     }
 
+    let spans = region_spans(song);
+    let pinned = pin_implicit_meter(song, &spans);
     let previous = song.clone();
-    let spans = region_spans(&previous);
     // A quién pertenece cada elemento, decidido UNA vez sobre las posiciones
     // de partida: durante la recolocación las canciones se cruzan.
     let owners = Owners::of(song, &spans);
@@ -114,7 +118,131 @@ pub(super) fn reorder_song_regions(song: &mut Song, region_id: &str, target_inde
     order.insert(to, moved);
 
     lay_out_songs(song, &previous, &owners, &order, 0, &lengths);
+    drop_redundant_pins(song, &pinned);
     true
+}
+
+/// Ids de las marcas que `pin_implicit_meter` añadió.
+struct PinnedMarkers {
+    tempo: Vec<String>,
+    time_signature: Vec<String>,
+}
+
+/// Una canción sin marca de tempo (o de compás) en su inicio no tiene tempo
+/// propio: hereda el de lo que tenga delante (la 1ª, `song.bpm`). Al cambiarla
+/// de sitio heredaría el de su nueva vecina. Antes de reordenar se fija ese
+/// tempo heredado en una marca en su inicio, que viaja con ella.
+///
+/// Si lo que hereda es una rampa que la cruza, no se fija nada: una marca ahí
+/// cambiaría el destino de la rampa de la canción anterior.
+fn pin_implicit_meter(song: &mut Song, spans: &[(f64, f64)]) -> PinnedMarkers {
+    let suffix = timestamp_suffix();
+    let mut pinned = PinnedMarkers {
+        tempo: Vec::new(),
+        time_signature: Vec::new(),
+    };
+    for (index, &(start, _)) in spans.iter().enumerate() {
+        let owns_marker_at_start = |position: f64| {
+            (position - start).abs() <= 0.001 && owning_span(spans, position) == Some(index)
+        };
+
+        if !song
+            .tempo_markers
+            .iter()
+            .any(|marker| owns_marker_at_start(marker.start_seconds))
+        {
+            let governing = song
+                .tempo_markers
+                .iter()
+                .filter(|marker| marker.start_seconds <= start + 0.001)
+                .max_by(|a, b| {
+                    a.start_seconds
+                        .partial_cmp(&b.start_seconds)
+                        .unwrap_or(std::cmp::Ordering::Equal)
+                });
+            if !governing.is_some_and(|marker| marker.ramp) {
+                let id = format!("tempo_marker_{suffix}_pin_{index}");
+                song.tempo_markers.push(TempoMarker {
+                    id: id.clone(),
+                    start_seconds: start,
+                    bpm: effective_bpm_at(song, start),
+                    ramp: false,
+                });
+                pinned.tempo.push(id);
+            }
+        }
+
+        if !song
+            .time_signature_markers
+            .iter()
+            .any(|marker| owns_marker_at_start(marker.start_seconds))
+        {
+            let signature = time_signature_at(song, start);
+            let id = format!("time_signature_marker_{suffix}_pin_{index}");
+            song.time_signature_markers.push(TimeSignatureMarker {
+                id: id.clone(),
+                start_seconds: start,
+                signature,
+            });
+            pinned.time_signature.push(id);
+        }
+    }
+    pinned
+}
+
+/// Compás vigente en `position`: la última marca hasta ahí, si no el de la
+/// sesión.
+fn time_signature_at(song: &Song, position: f64) -> String {
+    song.time_signature_markers
+        .iter()
+        .filter(|marker| marker.start_seconds <= position + 0.001)
+        .max_by(|a, b| {
+            a.start_seconds
+                .partial_cmp(&b.start_seconds)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        })
+        .map(|marker| marker.signature.clone())
+        .unwrap_or_else(|| song.time_signature.clone())
+}
+
+/// Quita las marcas fijadas que, tras reordenar, repiten lo que ya regía
+/// justo antes: la canción no cambió de vecino o el vecino tenía el mismo
+/// tempo. Así reordenar no llena la sesión de marcas inútiles.
+fn drop_redundant_pins(song: &mut Song, pinned: &PinnedMarkers) {
+    // Las listas ya están ordenadas por inicio (`lay_out_songs`).
+    let mut index = 0;
+    while index < song.tempo_markers.len() {
+        let marker = &song.tempo_markers[index];
+        if pinned.tempo.contains(&marker.id) {
+            let before = match index.checked_sub(1).map(|i| &song.tempo_markers[i]) {
+                // Una rampa anterior acaba en esta marca: no sobra.
+                Some(previous) if previous.ramp => None,
+                Some(previous) => Some(previous.bpm),
+                None => Some(song.bpm),
+            };
+            if before.is_some_and(|bpm| (bpm - marker.bpm).abs() < 1e-9) {
+                song.tempo_markers.remove(index);
+                continue;
+            }
+        }
+        index += 1;
+    }
+
+    let mut index = 0;
+    while index < song.time_signature_markers.len() {
+        let marker = &song.time_signature_markers[index];
+        if pinned.time_signature.contains(&marker.id) {
+            let before = index
+                .checked_sub(1)
+                .map(|i| song.time_signature_markers[i].signature.as_str())
+                .unwrap_or(song.time_signature.as_str());
+            if before == marker.signature {
+                song.time_signature_markers.remove(index);
+                continue;
+            }
+        }
+        index += 1;
+    }
 }
 
 /// Coloca las canciones una tras otra en el orden `order`, que indexa
