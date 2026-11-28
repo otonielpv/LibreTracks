@@ -261,6 +261,7 @@ EngineCommand command_from_json(const std::string& raw) {
         c.lead_bars = j.value("lead_bars", 1);
         c.count_in_enabled = j.value("count_in_enabled", true);
         c.count_style = j.value("count_style", 0);
+        c.jumps_only = j.value("jumps_only", false);
         return c;
     }
 
@@ -773,6 +774,7 @@ std::string command_to_json(const EngineCommand& cmd) {
             j["lead_bars"] = c.lead_bars;
             j["count_in_enabled"] = c.count_in_enabled;
             j["count_style"] = c.count_style;
+            j["jumps_only"] = c.jumps_only;
         }
         else if constexpr (std::is_same_v<T, CmdLoadVoiceGuideBank>) {
             j["type"] = "LoadVoiceGuideBank";

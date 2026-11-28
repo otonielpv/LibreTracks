@@ -17,6 +17,12 @@ import {
 import { PopoverShell } from "./PopoverShell";
 import { voiceGuideCountStyleLabel } from "../songs/songCountStyle";
 import { useMidiMappable } from "../midi/MidiMappable";
+import { useSongStore } from "../songStore";
+import {
+  guideJumpsOnlyActive,
+  regionsMissingGuide,
+  useGuideTrackPromptStore,
+} from "../voiceGuide/guideTrackPrompt";
 
 type RouteOption = { value: string; label: string };
 
@@ -47,6 +53,9 @@ export function VoiceGuideControls({
   const { t } = useTranslation();
   // MIDI Map mode (plan midi-controllers, paso 05).
   const voiceVolumeMap = useMidiMappable("mixer:voice_guide:volume", t("midiMap.voiceGuide"));
+  // «Solo en saltos»: canciones sin pista de guía (el aviso deja elegirla).
+  const missingGuide = useSongStore((state) => regionsMissingGuide(state.song).length);
+  const reopenGuidePrompt = useGuideTrackPromptStore((state) => state.reopen);
 
   // Voice guide can route to the local monitor; mirror the ordering the old
   // settings tab used (Monitor first, then the shared routing options).
@@ -92,6 +101,29 @@ export function VoiceGuideControls({
 
         {settings.voiceGuideEnabled ? (
           <>
+            <label className="lt-pads-toggle">
+              <input
+                type="checkbox"
+                checked={settings.voiceGuideJumpsOnly}
+                onChange={(event) =>
+                  onChange({ voiceGuideJumpsOnly: event.target.checked })
+                }
+              />
+              <span>{t("transport.settingsModal.voiceGuideJumpsOnly")}</span>
+            </label>
+            {guideJumpsOnlyActive(settings) && missingGuide > 0 ? (
+              <div className="lt-pads-field lt-voice-guide-missing">
+                <span className="lt-pads-field-label">
+                  {t("transport.settingsModal.voiceGuideMissingGuide", {
+                    count: missingGuide,
+                  })}
+                </span>
+                <button type="button" className="lt-pads-manage-btn" onClick={reopenGuidePrompt}>
+                  {t("transport.settingsModal.voiceGuideMissingGuideChoose")}
+                </button>
+              </div>
+            ) : null}
+
             <div className="lt-pads-field">
               <span className="lt-pads-field-label">
                 {t("transport.settingsModal.voiceGuideLanguage", {

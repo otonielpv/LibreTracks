@@ -74,6 +74,7 @@ fn new_video_track(song: &Song, name: &str, auto_color: bool) -> libretracks_cor
         collapsed: false,
         height_offset: None,
         match_aliases: Vec::new(),
+        guide: None,
         song_region_id: None,
     }
 }

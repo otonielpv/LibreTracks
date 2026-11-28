@@ -418,6 +418,7 @@ void VoiceGuideRenderer::set_config(const VoiceGuideConfig& config) {
     lead_bars_.store(std::clamp(config.lead_bars, 1, 4), std::memory_order_release);
     count_in_enabled_.store(config.count_in_enabled, std::memory_order_release);
     count_style_.store(static_cast<int>(config.count_style), std::memory_order_release);
+    jumps_only_.store(config.jumps_only, std::memory_order_release);
 
     std::string route = normalize_route(config.output_route.empty() ? "monitor"
                                                                      : config.output_route);
@@ -469,7 +470,54 @@ VoiceGuideConfig VoiceGuideRenderer::config() const {
     config.count_in_enabled = count_in_enabled_.load(std::memory_order_acquire);
     config.count_style =
         voice_guide_count_style_from_int(count_style_.load(std::memory_order_acquire));
+    config.jumps_only = jumps_only_.load(std::memory_order_acquire);
     return config;
+}
+
+bool VoiceGuideRenderer::ducks_guide_tracks(const Session* session,
+                                            const VoiceGuideTarget& jump_target,
+                                            Frame frame,
+                                            double sample_rate) const noexcept {
+    if (!jump_target.active || !session || sample_rate <= 0.0) return false;
+    if (!enabled_.load(std::memory_order_acquire)
+        || !jumps_only_.load(std::memory_order_acquire))
+        return false;
+    if (frame >= jump_target.at_frame) return false;
+    const Song* song = active_song(session, jump_target.at_frame - 1);
+    if (!song) return false;
+
+    // Same span the announcement uses (count style of the destination's song,
+    // lead bars, count on/off) plus one bar for the section name and chained
+    // cues spoken before the count. The tempo is read just before the jump:
+    // a ramp shifts it by a few frames at most, well inside that spare bar.
+    const Frame probe = jump_target.at_frame - 1;
+    const double bpm = bpm_at(song, probe);
+    const auto [beats_per_bar, beat_unit] = signature_at(song, probe);
+    const double beat_frames =
+        sample_rate * 60.0 / bpm * (4.0 / static_cast<double>(beat_unit));
+    if (!std::isfinite(beat_frames) || beat_frames < 1.0) return false;
+
+    const Frame anchor = jump_target.destination_frame > 0 ? jump_target.destination_frame
+                                                           : jump_target.at_frame;
+    VoiceGuideCountStyle style =
+        voice_guide_count_style_from_int(count_style_.load(std::memory_order_acquire));
+    const Song* anchor_song = active_song(session, anchor);
+    if (anchor_song) {
+        for (const auto& region : anchor_song->regions) {
+            if (anchor < region.start_frame || anchor >= region.end_frame) continue;
+            if (region.voice_guide_count_style >= 0)
+                style = voice_guide_count_style_from_int(region.voice_guide_count_style);
+            break;
+        }
+    }
+    style = effective_count_style(style, beats_per_bar, beat_unit);
+    const int lead_bars = lead_bars_.load(std::memory_order_acquire);
+    const int bars = count_in_enabled_.load(std::memory_order_acquire)
+        ? voice_guide_count_span_bars(style, lead_bars)
+        : lead_bars;
+    const Frame span = static_cast<Frame>(
+        std::llround(static_cast<double>(beats_per_bar * (bars + 1)) * beat_frames));
+    return frame >= jump_target.at_frame - span;
 }
 
 void VoiceGuideRenderer::set_clip_bank(std::shared_ptr<const VoiceGuideClipBank> bank) noexcept {
@@ -643,6 +691,9 @@ void VoiceGuideRenderer::render(float** output_channels,
     const bool count_in = count_in_enabled_.load(std::memory_order_acquire);
     const VoiceGuideCountStyle global_style =
         voice_guide_count_style_from_int(count_style_.load(std::memory_order_acquire));
+    // Solo en saltos: las marcas y los avisos sueltos los dice la guia grabada
+    // de la secuencia; aqui solo se anuncia el destino de un salto programado.
+    const bool jumps_only = jumps_only_.load(std::memory_order_acquire);
 
     for (int f = 0; f < num_frames; ++f) {
         const float ramp_frames = static_cast<float>(std::max(1.0, sample_rate * 0.010));
@@ -928,8 +979,8 @@ void VoiceGuideRenderer::render(float** output_channels,
                 }
                 // `marker_unreachable` (above) gates out the section that sits
                 // past the jump — announcing it is the vamp bug.
-                if (marker && marker_frame > abs_frame && marker_frame != jump_frame
-                    && !marker_unreachable) {
+                if (!jumps_only && marker && marker_frame > abs_frame
+                    && marker_frame != jump_frame && !marker_unreachable) {
                     announce_target(marker_frame, marker->kind, marker->variant,
                                     marker_frame, /*is_jump=*/false);
                 }
@@ -948,7 +999,7 @@ void VoiceGuideRenderer::render(float** output_channels,
                     && cue->frame == jump_chained_cue_frame_) {
                     last_cue_frame_ = cue->frame;
                     jump_chained_cue_frame_ = -1;
-                } else if (cue && cue->frame == abs_frame
+                } else if (!jumps_only && cue && cue->frame == abs_frame
                     && cue->frame != last_cue_frame_
                     && cue->frame != last_chained_cue_frame_) {
                     // Is this cue chained into a nearby downbeat's lead-in? If so,

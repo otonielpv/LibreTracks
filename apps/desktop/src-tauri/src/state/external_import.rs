@@ -345,6 +345,7 @@ impl DesktopSession {
                 collapsed: false,
                 height_offset: None,
                 match_aliases: Vec::new(),
+                guide: None,
                 song_region_id: None,
             });
             imported_track_ids_by_index.push(track_id.clone());
@@ -383,6 +384,7 @@ impl DesktopSession {
                         collapsed: false,
                         height_offset: None,
                         match_aliases: Vec::new(),
+                        guide: None,
                         song_region_id: None,
                     });
                     midi_track_id

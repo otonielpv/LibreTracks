@@ -1452,6 +1452,24 @@ pub fn update_track_channel_mode(
         .map_err(|error| error.to_string())
 }
 
+/// Guía de la secuencia: `Some(true)` la marca, `Some(false)` la descarta y
+/// `None` la deja a lo que diga su nombre.
+#[tauri::command(async)]
+pub fn update_track_guide(
+    track_id: String,
+    guide: Option<bool>,
+    state: State<'_, DesktopState>,
+) -> Result<TransportSnapshot, String> {
+    let mut session = state
+        .session
+        .lock()
+        .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+
+    session
+        .update_track_guide(&track_id, guide, &state.audio)
+        .map_err(|error| error.to_string())
+}
+
 /// «Separar canales L/R»: duplica la pista (mismos ficheros) y deja la
 /// original en Solo izquierdo y la nueva en Solo derecho. Un paso de deshacer.
 #[tauri::command(async)]

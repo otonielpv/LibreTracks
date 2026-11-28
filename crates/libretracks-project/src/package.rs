@@ -1290,6 +1290,7 @@ pub fn merge_extracted_song_package(
             collapsed: false,
             height_offset: None,
             match_aliases: Vec::new(),
+            guide: None,
             song_region_id: Some(region_id.clone()),
         });
         folder_id
@@ -1369,6 +1370,7 @@ pub fn merge_extracted_song_package(
             collapsed: track.collapsed,
             height_offset: track.height_offset,
             match_aliases: track.match_aliases.clone(),
+            guide: None,
             // The package's region ids are the source session's; whether the
             // imported tracks belong to the new song is the track mode's call.
             song_region_id: owning_region_id.clone(),
@@ -1640,6 +1642,7 @@ mod tests {
             collapsed: false,
             height_offset: None,
             match_aliases: Vec::new(),
+            guide: None,
             song_region_id: None,
         }
     }
@@ -1683,6 +1686,7 @@ mod tests {
             collapsed: false,
             height_offset: None,
             match_aliases: Vec::new(),
+            guide: None,
             song_region_id: None,
         }
     }

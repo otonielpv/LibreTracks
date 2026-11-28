@@ -94,6 +94,7 @@ fn three_songs() -> Song {
             collapsed: false,
             height_offset: None,
             match_aliases: Vec::new(),
+            guide: None,
             song_region_id: None,
         }],
         clips: vec![clip("c1", 1.0), clip("c2", 9.0), clip("c3", 17.0)],

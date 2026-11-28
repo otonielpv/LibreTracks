@@ -1183,6 +1183,7 @@ mod tests {
                     collapsed: false,
                     height_offset: None,
                     match_aliases: Vec::new(),
+                    guide: None,
                     song_region_id: None,
                 },
                 Track {
@@ -1206,6 +1207,7 @@ mod tests {
                     collapsed: false,
                     height_offset: None,
                     match_aliases: Vec::new(),
+                    guide: None,
                     song_region_id: None,
                 },
                 Track {
@@ -1229,6 +1231,7 @@ mod tests {
                     collapsed: false,
                     height_offset: None,
                     match_aliases: Vec::new(),
+                    guide: None,
                     song_region_id: None,
                 },
                 Track {
@@ -1252,6 +1255,7 @@ mod tests {
                     collapsed: false,
                     height_offset: None,
                     match_aliases: Vec::new(),
+                    guide: None,
                     song_region_id: None,
                 },
             ],
@@ -1426,6 +1430,7 @@ mod tests {
                 collapsed: false,
                 height_offset: None,
                 match_aliases: Vec::new(),
+                guide: None,
                 song_region_id: None,
             }],
             // One clip per region so each respects the "clip inside one

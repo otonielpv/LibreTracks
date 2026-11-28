@@ -772,6 +772,7 @@ mod tests {
                 collapsed: false,
                 height_offset: None,
                 match_aliases: Vec::new(),
+                guide: None,
                 song_region_id: None,
             }],
             clips: vec![],
@@ -1088,6 +1089,7 @@ mod tests {
             collapsed: true,
             height_offset: None,
             match_aliases: Vec::new(),
+            guide: None,
             song_region_id: None,
         });
 
@@ -1235,6 +1237,7 @@ mod tests {
             collapsed: false,
             height_offset: None,
             match_aliases: Vec::new(),
+            guide: None,
             song_region_id: None,
         });
         song.midi_clips.push(libretracks_core::MidiClip {
@@ -1315,6 +1318,7 @@ mod tests {
             collapsed: false,
             height_offset: None,
             match_aliases: Vec::new(),
+            guide: None,
             song_region_id: None,
         }
     }

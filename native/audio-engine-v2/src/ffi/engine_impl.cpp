@@ -2333,6 +2333,7 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
             voice_guide_config_.lead_bars = std::clamp(c.lead_bars, 1, 4);
             voice_guide_config_.count_in_enabled = c.count_in_enabled;
             voice_guide_config_.count_style = voice_guide_count_style_from_int(c.count_style);
+            voice_guide_config_.jumps_only = c.jumps_only;
             if (mixer_) mixer_->set_voice_guide_config(voice_guide_config_);
             return Result<void>::ok();
         }
@@ -3717,6 +3718,7 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                     track.kind = (tu.kind == "folder")
                         ? TrackKind::Folder : TrackKind::Audio;
                     track.parent_track_id = tu.parent_track_id;
+                    track.role = parse_track_role(tu.role);
                     track.eq = (track.kind == TrackKind::Audio) ? tu.eq : std::nullopt;
 
                     track.clips.reserve(tu.clips.size());

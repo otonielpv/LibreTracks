@@ -30,6 +30,7 @@ add_executable(lt_engine_tests
     test_fade_processor.cpp
     test_metronome_renderer.cpp
     test_voice_guide_renderer.cpp
+    test_voice_guide_jumps_only.cpp
     test_pad_renderer.cpp
     test_mixer_realtime_controls.cpp
     pitch_resolution_tests.cpp

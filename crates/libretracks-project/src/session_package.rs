@@ -1493,6 +1493,7 @@ mod tests {
             collapsed: false,
             height_offset: None,
             match_aliases: Vec::new(),
+            guide: None,
             song_region_id: None,
         }
     }

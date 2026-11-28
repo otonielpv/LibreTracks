@@ -197,6 +197,7 @@ fn track(id: &str, name: &str, kind: TrackKind, parent: Option<&str>, color: &st
         collapsed: false,
         height_offset: None,
         match_aliases: aliases.iter().map(|a| a.to_string()).collect(),
+        guide: None,
         song_region_id: None,
     }
 }

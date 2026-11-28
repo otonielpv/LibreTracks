@@ -379,6 +379,15 @@ const es = {
     remove: "Quitar",
   },
   transport: {
+    guidePrompt: {
+      title: "Falta la pista de guía",
+      body: "Con «Solo en saltos» la guía de tu secuencia se silencia mientras la voz anuncia un salto. En estas canciones no hay ninguna pista llamada «Guía», «Guide» o «Cue». Elige cuál es la guía:",
+      choose: "Elegir pista…",
+      noTracks: "Sin pistas de audio",
+      later: "Ahora no",
+      done: "Listo",
+      allSet: "Todas las canciones tienen pista de guía.",
+    },
     cloud: {
       downloading: "Descargando {{name}}…",
       uploading: "Subiendo {{name}}…",
@@ -782,6 +791,10 @@ const es = {
       voiceGuideCountStyleHint:
         "Para tempos rápidos: un compás a medio tiempo antes del conteo, o todo a medio tiempo. Cada canción puede cambiarlo desde su menú. En 3/4 o 6/8 se cuenta normal.",
       voiceGuideVolume: "Volumen de la voz",
+      voiceGuideJumpsOnly:
+        "Solo en saltos: al tocar en orden suena la guía de tu secuencia; al saltar, la voz anuncia el destino y la guía de la secuencia se silencia.",
+      voiceGuideMissingGuide: "Canciones sin pista de guía: {{count}}",
+      voiceGuideMissingGuideChoose: "Elegir",
       metronomeAccentEnabled: "Acento activado",
       metronomeAccentSound: "Sonido del acento",
       metronomeBeatSound: "Sonido del pulso",

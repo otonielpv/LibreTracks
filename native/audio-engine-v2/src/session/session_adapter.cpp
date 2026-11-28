@@ -17,7 +17,7 @@ static TransposeBehavior parse_transpose_behavior(const std::string& s) {
     return TransposeBehavior::FollowsSongOrRegion;
 }
 
-static TrackRole parse_track_role(const std::string& s) {
+TrackRole parse_track_role(const std::string& s) {
     if (s == "Click" || s == "click")     return TrackRole::Click;
     if (s == "Guide" || s == "guide")     return TrackRole::Guide;
     if (s == "Cue" || s == "cue")         return TrackRole::Cue;

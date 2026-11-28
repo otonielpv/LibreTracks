@@ -1122,6 +1122,12 @@ pub struct Track {
     /// igual. Solo lo procesa el motor en pistas [`TrackKind::Audio`].
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub eq: Option<crate::track_eq::TrackEq>,
+    /// Si es la guía de la secuencia (ver [`crate::guide_track`]). `None` —
+    /// lo que cargan las sesiones anteriores — la deduce del nombre; el
+    /// usuario la fija con `Some(true)` o la descarta con `Some(false)`. Se
+    /// omite al guardar si no se tocó.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub guide: Option<bool>,
 }
 
 pub fn default_audio_to() -> String {

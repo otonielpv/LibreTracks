@@ -864,9 +864,11 @@ fn set_voice_guide_config_carries_the_count_style() {
         lead_bars: 1,
         count_in_enabled: true,
         count_style: 2,
+        jumps_only: true,
     };
     let json = serde_json::to_value(&cmd).expect("serialize");
     assert_eq!(json["count_style"], 2);
+    assert_eq!(json["jumps_only"], true);
     match round_trip(&cmd) {
         EngineCommand::SetVoiceGuideConfig { count_style, .. } => assert_eq!(count_style, 2),
         other => panic!("expected SetVoiceGuideConfig, got {other:?}"),

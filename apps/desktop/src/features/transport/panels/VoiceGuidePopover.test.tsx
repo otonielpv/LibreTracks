@@ -57,3 +57,30 @@ describe("VoiceGuidePopover count style", () => {
     expect(styleSelect().disabled).toBe(true);
   });
 });
+
+describe("VoiceGuidePopover only on jumps", () => {
+  it("sends the toggle as a settings patch", () => {
+    const onChange = renderPopover({});
+    fireEvent.click(screen.getByLabelText("transport.settingsModal.voiceGuideJumpsOnly"));
+    expect(onChange).toHaveBeenCalledWith({ voiceGuideJumpsOnly: true });
+  });
+
+  it("counts the songs without a guide track and reopens the prompt", async () => {
+    const { useSongStore } = await import("../songStore");
+    const { useGuideTrackPromptStore } = await import("../voiceGuide/guideTrackPrompt");
+    useSongStore.setState({
+      song: {
+        regions: [
+          { id: "r1", hasGuideTrack: false },
+          { id: "r2", hasGuideTrack: true },
+        ],
+      } as never,
+    });
+    useGuideTrackPromptStore.setState({ dismissed: ["r1"], forced: false });
+    renderPopover({ voiceGuideJumpsOnly: true });
+    expect(screen.getByText("transport.settingsModal.voiceGuideMissingGuide")).toBeTruthy();
+    fireEvent.click(screen.getByText("transport.settingsModal.voiceGuideMissingGuideChoose"));
+    expect(useGuideTrackPromptStore.getState()).toMatchObject({ dismissed: [], forced: true });
+    useSongStore.setState({ song: null });
+  });
+});

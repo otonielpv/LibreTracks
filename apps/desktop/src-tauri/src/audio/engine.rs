@@ -1382,7 +1382,9 @@ impl AudioController {
                     } else {
                         "never_transpose".to_string()
                     },
-                    role: String::new(),
+                    // Guía de la secuencia: el motor la calla mientras la voz
+                    // guía anuncia un salto (modo «solo en saltos»).
+                    role: engine_track_role(track),
                     kind: match track.kind {
                         TrackKind::Folder => "folder".to_string(),
                         // Midi/Video never get here (filtered above).
@@ -1816,6 +1818,7 @@ impl AudioController {
                 lead_bars: settings.voice_guide_lead_bars,
                 count_in_enabled: settings.voice_guide_count_in_enabled,
                 count_style: settings.voice_guide_count_style.as_engine_value(),
+                jumps_only: settings.voice_guide_jumps_only,
             })?;
             Ok(())
         })
@@ -1838,6 +1841,7 @@ impl AudioController {
                 lead_bars: settings.voice_guide_lead_bars,
                 count_in_enabled: settings.voice_guide_count_in_enabled,
                 count_style: settings.voice_guide_count_style.as_engine_value(),
+                jumps_only: settings.voice_guide_jumps_only,
             })?;
             Ok(())
         })
@@ -2406,6 +2410,7 @@ impl AudioController {
                 lead_bars: settings.voice_guide_lead_bars,
                 count_in_enabled: settings.voice_guide_count_in_enabled,
                 count_style: settings.voice_guide_count_style.as_engine_value(),
+                jumps_only: settings.voice_guide_jumps_only,
             })?;
             // Ambient-pad config (the key clip is decoded separately via the
             // command layer, which knows the installed-pads path).
@@ -3695,6 +3700,34 @@ fn current_song_source_ids(resolved: &Song) -> HashSet<String> {
         .collect()
 }
 
+/// Rol de la pista para el motor: «Guide» si es la guía de la secuencia (ver
+/// `libretracks_core::guide_track`), vacío (Normal) en otro caso.
+fn engine_track_role(track: &libretracks_core::Track) -> String {
+    if libretracks_core::guide_track::is_guide_track(track) {
+        "Guide".to_string()
+    } else {
+        String::new()
+    }
+}
+
+/// La carga completa lee el rol de cada pista de la clave `role` del JSON de
+/// la sesión, que el modelo no guarda: se deduce al cargar, igual que en
+/// `UpsertSongTracks`.
+fn mark_track_roles_in_session_json(project_value: &mut serde_json::Value, song: &Song) {
+    let Some(tracks) = project_value
+        .get_mut("tracks")
+        .and_then(serde_json::Value::as_array_mut)
+    else {
+        return;
+    };
+    for (value, track) in tracks.iter_mut().zip(&song.tracks) {
+        let role = engine_track_role(track);
+        if let (false, Some(object)) = (role.is_empty(), value.as_object_mut()) {
+            object.insert("role".to_string(), serde_json::Value::String(role));
+        }
+    }
+}
+
 fn load_resolved_song(
     engine: &Engine,
     state: &mut ControllerState,
@@ -3715,6 +3748,7 @@ fn load_resolved_song(
     let mut project_value = serde_json::to_value(&runtime_song)
         .map_err(|error| DesktopError::AudioCommand(error.to_string()))?;
     pitch_prerender::mark_prerendered_in_session_json(&mut project_value, &prerendered);
+    mark_track_roles_in_session_json(&mut project_value, &runtime_song);
     let project_json = project_value.to_string();
     if audio_debug_logging_enabled() {
         eprintln!(
@@ -4235,6 +4269,7 @@ mod tests {
                 collapsed: false,
                 height_offset: None,
                 match_aliases: Vec::new(),
+                guide: None,
                 song_region_id: None,
             }],
             clips: vec![Clip {

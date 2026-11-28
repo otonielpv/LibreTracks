@@ -111,6 +111,10 @@ struct VoiceGuideConfig {
     // Global count style; a song (region) may override it with its own
     // `voice_guide_count_style` (>= 0).
     VoiceGuideCountStyle count_style = VoiceGuideCountStyle::Full;
+    // Solo en saltos (estilo AbleSet): la voz calla al tocar en orden y solo
+    // anuncia los saltos programados; mientras anuncia uno, el mixer silencia
+    // las pistas con rol Guide (la guia grabada de la secuencia).
+    bool  jumps_only = false;
 };
 
 struct VoiceGuideDiagnostics {
@@ -177,6 +181,13 @@ public:
 
     VoiceGuideDiagnostics diagnostics() const;
 
+    // True while the sequence's own guide tracks (TrackRole::Guide) must be
+    // silenced: "jumps only" is on and `frame` sits inside the announcement of
+    // the pending jump `jump_target` (from one bar before its count until the
+    // jump fires). Realtime-safe.
+    bool ducks_guide_tracks(const Session* session, const VoiceGuideTarget& jump_target,
+                            Frame frame, double sample_rate) const noexcept;
+
 private:
     enum class RouteMode : int { Master = 0, Monitor = 1, Ext = 2 };
 
@@ -226,6 +237,7 @@ private:
     std::atomic<int> lead_bars_{1};
     std::atomic<bool> count_in_enabled_{true};
     std::atomic<int> count_style_{static_cast<int>(VoiceGuideCountStyle::Full)};
+    std::atomic<bool> jumps_only_{false};
     std::atomic<int> route_mode_{static_cast<int>(RouteMode::Monitor)};
     std::atomic<int> route_start_{2};
     std::atomic<int> route_end_{3};

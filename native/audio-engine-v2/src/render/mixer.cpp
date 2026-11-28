@@ -797,6 +797,13 @@ void Mixer::render_timeline_span(float** output_channels,
     push_loop_span(output_offset, num_frames, timeline_frame, LoopSpanKind::Playing);
     std::uint64_t rendered_this_block = 0;
     std::uint64_t skipped_this_block = 0;
+    // Voz guia "solo en saltos": mientras anuncia un salto programado, las
+    // pistas Guide (la guia grabada de la secuencia) se silencian por la misma
+    // rampa que el mute. Pasado el salto el destino ya no esta pendiente y
+    // vuelven solas.
+    const VoiceGuideTarget jump_target = announceable_jump_target(session.get());
+    const bool duck_guides = voice_guide_.ducks_guide_tracks(
+        session.get(), jump_target, timeline_frame, clock_->sample_rate());
 
     // Renderer slots available to the audio thread this block. Grown off-thread
     // by prepare_render_resources; never exceed it here.
@@ -868,7 +875,9 @@ void Mixer::render_timeline_span(float** output_channels,
 
             const float gain = eff.target_gain;
             const float pan_target = eff.target_pan;
-            const float target_mute_gain = eff.target_muted ? 0.0f : 1.0f;
+            const float target_mute_gain =
+                (eff.target_muted || (duck_guides && track.role == TrackRole::Guide))
+                    ? 0.0f : 1.0f;
             const float target_solo_gain = eff.target_solo_gain;
 
             const float smooth_ms = 10.0f;
@@ -1084,7 +1093,7 @@ void Mixer::render_timeline_span(float** output_channels,
                       render_output_channels_.data(), render_output_channel_count_);
     voice_guide_.render(metronome_channels, num_channels, num_frames,
                         clock_->sample_rate(), timeline_frame, session.get(),
-                        announceable_jump_target(session.get()),
+                        jump_target,
                         render_output_channels_.data(), render_output_channel_count_);
     // The pad is NOT rendered here: render() drives it once per callback on the
     // full block after this span returns. A due_jump splits the block into two
@@ -1321,6 +1330,11 @@ void Mixer::render(float** output_channels,
         push_loop_span(0, num_frames, timeline_frame, LoopSpanKind::Playing);
         std::uint64_t rendered_this_block = 0;
         std::uint64_t skipped_this_block = 0;
+        // Ver render_timeline_span: guia de la secuencia callada durante el
+        // anuncio de un salto con la voz guia en "solo en saltos".
+        const VoiceGuideTarget jump_target = announceable_jump_target(session.get());
+        const bool duck_guides = voice_guide_.ducks_guide_tracks(
+            session.get(), jump_target, timeline_frame, clock_->sample_rate());
         // Renderer slots available to the audio thread this block (see the note
         // in render_timeline_span).
         const std::size_t renderer_slots =
@@ -1399,7 +1413,9 @@ void Mixer::render(float** output_channels,
 
                 const float gain        = eff.target_gain;
                 const float pan_target  = eff.target_pan;
-                const float target_mute_gain = eff.target_muted ? 0.0f : 1.0f;
+                const float target_mute_gain =
+                    (eff.target_muted || (duck_guides && track.role == TrackRole::Guide))
+                        ? 0.0f : 1.0f;
                 const float target_solo_gain = eff.target_solo_gain;
 
                 const float smooth_ms = 10.0f;
@@ -1628,7 +1644,7 @@ void Mixer::render(float** output_channels,
                           render_output_channels_.data(), render_output_channel_count_);
         voice_guide_.render(output_channels, num_channels, num_frames,
                             clock_->sample_rate(), timeline_frame, session.get(),
-                            announceable_jump_target(session.get()),
+                            jump_target,
                             render_output_channels_.data(), render_output_channel_count_);
 
         const bool was_pending_start = clock_->pending_start();

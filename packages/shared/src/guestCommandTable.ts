@@ -261,6 +261,7 @@ export const GUEST_COMMAND_ROUTES: Readonly<Record<string, GuestCommandRoute>> =
   update_track_collapsed: "edit",
   update_track_color: "edit",
   update_track_eq_realtime: "edit",
+  update_track_guide: "edit",
   update_track_height_offset: "edit",
   update_track_match_aliases: "edit",
   update_track_mix_realtime: "edit",

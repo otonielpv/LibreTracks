@@ -17,4 +17,7 @@ namespace lt {
 Result<Session> session_from_project_json(const std::string& project_json,
                                            int engine_sample_rate);
 
+/// Track role from its wire token ("Guide", "guide", ...); unknown = Normal.
+TrackRole parse_track_role(const std::string& s);
+
 } // namespace lt

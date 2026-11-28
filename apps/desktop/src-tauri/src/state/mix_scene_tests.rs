@@ -64,6 +64,7 @@ fn track(id: &str, name: &str, volume: f64) -> Track {
         collapsed: false,
         height_offset: None,
         match_aliases: Vec::new(),
+        guide: None,
         song_region_id: None,
     }
 }

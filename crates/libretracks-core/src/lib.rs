@@ -2,6 +2,7 @@ pub mod audio_clock;
 pub mod automation;
 pub mod drum_loop_resolve;
 pub mod drum_loops;
+pub mod guide_track;
 pub mod key_changes;
 pub mod lead_plan;
 pub mod lead_time;
@@ -109,6 +110,7 @@ mod tests {
                     collapsed: false,
                     height_offset: None,
                     match_aliases: Vec::new(),
+                    guide: None,
                     song_region_id: None,
                 },
                 Track {
@@ -132,6 +134,7 @@ mod tests {
                     collapsed: false,
                     height_offset: None,
                     match_aliases: Vec::new(),
+                    guide: None,
                     song_region_id: None,
                 },
             ],

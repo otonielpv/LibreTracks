@@ -85,6 +85,7 @@ pub(crate) fn builtin_band_template(locale: Option<&str>) -> Vec<Track> {
             collapsed: false,
             height_offset: None,
             match_aliases: group.aliases.iter().map(|alias| alias.to_string()).collect(),
+            guide: None,
             song_region_id: None,
         })
         .collect()
@@ -338,6 +339,7 @@ pub(crate) fn song_folder_track(id: String, name: String, region_id: &str) -> Tr
         collapsed: false,
         height_offset: None,
         match_aliases: Vec::new(),
+        guide: None,
         song_region_id: Some(region_id.to_string()),
     }
 }
@@ -1271,6 +1273,7 @@ fn lane_track(
         collapsed: false,
         height_offset: None,
         match_aliases: Vec::new(),
+        guide: None,
         song_region_id,
     }
 }

@@ -263,6 +263,7 @@
     "update_track_collapsed",
     "update_track_color",
     "update_track_eq_realtime",
+    "update_track_guide",
     "update_track_height_offset",
     "update_track_match_aliases",
     "update_track_mix_realtime",

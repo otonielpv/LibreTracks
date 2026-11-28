@@ -375,6 +375,9 @@ export type SongRegionSummary = {
   /** How the voice guide counts into this song's sections, or `null`/absent
    * to follow the global `AppSettings.voiceGuideCountStyle`. */
   voiceGuideCountStyle?: VoiceGuideCountStyle | null;
+  /** Si alguna pista de guía de la secuencia suena en la canción (por nombre
+   * o elegida a mano). Ausente = desconocido (no se avisa). */
+  hasGuideTrack?: boolean;
 };
 
 /**
@@ -877,6 +880,11 @@ export type TrackSummary = {
   /** Ecualizador paramétrico de la pista (plan track-eq). Ausente = la pista
    * nunca ha tenido EQ. Solo suena en pistas de audio. */
   eq?: TrackEq | null;
+  /** Guía de la secuencia elegida a mano: `true` la marca, `false` la
+   * descarta, `null`/ausente = según su nombre. */
+  guide?: boolean | null;
+  /** Si es la guía de la secuencia (lo elegido o, si no, el nombre). */
+  isGuide?: boolean;
 };
 
 export function formatTransposeSemitones(value: number): string {
@@ -1735,6 +1743,10 @@ export type AppSettings = {
   voiceGuideCountInEnabled: boolean;
   /** Default count-in layout; each song may override it. */
   voiceGuideCountStyle: VoiceGuideCountStyle;
+  /** «Solo en saltos» (estilo AbleSet): al tocar en orden suena la guía de la
+   * secuencia; al saltar, la voz anuncia el destino y la guía de la secuencia
+   * se silencia hasta el salto. */
+  voiceGuideJumpsOnly: boolean;
   voiceGuideLanguage: string;
   padEnabled: boolean;
   /** Installed pad folder id currently selected ("" = none). */
@@ -1939,6 +1951,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   voiceGuideLeadBars: 1,
   voiceGuideCountInEnabled: true,
   voiceGuideCountStyle: "full",
+  voiceGuideJumpsOnly: false,
   voiceGuideLanguage: "es",
   padEnabled: false,
   padId: "",
@@ -2244,6 +2257,7 @@ export function normalizeAppSettings(settings: AppSettings): AppSettings {
     voiceGuideCountStyle: isVoiceGuideCountStyle(settings.voiceGuideCountStyle)
       ? settings.voiceGuideCountStyle
       : DEFAULT_APP_SETTINGS.voiceGuideCountStyle,
+    voiceGuideJumpsOnly: Boolean(settings.voiceGuideJumpsOnly),
     voiceGuideLanguage:
       settings.voiceGuideLanguage ?? DEFAULT_APP_SETTINGS.voiceGuideLanguage,
     padEnabled: Boolean(settings.padEnabled),

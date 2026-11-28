@@ -3115,6 +3115,17 @@ export async function updateTrackChannelMode(args: {
 }
 
 /**
+ * Guía de la secuencia (voz guía «solo en saltos»): `true` marca la pista,
+ * `false` la descarta y `null` la deja a lo que diga su nombre.
+ */
+export async function updateTrackGuide(args: {
+  trackId: string;
+  guide: boolean | null;
+}): Promise<TransportSnapshot> {
+  return invokeCommand<TransportSnapshot>("update_track_guide", args);
+}
+
+/**
  * «Separar canales L/R»: duplica la pista con sus clips apuntando a los mismos
  * ficheros (no copia audio) y deja la original en Solo izquierdo con
  * `leftName` y la nueva, justo debajo, en Solo derecho con `rightName`. Un

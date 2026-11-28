@@ -389,6 +389,10 @@ pub struct SongRegionSummary {
     pub chart: Option<libretracks_core::SongChart>,
     /// Estilo de conteo de la voz guía propio de la canción; `None` = el global.
     pub voice_guide_count_style: Option<libretracks_core::VoiceGuideCountStyle>,
+    /// Si alguna pista de guía de la secuencia suena en la canción (ver
+    /// `libretracks_core::guide_track`). Con la voz guía en «solo en saltos»
+    /// el frontend avisa de las canciones que no la tienen.
+    pub has_guide_track: bool,
     /// Cambios de nota dentro de la canción, ordenados; `key` es la inicial.
     pub key_changes: Vec<KeyChangeSummary>,
     /// Loop de batería propio de la canción (plan drum-loops); se omite si no
@@ -582,6 +586,11 @@ pub struct TrackSummary {
     /// Se omite si no hay, como en el modelo.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub eq: Option<libretracks_core::TrackEq>,
+    /// Lo que el usuario eligió para la guía de la secuencia: `None` = según
+    /// el nombre.
+    pub guide: Option<bool>,
+    /// Si es la guía de la secuencia (lo elegido o, si no, el nombre).
+    pub is_guide: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -936,6 +945,8 @@ pub(crate) fn song_to_view(
                 match_aliases: track.match_aliases.clone(),
                 song_region_id: track.song_region_id.clone(),
                 eq: track.eq.clone(),
+                guide: track.guide,
+                is_guide: libretracks_core::guide_track::is_guide_track(track),
             })
             .collect(),
         automation_cues: automation_cues_to_summary(song, &automation.cues, automation_run_counts),
@@ -1401,6 +1412,7 @@ pub(crate) fn region_to_summary(song: &Song, region: &SongRegion) -> SongRegionS
         drum_loop: region.drum_loop.clone(),
         lyrics: region.lyrics.clone(),
         voice_guide_count_style: region.voice_guide_count_style,
+        has_guide_track: libretracks_core::guide_track::region_has_guide_track(song, region),
         key_changes: region
             .key_changes
             .iter()
@@ -1787,6 +1799,7 @@ mod tests {
             collapsed: false,
             height_offset: None,
             match_aliases: Vec::new(),
+            guide: None,
             song_region_id: None,
         }
     }

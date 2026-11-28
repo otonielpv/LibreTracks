@@ -455,6 +455,7 @@ function buildInitialState(): DesktopApiMockState {
       voiceGuideLeadBars: 1,
       voiceGuideCountInEnabled: true,
       voiceGuideCountStyle: "full",
+      voiceGuideJumpsOnly: false,
       voiceGuideLanguage: "es",
       padEnabled: false,
       padId: "",
@@ -2756,6 +2757,26 @@ export const testDesktopApiMock = {
         track.id === args.trackId ? { ...track, channelMode: args.channelMode } : track,
       ),
     });
+    return clone(buildSnapshot());
+  },
+  updateTrackGuide: async (args: { trackId: string; guide: boolean | null }) => {
+    const tracks = state.song.tracks.map((track) =>
+      track.id === args.trackId
+        ? { ...track, guide: args.guide, isGuide: args.guide ?? Boolean(track.isGuide) }
+        : track,
+    );
+    const guideIds = new Set(tracks.filter((track) => track.isGuide).map((track) => track.id));
+    // Como el backend: una canción tiene guía si suena en ella alguna pista guía.
+    const regions = state.song.regions.map((region) => ({
+      ...region,
+      hasGuideTrack: state.song.clips.some(
+        (clip) =>
+          guideIds.has(clip.trackId) &&
+          Math.max(clip.timelineStartSeconds, region.startSeconds) + 0.01 <
+            Math.min(clip.timelineStartSeconds + clip.durationSeconds, region.endSeconds),
+      ),
+    }));
+    replaceSong({ ...state.song, tracks, regions });
     return clone(buildSnapshot());
   },
   updateTrackMatchAliases: async (args: { trackId: string; aliases: string[] }) => {

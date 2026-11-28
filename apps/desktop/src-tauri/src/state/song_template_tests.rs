@@ -788,6 +788,7 @@ fn plain_track(
         collapsed: false,
         height_offset: None,
         match_aliases: Vec::new(),
+        guide: None,
         song_region_id: region.map(str::to_string),
     }
 }

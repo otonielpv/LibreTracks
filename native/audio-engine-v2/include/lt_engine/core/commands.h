@@ -127,6 +127,7 @@ struct CmdSetVoiceGuideConfig {
     int lead_bars = 1;
     bool count_in_enabled = true;
     int count_style = 0;   // VoiceGuideCountStyle (0 = Full)
+    bool jumps_only = false; // solo anuncia saltos y silencia las pistas Guide
 };
 
 struct CmdLoadVoiceGuideBank {

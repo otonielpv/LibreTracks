@@ -291,6 +291,7 @@ pub fn import_wav_song(
                 collapsed: false,
                 height_offset: None,
                 match_aliases: Vec::new(),
+                guide: None,
                 song_region_id: None,
             })
             .collect(),
@@ -386,6 +387,7 @@ pub fn append_wav_files_to_song(
             collapsed: false,
             height_offset: None,
             match_aliases: Vec::new(),
+            guide: None,
             song_region_id: None,
         });
 

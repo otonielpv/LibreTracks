@@ -156,6 +156,11 @@ pub enum EngineCommand {
         /// with `RegionUpdate::voice_guide_count_style`.
         #[serde(default)]
         count_style: i32,
+        /// «Solo en saltos» (estilo AbleSet): la voz solo anuncia los saltos
+        /// programados y el motor calla las pistas con rol Guide mientras lo
+        /// hace. Ausente = false (el comportamiento de siempre).
+        #[serde(default)]
+        jumps_only: bool,
     },
 
     /// Decode and install the voice-guide clip bank for a language. The engine

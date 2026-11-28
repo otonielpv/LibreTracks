@@ -379,6 +379,15 @@ const en = {
     remove: "Remove",
   },
   transport: {
+    guidePrompt: {
+      title: "Guide track missing",
+      body: "With \"Only on jumps\" your sequence's guide is muted while the voice announces a jump. These songs have no track named \"Guide\", \"Guía\" or \"Cue\". Choose which one is the guide:",
+      choose: "Choose track…",
+      noTracks: "No audio tracks",
+      later: "Not now",
+      done: "Done",
+      allSet: "Every song has a guide track.",
+    },
     cloud: {
       downloading: "Downloading {{name}}…",
       uploading: "Uploading {{name}}…",
@@ -560,6 +569,10 @@ const en = {
       tabSystem: "System",
       tabAudio: "Audio",
       voiceGuideVolume: "Voice volume",
+      voiceGuideJumpsOnly:
+        "Only on jumps: playing in order you hear your sequence's guide; on a jump the voice announces the destination and the sequence's guide is muted.",
+      voiceGuideMissingGuide: "Songs without a guide track: {{count}}",
+      voiceGuideMissingGuideChoose: "Choose",
       voiceGuideCountInDescription: "Count the remaining beats after the section name.",
       voiceGuideCountStyle: "Count style",
       voiceGuideCountStyleFull: "1-2-3-4",

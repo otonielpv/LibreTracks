@@ -217,6 +217,7 @@ fn demo_song() -> Song {
             collapsed: false,
             height_offset: None,
             match_aliases: Vec::new(),
+            guide: None,
             song_region_id: None,
         }],
         clips: vec![Clip {
@@ -501,6 +502,7 @@ fn demo_song_with_folder_track() -> Song {
             collapsed: false,
             height_offset: None,
             match_aliases: Vec::new(),
+            guide: None,
             song_region_id: None,
         },
     );
@@ -599,6 +601,7 @@ fn hierarchy_song() -> Song {
                 collapsed: false,
                 height_offset: None,
                 match_aliases: Vec::new(),
+                guide: None,
                 song_region_id: None,
             },
             Track {
@@ -622,6 +625,7 @@ fn hierarchy_song() -> Song {
                 collapsed: false,
                 height_offset: None,
                 match_aliases: Vec::new(),
+                guide: None,
                 song_region_id: None,
             },
             Track {
@@ -645,6 +649,7 @@ fn hierarchy_song() -> Song {
                 collapsed: false,
                 height_offset: None,
                 match_aliases: Vec::new(),
+                guide: None,
                 song_region_id: None,
             },
             Track {
@@ -668,6 +673,7 @@ fn hierarchy_song() -> Song {
                 collapsed: false,
                 height_offset: None,
                 match_aliases: Vec::new(),
+                guide: None,
                 song_region_id: None,
             },
         ],
@@ -1236,6 +1242,7 @@ fn song_to_view_preserves_track_ids_and_parent_ids_verbatim() {
                 collapsed: false,
                 height_offset: None,
                 match_aliases: Vec::new(),
+                guide: None,
                 song_region_id: None,
             },
             Track {
@@ -1259,6 +1266,7 @@ fn song_to_view_preserves_track_ids_and_parent_ids_verbatim() {
                 collapsed: false,
                 height_offset: None,
                 match_aliases: Vec::new(),
+                guide: None,
                 song_region_id: None,
             },
         ],
@@ -1445,6 +1453,7 @@ fn batch_move_can_reassign_clip_to_another_track() {
         collapsed: false,
         height_offset: None,
         match_aliases: Vec::new(),
+        guide: None,
         song_region_id: None,
     });
     let mut session = session_with_song_dir("batch-move-track", song);
@@ -2694,6 +2703,7 @@ fn song_with_folder_hierarchy() -> Song {
             collapsed: false,
             height_offset: None,
             match_aliases: vec!["drums".into(), "kick".into()],
+            guide: None,
             song_region_id: Some("region_1".into()),
         },
     );
@@ -2718,6 +2728,7 @@ fn song_with_folder_hierarchy() -> Song {
         collapsed: false,
         height_offset: None,
         match_aliases: Vec::new(),
+        guide: None,
         song_region_id: None,
     });
     song

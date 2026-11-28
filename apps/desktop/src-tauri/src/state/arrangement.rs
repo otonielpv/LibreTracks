@@ -497,6 +497,39 @@ impl DesktopSession {
         Ok(self.snapshot())
     }
 
+    /// Marca la pista como guía de la secuencia (`Some(true)`), la descarta
+    /// (`Some(false)`) o la deja a lo que diga su nombre (`None`). Ver
+    /// `libretracks_core::guide_track`.
+    ///
+    /// `StructureRebuild` por lo mismo que el modo de canal: el motor lee el
+    /// rol de la pista por el camino de sesión. Repetir lo que ya tiene no crea
+    /// paso de deshacer.
+    pub fn update_track_guide(
+        &mut self,
+        track_id: &str,
+        guide: Option<bool>,
+        audio: &AudioController,
+    ) -> Result<TransportSnapshot, DesktopError> {
+        let mut song = self
+            .engine
+            .song()
+            .cloned()
+            .ok_or(DesktopError::NoSongLoaded)?;
+        let track = song
+            .tracks
+            .iter_mut()
+            .find(|track| track.id == track_id)
+            .ok_or_else(|| DesktopError::TrackNotFound(track_id.to_string()))?;
+
+        if track.guide == guide {
+            return Ok(self.snapshot());
+        }
+        track.guide = guide;
+
+        self.persist_song_update(song, audio, AudioChangeImpact::StructureRebuild, true)?;
+        Ok(self.snapshot())
+    }
+
     /// El conmutador «Mono» de antes del modo de canal: `true` = Mono,
     /// `false` = Stereo. Se mantiene para invitados del remote / app↔app de
     /// versiones anteriores.
@@ -644,6 +677,7 @@ impl DesktopSession {
                 collapsed: false,
                 height_offset: None,
                 match_aliases: Vec::new(),
+                guide: None,
                 song_region_id: None,
             });
             append_clip_to_song(
@@ -748,6 +782,7 @@ impl DesktopSession {
                 collapsed: false,
                 height_offset: None,
                 match_aliases: Vec::new(),
+                guide: None,
                 song_region_id: None,
             });
             append_clip_to_song(
@@ -830,6 +865,7 @@ impl DesktopSession {
                         collapsed: false,
                         height_offset: None,
                         match_aliases: Vec::new(),
+                        guide: None,
                         song_region_id: song_region_id.clone(),
                     };
                     let track_id = track.id.clone();
@@ -1477,6 +1513,7 @@ pub(super) fn new_track(
         collapsed: false,
         height_offset: None,
         match_aliases: Vec::new(),
+        guide: None,
         song_region_id: None,
     }
 }

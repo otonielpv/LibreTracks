@@ -304,6 +304,11 @@ pub struct AppSettings {
     /// time). Each song may override it (`SongRegion.voice_guide_count_style`).
     #[serde(default)]
     pub voice_guide_count_style: libretracks_core::VoiceGuideCountStyle,
+    /// «Solo en saltos» (estilo AbleSet): al tocar en orden suena la guía
+    /// grabada de la secuencia y la voz calla; al saltar, la voz anuncia el
+    /// destino y la guía de la secuencia se silencia hasta el salto.
+    #[serde(default)]
+    pub voice_guide_jumps_only: bool,
     #[serde(default = "default_voice_guide_language")]
     pub voice_guide_language: String,
     /// Loops de batería (plan drum-loops): `follow` sigue el click de la
@@ -568,6 +573,7 @@ impl Default for AppSettings {
             voice_guide_lead_bars: default_voice_guide_lead_bars(),
             voice_guide_count_in_enabled: default_voice_guide_count_in_enabled(),
             voice_guide_count_style: libretracks_core::VoiceGuideCountStyle::default(),
+            voice_guide_jumps_only: false,
             voice_guide_language: default_voice_guide_language(),
             loop_clock_mode: default_loop_clock_mode(),
             loop_free_bpm: 0.0,

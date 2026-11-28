@@ -231,6 +231,7 @@ import { useAudioMeters } from "./hooks/useAudioMeters";
 import { useRegionMeters } from "./hooks/useRegionMeters";
 import { useLibraryActions } from "./hooks/useLibraryActions";
 import { useSettingsState } from "./hooks/useSettingsState";
+import { GuideTrackMissingPrompt } from "./voiceGuide/GuideTrackMissingPrompt";
 import { useMidiCapabilities } from "./hooks/useMidiCapabilities";
 import {
   UI_ZOOM_STATUS_EVENT,
@@ -6685,6 +6686,7 @@ export function TransportPanelContent() {
           onVolumeDraftChange={handleVoiceGuideVolumeDraftChange}
           onCommitVolume={commitVoiceGuideVolumeDraft}
         />
+        <GuideTrackMissingPrompt settings={appSettings} />
 
         <PadsPopover
           open={isPadsPopoverOpen}

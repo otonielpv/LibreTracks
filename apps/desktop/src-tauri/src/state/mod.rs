@@ -1718,7 +1718,8 @@ pub(crate) fn plan_audio_settings_change(
         || (previous.voice_guide_volume - next.voice_guide_volume).abs() > f64::EPSILON
         || previous.voice_guide_lead_bars != next.voice_guide_lead_bars
         || previous.voice_guide_count_in_enabled != next.voice_guide_count_in_enabled
-        || previous.voice_guide_count_style != next.voice_guide_count_style;
+        || previous.voice_guide_count_style != next.voice_guide_count_style
+        || previous.voice_guide_jumps_only != next.voice_guide_jumps_only;
 
     // Pure mixer flags (pause at song end, vamp between songs, meter point),
     // flipped between blocks: go to the engine, never reopen the stream.
@@ -5065,5 +5066,7 @@ mod ruler_markers_tests;
 mod mix_scene_tests;
 #[cfg(test)]
 mod channel_mode_tests;
+#[cfg(test)]
+mod guide_track_tests;
 #[cfg(test)]
 mod track_eq_tests;
